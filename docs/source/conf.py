@@ -189,6 +189,19 @@ typehints_use_signature = True # show typehints in the function signature.
 autodoc_preserve_defaults = True # show default values as written in source, not repr()
 add_module_names = False # removes the long cottax.module.name from the docs.
 
+
+def _skip_foreign_classes(app, what, name, obj, skip, options):
+    """A class another package defines (jax's key kinds, re-exported by the assembly) is
+    documented there, not here."""
+    module = getattr(obj, "__module__", None) or ""
+    if isinstance(obj, type) and not module.startswith("cottax"):
+        return True
+    return None
+
+
+def setup(app):
+    app.connect("autodoc-skip-member", _skip_foreign_classes)
+
 rst_prolog = """
 .. role:: parallel
    :class: parallel
