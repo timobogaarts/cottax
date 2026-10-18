@@ -1,0 +1,37 @@
+name: Tests
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:        # run by release.yml before publishing
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    env:
+      JAX_PLATFORMS: cpu
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+          cache-dependency-path: pyproject.toml
+
+      - name: Install graphviz and cairo
+        run: sudo apt-get update && sudo apt-get install -y graphviz libcairo2
+
+      - name: Install cottax
+        run: |
+          python -m pip install --upgrade pip
+          pip install ".[solvers,ode,viz]" pytest "equinox>=0.11"
+
+      - name: Run tests
+        run: pytest -m 'slow or not slow'

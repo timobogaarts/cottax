@@ -1,0 +1,15 @@
+{% extends "!base.html" %}
+
+{#- Default to light mode for first-time visitors.
+
+    Furo's own base.html seeds the theme with `localStorage.getItem("theme") ||
+    "auto"`, i.e. it follows the OS colour scheme when no choice has been made.
+    This overrides only that fallback: a visitor who has used the theme toggle
+    still gets their stored preference, and nothing is written to localStorage
+    on their behalf. -#}
+{% block body %}
+<script>
+  document.body.dataset.theme = localStorage.getItem("theme") || "light";
+</script>
+{% endblock %}
+

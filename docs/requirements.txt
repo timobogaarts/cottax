@@ -1,0 +1,9 @@
+sphinx
+furo
+sphinx-autodoc-typehints
+myst-nb
+# only needed when the CI-runnable example notebooks are executed
+ipykernel
+matplotlib
+equinox
+plotly

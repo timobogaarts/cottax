@@ -1,0 +1,11 @@
+# Notebook outputs are stripped on commit, EXCEPT the ci: False entries of
+# docs/source/_notebook_manifest.py -- those publish their committed outputs,
+# so stripping them would empty the rendered docs page. Everything else is
+# re-executed by the docs build (nb_execution_mode = "cache"), so committed
+# outputs there are diff noise.
+#
+# The filter is inert until `nbstripout --install` is run once in this clone
+# (pip install nbstripout first); git silently skips an undefined filter.
+*.ipynb filter=nbstripout
+*.ipynb diff=ipynb
+

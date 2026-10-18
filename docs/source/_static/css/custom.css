@@ -1,0 +1,75 @@
+.math {
+    text-align: left;
+}
+.eqno {
+    float: right;
+}
+/* --tc-* variables are supplied per colour scheme via html_theme_options in
+   conf.py; the fallbacks here are only a safety net. */
+.algorithm-box {
+    border: 1px solid var(--tc-border-strong, #888);
+    border-radius: 4px;
+    padding: 0.4em 0.8em;
+    margin: 0.5em 0;
+    background: var(--tc-box-bg, #fafafa);
+}
+
+.algorithm-box p {
+    margin: 0.15em 0;
+}
+
+/* light blue -- kept blue on purpose: matches the blue algorithm keywords in
+   the thesis preamble, and reads as a complementary accent to the warm theme */
+.parallel {
+    background-color: var(--tc-chip-parallel-bg, #d7ecff);
+    color: var(--tc-chip-parallel-fg, #005b96);
+    border-radius: 3px;
+    padding: 0.1em 0.35em;
+    font-weight: bold;
+}
+
+/* dark blue */
+.loop {
+    background-color: var(--tc-chip-loop-bg, #b3d1ff);
+    color: var(--tc-chip-loop-fg, #003366);
+    border-radius: 3px;
+    padding: 0.1em 0.35em;
+    font-weight: bold;
+}
+a.reference.internal code.literal {
+    font-family: inherit;
+    background: none;
+    padding: 0;
+    border: none;
+}
+
+/* --- notebook pages (myst-nb) ---------------------------------------------
+   myst-nb wraps each notebook cell in .cell > (.cell_input, .cell_output).
+   The input is a normal furo code block; these rules only mark the output as
+   a quieter, visually attached continuation of it. */
+.cell {
+    margin: 0.8em 0;
+}
+
+.cell_output {
+    border-left: 3px solid var(--tc-border-strong, #888);
+    background: var(--tc-box-bg, #fafafa);
+    padding: 0.2em 0.8em;
+    margin-left: 0.15em;
+    overflow-x: auto;
+}
+
+/* outputs already sit in the box above, so drop the nested code-block chrome */
+.cell_output .highlight,
+.cell_output .highlight pre {
+    background: none;
+    margin: 0;
+}
+
+/* matplotlib figures: centred, never wider than the content column */
+.cell_output img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin: 0.4em auto;
+}

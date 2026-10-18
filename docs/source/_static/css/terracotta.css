@@ -1,0 +1,34 @@
+/*
+ * Terracotta theme for furo.
+ *
+ * The palette itself lives in `html_theme_options` in conf.py (furo is entirely
+ * CSS-variable driven, and letting furo emit the variables is what makes the
+ * light/dark switch work). This file only holds the handful of structural
+ * touches that are not expressible as a colour variable.
+ */
+
+/* Page title rule. */
+h1 {
+    border-bottom: 2px solid var(--color-brand-content);
+    padding-bottom: 0.2em;
+}
+
+/* Terracotta accent bar on API signatures (furo gives them a flat tint only).
+   An inset shadow, not border-left: furo hangs long signatures with a negative
+   text-indent, which paints a real border in the middle of the first line. */
+dl.py > dt.sig,
+dl.c > dt.sig,
+dl.cpp > dt.sig {
+    box-shadow: inset 3px 0 0 0 var(--color-brand-content);
+    background: var(--color-api-background-hover);
+}
+
+/* Sidebar current page marker. */
+.sidebar-tree .current-page > .reference {
+    box-shadow: inset 3px 0 0 0 var(--color-brand-content);
+}
+
+/* Right-hand "On this page" active entry. */
+.toc-tree li.scroll-current > .reference {
+    border-left-color: var(--color-brand-content);
+}

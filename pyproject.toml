@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=77"]
+
+
+[project]
+name = "cottax"
+version = "0.1.0"
+description = "Declare, rewrite, prove and draw computation graphs whose leaves are JAX functions"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Timo Bogaarts" }]
+requires-python = ">=3.12"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+]
+dependencies = ["jax>=0.4", "networkx>=3"]
+
+[project.optional-dependencies]
+solvers = ["optimistix", "scipy"]
+ode = ["diffrax>=0.7"]
+viz = ["matplotlib", "graphviz", "cairosvg"]
+docs = ["sphinx", "sphinx_autodoc_typehints", "myst_nb", "furo"]
+dev = ["pytest", "equinox>=0.11", "cottax[docs,solvers,ode,viz]"]
+
+[project.urls]
+Documentation = "https://timobogaarts.github.io/cottax/"
+Source = "https://github.com/timobogaarts/cottax"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "tests"]
+testpaths = ["tests"]
+markers = ["slow: a real solve, compilation or export; run them with -m 'slow or not slow'"]
+addopts = "-m 'not slow'"
