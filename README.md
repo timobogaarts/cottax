@@ -3,8 +3,9 @@
 Python package for computational dependency graph declaration, manipulation, and execution.
 
 
-
 **Documentation, theory and examples: https://timobogaarts.github.io/cottax/**
+
+Theory and application discussed at https://arxiv.org/abs/2610.22687
 
 ## Installation
 
