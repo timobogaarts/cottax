@@ -12,6 +12,7 @@ import re
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 import cottax.assemblies.jax as cx
@@ -327,7 +328,7 @@ def test_two_odes_on_one_cycle_are_refused_until_combined_and_then_integrate_as_
     assert out[s.place('x')] == pytest.approx(math.cos(3.0), abs=1e-8)
     assert out[s.place('v')] == pytest.approx(-2.0 * math.sin(3.0), abs=1e-8)
     assert (out[s.place('x')], out[s.place('v')]) == pytest.approx(
-        (one[s.place('x')], one[s.place('v')]), abs=1e-12)
+        np.asarray((one[s.place('x')], one[s.place('v')])), abs=1e-12)
 
 
 def test_an_ode_joins_an_ode_and_nothing_else():
@@ -450,7 +451,7 @@ def test_mdf_and_idf_nest_the_algebraic_constraint_in_the_ode_and_the_ode_in_the
     by_hand = Plan(fitted_index_one().graph) + Nest(inner, ode) + Nest(ode, node('opt'))
     c = fit_index_one(plan)
     assert c == pytest.approx(2.0, rel=1e-6)
-    assert c == pytest.approx(fit_index_one(by_hand), rel=1e-10)
+    assert c == pytest.approx(np.asarray(fit_index_one(by_hand)), rel=1e-10)
 
 
 def test_sand_refuses_the_index_one_ode_as_any():
@@ -465,7 +466,7 @@ def test_an_mda_nests_the_algebraic_constraint_in_the_ode():
     out = run(GraphWithValues(graph, OrderedMap({
         s.place('c'): 2.0, **ivp((0.0, 0.8), x=1.5),
         s.place(cx.start('z')): 0.0})))
-    assert out[s.place('x')] == pytest.approx(index_one(2.0)[s.place('x')], rel=1e-12)
+    assert out[s.place('x')] == pytest.approx(np.asarray(index_one(2.0)[s.place('x')]), rel=1e-12)
 
 
 def logistic_at(t: float) -> float:
@@ -512,7 +513,7 @@ def test_a_closure_written_by_hand_through_the_loop_is_a_model_of_its_own():
     graph = CallableGraph((plan + drive(Picard(rtol=1e-12, atol=1e-12), diffrax_run())).graph)
     x = final(graph, {s.place('k'): 1.0, **ivp((0.0, 0.5), x=0.1),
                       s.place(cx.start(cx.copy('x'))): 0.1})
-    assert x == pytest.approx(x * x + (0.1 - x * x) * math.exp(0.5), rel=1e-8)
+    assert x == pytest.approx(np.asarray(x * x + (0.1 - x * x) * math.exp(0.5)), rel=1e-8)
     assert x != pytest.approx(logistic_at(0.5), rel=1e-3)
 
 

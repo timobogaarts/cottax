@@ -13,6 +13,7 @@ from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 import cottax.assemblies.jax as cx
@@ -833,9 +834,9 @@ def test_sellar_declared_loose_reaches_the_optimum_of_the_problem_in_a_slot(x64)
         out = flat.run(ran, {cx.Start: guess[arch]})
         ref = flat.run(ref, {cx.Start: guess[arch]})
         assert out['f'] == pytest.approx(3.1834, abs=1e-3)
-        assert out['f'] == pytest.approx(ref['f'], abs=1e-6)
+        assert out['f'] == pytest.approx(np.asarray(ref['f']), abs=1e-6)
         for k in ('z_1', 'z_2', 'x'):
-            assert out[k] == pytest.approx(ref[k], abs=1e-6)
+            assert out[k] == pytest.approx(np.asarray(ref[k]), abs=1e-6)
 
     # One state serves all three: each start read at its unknown's place, a copy's at the
     # place of what it copies, and the answer written back.

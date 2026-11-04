@@ -11,6 +11,7 @@ import re
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 import cottax.assemblies.jax as cx
@@ -312,7 +313,7 @@ def test_7_grad_in_reverse_and_jacfwd_forward():
         adjoint=diffrax.ForwardMode())), ts))(0.5)
     exact = (2.0 * math.exp(-1.0) * 0.5 - (1 - math.exp(-1.0))) / 0.25   # d/dk (1 - e^-2k) / k
     print(f'\n[7] grad {float(rev)!r}, jacfwd {float(fwd)!r}, d/dk of the integral {exact!r}')
-    assert rev == pytest.approx(exact, rel=1e-4) and fwd == pytest.approx(rev, rel=1e-8)
+    assert rev == pytest.approx(exact, rel=1e-4) and fwd == pytest.approx(np.asarray(rev), rel=1e-8)
 
 
 @pytest.mark.slow
