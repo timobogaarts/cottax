@@ -160,7 +160,7 @@ def test_a_record_without_times_or_a_place_not_a_state_is_refused_by_its_kind():
 
 # ================================================================ 1. decay
 
-def test_1_decay_the_history_against_the_exponential_the_final_state_bitwise_unchanged():
+def test_1_decay_the_history_against_the_exponential_the_final_state_unchanged():
     ts = jnp.linspace(0.0, 2.0, 5)
     out = run(GraphWithValues(driven(decay, implementation=diffrax_run()), values(
         k=0.5, x0=1.0, span=(0.0, 2.0), times=ts)))
@@ -170,7 +170,9 @@ def test_1_decay_the_history_against_the_exponential_the_final_state_bitwise_unc
     print(f'\n[1] xs={xs.tolist()}\n    max |xs - exp(-kt)| = {err:.2e}; final with '
           f'{float(out[s.place("x")])!r}, without {float(without[s.place("x")])!r}')
     assert xs.shape == (5,) and err < 1e-9
-    assert out[s.place('x')] == without[s.place('x')]          # bitwise: one solve, same steps
+    # one solve, same steps: equal to a few ulp (the two compile apart); other steps differ ~1e-10
+    x, x_without = out[s.place('x')], without[s.place('x')]
+    assert jnp.abs(x - x_without) <= 16 * jnp.finfo(x.dtype).eps * jnp.abs(x_without)
 
 
 # ================================================================ 2. shapes
