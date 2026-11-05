@@ -1,5 +1,6 @@
 '''The arithmetic over a `Programme` at the values of a condition's reads: `canonical`,
-every objective minimised and every relation a residual, `box`, and `next_values`.'''
+every objective minimised and every relation a residual, `box`, `scaled`, both in a scaled
+driver's units, and `next_values`.'''
 
 import operator
 from typing import Any, NamedTuple
@@ -9,6 +10,7 @@ import jax.numpy as jnp
 
 from .....core import Place, Violation
 from .....relational import Max, RelationalCondition, programme
+from .....relational.mints import ResidualScale
 
 
 class Canonical(NamedTuple):
@@ -58,6 +60,33 @@ def _tightest(fold, bounds) -> Any:
     for i, b in enumerate(bounds):
         tightest = b if i == 0 else fold(tightest, b)
     return tightest
+
+
+def scaled[V: Place](condition: RelationalCondition[V], unknowns: tuple[Any, ...],
+                     values: tuple[Any, ...], column: tuple[Any, ...]) -> tuple[Canonical, Box]:
+    '''`canonical` and `box` in `y = x / column`, for `unknowns` the values `x` at which
+    `values` were read: each relation's residual over the magnitude of the place it attaches
+    as its `ResidualScale` (one attaching none read as it is), the box over `column`, its
+    sides swapped where a column is negative (a side then `-inf` / `inf` where unbounded).
+    Objectives as they are.'''
+    value = _values(condition, unknowns, values)
+    form  = programme(condition)
+    def held(r):
+        residual = _residual(value(r.lhs), value(r.rhs))
+        if (scale := r.attached.get(ResidualScale)) is None:
+            return residual
+        return jax.tree.map(lambda e, s: e / jnp.abs(s), residual, value(scale))
+    lower, upper = box(condition, unknowns, values)
+    def scaled_box(lo, hi, c):
+        if lo is None and hi is None:
+            return None, None
+        lo = -jnp.inf if lo is None else lo
+        hi =  jnp.inf if hi is None else hi
+        return jnp.where(c > 0, lo, hi) / c, jnp.where(c > 0, hi, lo) / c
+    sides = tuple(scaled_box(*b) for b in zip(lower, upper, column, strict=True))
+    return (Canonical(tuple(_minimised(value(o.place), o.sense) for o in form.objectives),
+                      tuple(map(held, form.equalities)), tuple(map(held, form.inequalities))),
+            Box(tuple(lo for lo, _ in sides), tuple(hi for _, hi in sides)))
 
 
 def next_values[V: Place](condition: RelationalCondition[V], unknowns: tuple[Any, ...],

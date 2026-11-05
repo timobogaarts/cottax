@@ -19,8 +19,9 @@ from cottax.relational import (
     is_feasibility, is_fixed_point, is_optimise, is_root_find, is_unconstrained_optimise,
 )
 from cottax.relational.relational_condition import (
-    FixedAndMoved, FixedRelation, NotARel, ParameterUnrelated, RelatesNothing,
+    AttachedNotAParameter, FixedAndMoved, FixedRelation, NotARel, ParameterUnrelated, RelatesNothing,
 )
+from cottax.relational.mints import ResidualScale
 from cottax.pytree.path import NodePath, VarPath
 from cottax.core import Function, problems, violations
 from cottax.core.maths.definition import ReadsOwn
@@ -209,6 +210,19 @@ def test_a_parameter_is_held_fixed_related_and_never_alone():
     assert found((Relation(g, None, Le),), (), (lo,)) == [ParameterUnrelated]
     assert found((Relation(lo, hi, Le), Relation(lo, None, Le)), (), (lo, hi)) == [FixedRelation]
     assert found((Relation(lo, u, Le), Relation(u, hi, Le)), (), (lo, hi)) == []
+
+
+def test_an_attached_place_is_a_given_term_renamed_and_written_never_a_condition():
+    '''A relation's attachment is a term (so a parameter relates through it), renamed with
+    its sides and written after them; it is no condition, and it must be held fixed.'''
+    u, g, s, t = v('u'), v('g'), v('s'), v('t')
+    r = Relation(u, g, Eq, OrderedMap({ResidualScale: s}))
+    assert (r.sides, r.terms) == ((u, g), (u, g, s))
+    assert r.relabel({s: t}) == Relation(u, g, Eq, OrderedMap({ResidualScale: t}))
+    assert repr(r) == f'{u} = {g} with {s}'
+    node = RelationalCondition((r,), (), (u,), (s,))
+    assert (node.conditions, node.reads) == ((g,), (g, s))
+    assert [type(x) for x in violations(RelationalCondition, (r,), (), (u,), ())] == [AttachedNotAParameter]
 
 
 def test_the_join_holds_fixed_what_either_side_does_once():

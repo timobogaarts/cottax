@@ -21,3 +21,7 @@ class Upper(Mint):
 
 class Target(Mint):
     '''An equality's target written as a value: `^target.h`.'''
+
+
+class ResidualScale(Mint):
+    '''The magnitude a relation's residual is read in, attached to it: `^residualscale.h`.'''

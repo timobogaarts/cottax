@@ -3,9 +3,10 @@
 from typing import Any
 
 from ...core import Place, Violation
-from ...core.frozen import answers
+from ...core.frozen import OrderedMap, answers
 from ...consumers.json.interface import Spelling
 from ...consumers.json.interface_types import Reader, Writer
+from ..mints import ResidualScale
 from ..relational_condition import Eq, Le, Max, Min, Objective, Relation, RelationalCondition
 
 
@@ -13,7 +14,9 @@ RELS = {'eq': Eq, 'le': Le}
 '''Each relation by its word in the file: a new `Rel` is one line here.'''
 SENSES = {'min': Min, 'max': Max}
 '''Each objective's sense by its word in the file.'''
-TABLES = {'RELS': RELS, 'SENSES': SENSES}
+PURPOSES = {'residual_scale': ResidualScale}
+'''Each purpose a relation attaches a place under, by its word in the file.'''
+TABLES = {'RELS': RELS, 'SENSES': SENSES, 'PURPOSES': PURPOSES}
 '''Each table a word in the file is read through, by its name.'''
 
 
@@ -24,8 +27,9 @@ def word_of(table: dict[str, type], marker: type) -> str | None:
 
 @answers(RelationalCondition)
 class RelationalSpelling(Spelling[RelationalCondition]):
-    '''The relations, each `op` by its word in `RELS`; the objectives, each `sense` by its
-    word in `SENSES`; the unknowns and parameters.'''
+    '''The relations, each `op` by its word in `RELS` and what it attaches by its purpose's
+    word in `PURPOSES`; the objectives, each `sense` by its word in `SENSES`; the unknowns
+    and parameters.'''
 
     kind = 'relational'
 
@@ -34,7 +38,12 @@ class RelationalSpelling(Spelling[RelationalCondition]):
             if (op := word_of(RELS, x.op)) is None:
                 raise w.refuse(x.op.__name__, 'a relation with no spelling in `RELS`')
             side = lambda p: None if p is None else w.place(p)          # a side of `None` is zero
-            return {'lhs': side(x.lhs), 'op': op, 'rhs': side(x.rhs)}
+            written = {'lhs': side(x.lhs), 'op': op, 'rhs': side(x.rhs)}
+            for purpose, place in x.attached.items():
+                if (word := word_of(PURPOSES, purpose)) is None:
+                    raise w.refuse(purpose.__name__, 'a purpose with no spelling in `PURPOSES`')
+                written.setdefault('attached', {})[word] = w.place(place)
+            return written
         def objective(o: Objective[V]) -> dict:
             if (sense := word_of(SENSES, o.sense)) is None:
                 raise w.refuse(o.sense.__name__, 'a sense with no spelling in `SENSES`')
@@ -51,7 +60,9 @@ class RelationalSpelling(Spelling[RelationalCondition]):
             return found
         side = lambda p: None if p is None else r.place(p)
         return RelationalCondition(
-            tuple(Relation(side(x['lhs']), side(x['rhs']), marker('RELS', x['op']))
+            tuple(Relation(side(x['lhs']), side(x['rhs']), marker('RELS', x['op']),
+                           OrderedMap((marker('PURPOSES', k), r.place(p))
+                                      for k, p in x.get('attached', {}).items()))
                   for x in data['relations']),
             tuple(Objective(r.place(o['place']), marker('SENSES', o['sense']))
                   for o in data['objectives']),

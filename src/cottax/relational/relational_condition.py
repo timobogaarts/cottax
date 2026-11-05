@@ -7,8 +7,8 @@ determine and the parameters they hold fixed, and `+` the join.
 import dataclasses
 from collections.abc import Iterator
 
-from ..core import ConditionalNode, Place, Renaming, Violation, relabelled
-from ..core.frozen import Frozen
+from ..core import ConditionalNode, Mint, Place, Renaming, Violation, relabelled
+from ..core.frozen import Frozen, OrderedMap
 
 
 class Rel:
@@ -42,27 +42,43 @@ def check_op(relation: 'Relation') -> Iterator[Violation]:
     if not (isinstance(relation.op, type) and issubclass(relation.op, Rel)):
         yield NotARel(relation.op)
 
+def check_attached(relation: 'Relation') -> Iterator[Violation]:
+    '''Each attachment is a purpose, a `Mint` class, and a place.'''
+    for purpose, place in relation.attached.items():
+        if not (isinstance(purpose, type) and issubclass(purpose, Mint)) or place is None:
+            yield NotAnAttachment(purpose, place)
+
 class Relation[V: Place](Frozen):
-    '''`lhs op rhs` between two places; a side of `None` is zero.'''
+    '''`lhs op rhs` between two places; a side of `None` is zero. `attached`: given places it
+    refers to beside its sides, each under its purpose (`ResidualScale`: the magnitude its
+    residual is read in). A purpose exists only where something reads it.'''
 
-    lhs : V | None
-    rhs : V | None
-    op  : type[Rel]
+    lhs      : V | None
+    rhs      : V | None
+    op       : type[Rel]
+    attached : OrderedMap[type[Mint], V] = OrderedMap()
 
-    checks = (check_sides, check_op)
+    checks = (check_sides, check_op, check_attached)
 
     @property
-    def terms(self) -> tuple[V, ...]:
+    def sides(self) -> tuple[V, ...]:
         '''The sides that are places, left then right.'''
         return tuple(s for s in (self.lhs, self.rhs) if s is not None)
 
+    @property
+    def terms(self) -> tuple[V, ...]:
+        '''The sides that are places, then the attached places.'''
+        return self.sides + tuple(self.attached.values())
+
     def relabel(self, renaming: Renaming[V]) -> 'Relation[V]':
         return Relation(*(s if s is None else renaming.get(s, s)
-                          for s in (self.lhs, self.rhs)), self.op)
+                          for s in (self.lhs, self.rhs)), self.op,
+                        OrderedMap((m, renaming.get(p, p)) for m, p in self.attached.items()))
 
     def __repr__(self) -> str:
-        return (f'{"0" if self.lhs is None else self.lhs} {self.op.symbol} '
-                f'{"0" if self.rhs is None else self.rhs}')
+        stated = (f'{"0" if self.lhs is None else self.lhs} {self.op.symbol} '
+                  f'{"0" if self.rhs is None else self.rhs}')
+        return stated + ''.join(f' with {p}' for p in self.attached.values())
 
 # -------------------- objective
 
@@ -115,7 +131,8 @@ def check_relates_something(node: 'RelationalCondition') -> Iterator[Violation]:
 
 def check_parameters(node: 'RelationalCondition') -> Iterator[Violation]:
     '''A parameter is held fixed: not moved (an unknown), not minimised (an objective), a
-    term of some relation, and never the only kind of term in one.'''
+    term of some relation, and never the only kind of side in one. An attached place is a
+    parameter.'''
     driven = {o.place for o in node.objectives}
     if moved := tuple(p for p in node.parameters if p in node.unknowns or p in driven):
         yield FixedAndMoved(moved)
@@ -123,8 +140,11 @@ def check_parameters(node: 'RelationalCondition') -> Iterator[Violation]:
     if unrelated := tuple(p for p in node.parameters if p not in terms):
         yield ParameterUnrelated(unrelated)
     if fixed := tuple(r for r in node.relations
-                      if r.terms and all(t in node.parameters for t in r.terms)):
+                      if r.sides and all(t in node.parameters for t in r.sides)):
         yield FixedRelation(fixed)
+    if loose := tuple(dict.fromkeys(p for r in node.relations for p in r.attached.values()
+                                    if p not in node.parameters)):
+        yield AttachedNotAParameter(loose)
 
 class RelationalCondition[V: Place](ConditionalNode[V]):
     '''A condition node: relations and objectives over places, the unknowns it determines and
@@ -141,10 +161,10 @@ class RelationalCondition[V: Place](ConditionalNode[V]):
 
     @property
     def conditions(self) -> tuple[V, ...]:
-        '''The objectives, then every relation's terms that are neither unknowns nor
+        '''The objectives, then every relation's sides that are neither unknowns nor
         parameters, in order.'''
         return tuple(o.place for o in self.objectives) + tuple(
-            t for r in self.relations for t in r.terms
+            t for r in self.relations for t in r.sides
             if t not in self.unknowns and t not in self.parameters)
     @property
     def reads(self) -> tuple[V, ...]:
@@ -199,6 +219,14 @@ class NoSides(Violation):
     template = 'a relation with zero on both sides relates nothing'
 
 
+class NotAnAttachment(Violation):
+    purpose : object
+    place   : object
+    error    = TypeError
+    template = ('{purpose!r}: {place!r} is no attachment -- a relation attaches a place under '
+                'a `Mint` class, its purpose')
+
+
 class NotASense(Violation):
     sense : object
     error    = TypeError
@@ -228,6 +256,13 @@ class ParameterUnrelated(Violation):
     places : tuple
     error    = ValueError
     template = '{places!r} held fixed, but no relation relates them: a parameter is a term'
+
+
+class AttachedNotAParameter(Violation):
+    places : tuple
+    error    = ValueError
+    template = ('{places!r} attached to a relation, but not held fixed: an attached place is '
+                'given, a parameter of the condition')
 
 
 class FixedRelation(Violation):

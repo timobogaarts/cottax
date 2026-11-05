@@ -24,6 +24,7 @@ from cottax.relational import (
     Eq, Le, Relation, RelationalCondition, is_fixed_point, is_optimise, is_root_find,
 )
 from cottax.core import Combine
+from cottax.relational.mints import ResidualScale
 from cottax.relational.rewrites import FixedPointCut
 from cottax.pytree.path import NodePath, VarPath
 import purposes
@@ -154,6 +155,18 @@ def test_the_minted_names_follow_their_own_roots(looped):
 
 def test_closure_repr(looped):
     assert repr(closure(looped, Y1)) == 'fixed_point_cut(.y1->^copy.y1 @ ^solve.y1)'
+
+
+def test_a_cut_attaching_a_purpose_holds_it_fixed_minted_on_each_copy(looped):
+    '''`^copy.y1 = y1` attaching `^residualscale.^copy.y1`, a parameter of the closure: read,
+    so given, and no condition; the shape and the repr are the plain cut's.'''
+    plain = closure(looped, Y1)
+    o = FixedPointCut(plain.cuts, plain.at, (ResidualScale,))
+    scale = ResidualScale()(o.copies[0])
+    g = o(looped)
+    assert g[o.at].relations == (Relation(o.copies[0], Y1, Eq, OrderedMap({ResidualScale: scale})),)
+    assert g[o.at].parameters == (scale,) and g[o.at].conditions == o.vars
+    assert is_fixed_point(g[o.at]) and repr(o) == repr(plain)
 
 
 # ---------------------------------------------------------------- one closure, several cuts

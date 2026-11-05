@@ -2,7 +2,7 @@
 is no implicit model; offers its closing, `FixedPointClosing`, each group of cuts closed by a
 `FixedPointCut`.'''
 
-from ...core import Cut, FunctionalNode, Label, Place, PlaceToPlace, ToCut, Violation
+from ...core import Cut, FunctionalNode, Label, Mint, Place, PlaceToPlace, ToCut, Violation
 from ...core.frozen import answers, choice
 from ...consumers.architectures.interface import Closing, ModelReading
 from ...consumers.architectures.interface_types import At
@@ -42,20 +42,23 @@ class RelationalModel(ModelReading):
 @choice(Closing)
 class FixedPointClosing[N: Label, V: Place](Closing[N, V]):
     '''One group closed as one problem: a copy per variable, named by `copies`, and
-    the closure bound where `at` says.'''
+    the closure bound where `at` says; each coupling attaching `attach` (an arm folding
+    closures into a residual, IDF or SAND, is handed one attaching `ResidualScale`).'''
 
     copies : PlaceToPlace[V]
     at     : At[N, V]
+    attach : tuple[type[Mint], ...] = ()
 
     def __call__(self, cycle: tuple[N, ...], group: ToCut[N, V]) -> FixedPointCut[N, V]:
         return FixedPointCut(tuple(Cut(var, readers, self.copies) for var, readers in group.items()),
-                             self.at(cycle, group))
+                             self.at(cycle, group), self.attach)
 
     def bound_at(self, cycle: tuple[N, ...], group: ToCut[N, V]) -> N:
         return self.at(cycle, group)
 
     def __repr__(self) -> str:
-        return f'closing({self.copies!r}, {self.at!r})'
+        attach = ''.join(f', {m.__name__}' for m in self.attach)
+        return f'closing({self.copies!r}, {self.at!r}{attach})'
 
 
 class NotEqualities(Violation):

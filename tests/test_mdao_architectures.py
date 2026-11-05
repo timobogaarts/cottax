@@ -24,6 +24,7 @@ from cottax.core.maths.cut_rules import (
     ByName, CutRule, GaussSeidel, GaussSeidelMinimal, Jacobi, coupling_reads, per_functional_cycle,
 )
 from cottax.consumers.architectures import CloseFunctionalCycles, closed
+from cottax.relational.mints import ResidualScale
 from cottax.relational.rewrites import FixedPointCut
 from cottax.relational.consumers.architectures import FixedPointClosing
 from cottax.consumers.architectures.interface_types import At
@@ -317,6 +318,19 @@ def test_two_cycles_are_two_solves_under_mdf(two_cycles):
     top, = entries(ExecutableGraph(g).graph)
     solves = [e for e in entries(top.interior) if isinstance(e, Solve)]
     assert [names(e.nodes) for e in solves] == [['.A1', '.A2', '^closure.A1'], ['.B1', '.B2', '^closure.B1']]
+
+
+def test_idf_handed_an_attaching_closing_holds_each_couplings_scale_fixed_at_the_top(sellar):
+    '''The coupling folded into the top attaches `^residualscale.^copy.y2`, a parameter
+    there; MDF, handed the plain closing, nests the closure and has no such place.'''
+    attaching = FixedPointClosing(CLOSING.copies, CLOSING.at, (ResidualScale,))
+    top = (Plan(sellar) + IDF(GaussSeidel(), attaching, OPT)).graph[OPT]
+    (coupling,) = [r for r in top.relations if r.attached]
+    assert coupling.attached[ResidualScale] == ResidualScale()(coupling.lhs)
+    assert coupling.attached[ResidualScale] in top.parameters
+    nested = (Plan(sellar) + mdf()).graph
+    assert not any(r.attached for n in nested.nodes if isinstance(nested[n], RelationalCondition)
+                   for r in nested[n].relations)
 
 
 def test_idf_keeps_the_optimiser_where_it_was_bound(sellar):

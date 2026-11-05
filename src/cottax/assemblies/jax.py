@@ -48,7 +48,7 @@ from ..relational.consumers.declaration import (
 from ..relational.consumers.surface import RelationalEditing
 from ..relational.consumers.execution.jax_solvers import BFGS, SLSQP, Newton, Picard
 from ..relational.consumers.execution.jax_solvers.canonical_nlp import (
-    Box, NotSquare, box, canonical,
+    Box, NotSquare, box, canonical, scaled,
 )
 from ..consumers.declaration import (
     Conventions, Declared, Description, Explicit, Shipped, Unimplemented, tags_of,
@@ -109,10 +109,10 @@ copy, closure, given, start, steps = (
     Purpose(m) for m in (Copy(), Closure(), _surface_mints.Given(), _surface_mints.Start(),
                          _surface_mints.Steps()))
 solve = Purpose(_Solve())
-cond, require, lower, upper, target = (
+cond, require, lower, upper, target, residual_scale = (
     Purpose(m) for m in (_relational_mints.Cond(), _relational_mints.Require(),
                          _relational_mints.Lower(), _relational_mints.Upper(),
-                         _relational_mints.Target()))
+                         _relational_mints.Target(), _relational_mints.ResidualScale()))
 rate, initial, span, times, trajectory = (
     Purpose(m) for m in (_ode_mints.Rate(), _ode_mints.Initial(), _ode_mints.Span(),
                          _ode_mints.Times(), _ode_mints.Trajectory()))
@@ -174,7 +174,7 @@ __all__ = [
     'Architecting', 'Driving', 'ShippedSurface', 'Drive', 'RolePlaces', 'core_role_places',
     'Mint', 'Copy', 'Closure', 'Purpose',
     'copy', 'closure', 'given', 'start', 'steps', 'solve', 'cond', 'require', 'lower', 'upper',
-    'target', 'rate', 'initial', 'span', 'times', 'trajectory',
+    'target', 'residual_scale', 'rate', 'initial', 'span', 'times', 'trajectory',
     'Locator', 'Conventions', 'Shipped', 'PytreeLocator', 'Under', 'InFull',
     'Scope', 'flat', 'absolute', 'Declared', 'tags_of',
     'Static', 'DictKey', 'GetAttrKey', 'SequenceKey',
@@ -188,7 +188,7 @@ __all__ = [
     'RootFinding', 'FixedPointIteration', 'Minimisation', 'ConstrainedMinimisation', 'CONTRACTS',
     'OdeDeclaring', 'Rate', 'Dt', 'OdeCondition', 'Integration', 'Integrator',
     'Times', 'Trajectory',
-    'Newton', 'Picard', 'BFGS', 'SLSQP', 'canonical', 'box', 'Box', 'NotSquare', 'JitGraph',
+    'Newton', 'Picard', 'BFGS', 'SLSQP', 'canonical', 'box', 'scaled', 'Box', 'NotSquare', 'JitGraph',
     'Running', 'Results', 'Inputs', 'Traced', 'Start', 'Driven', 'CallableGraph', 'completed',
     'PlainFormat', 'LatexFormatter', 'render_xdsm_svg', 'render_matrix_svg', 'by_namespace',
     'render_html', 'draw', 'render', 'to_dot', 'Style', 'STYLES', 'TERRACOTTA', 'PYXDSM', 'DARK',

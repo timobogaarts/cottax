@@ -6,14 +6,16 @@ no group for is refused, and so by `canonical` and `box`, which compute over it.
 
 from dataclasses import dataclass
 
+import jax.numpy as jnp
 import pytest
 
 from cottax.core.frozen import OrderedMap
-from cottax.relational.consumers.execution.jax_solvers.canonical_nlp import box, canonical
+from cottax.relational.consumers.execution.jax_solvers.canonical_nlp import box, canonical, scaled
+from cottax.relational.mints import ResidualScale
 from cottax.relational import (
     Eq, Le, Max, Min, Objective, Programme, Rel, Relation, RelationalCondition, programme,
 )
-from cottax.relational.programme import NotProgrammable, check_programmable
+from cottax.relational.programme import AttachedBound, NotProgrammable, check_programmable
 
 
 @dataclass(frozen=True)
@@ -85,3 +87,20 @@ def test_an_unknown_rel_is_refused():
                  lambda n: box(n, (1.0,), (2.0,))):
         with pytest.raises(TypeError, match='reads `Eq` and `Le` alone'):
             read(node)
+
+
+def test_scaled_reads_each_residual_in_what_it_attaches_and_the_box_in_y():
+    '''`x - y = 6` read in `|k| = 2` (a scale is a magnitude, its sign dropped), `g <= 0`
+    attaching nothing as it is; the box `1 <= x` over a column of -2, its sides swapped.'''
+    scale = OrderedMap({ResidualScale: k})
+    node = RelationalCondition((Relation(x, y, Eq, scale), Relation(g, None, Le), Relation(lo, x, Le)),
+                               (), (x,), (k, lo))
+    form, (lower, upper) = scaled(node, (8.0,), (2.0, 5.0, -2.0, 1.0), (-2.0,))
+    assert (form.equalities, form.inequalities) == ((3.0,), (5.0,))
+    assert (float(lower[0]), float(upper[0])) == (-jnp.inf, -0.5)
+
+
+def test_a_bound_attaches_nothing():
+    rel  = Relation(lo, x, Le, OrderedMap({ResidualScale: k}))
+    node = RelationalCondition((rel,), (Objective(f, Min),), (x,), (lo, k))
+    assert list(check_programmable(node)) == [AttachedBound(rel)]

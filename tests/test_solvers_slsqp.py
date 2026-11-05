@@ -22,6 +22,7 @@ import purposes
 from cottax.pytree.path import NodePath, VarPath
 from cottax.core.realisation import ImplementedDriven, ImplementedFunction
 from cottax.relational import Eq, Le, Relation, RelationalCondition
+from cottax.relational.mints import ResidualScale
 from cottax.relational.consumers.execution.jax_solvers.canonical_nlp import Canonical, box, canonical
 from cottax.relational.consumers.execution.jax_solvers import SLSQP, scipy_slsqp
 from cottax.relational.consumers.execution.jax_solvers.scipy_slsqp import _Memo
@@ -110,6 +111,22 @@ def test_a_bound_is_broadcast_over_an_unknown_that_holds_an_array():
     }, {STARTS(V('x')): jnp.zeros(4), LOWER(V('x')): -1.0, UPPER(V('x')): 0.5})
     assert out[V('x')].shape == (4,)
     assert out[V('x')].tolist() == pytest.approx([0.5] * 4, abs=1e-6)
+
+
+def test_a_residual_is_read_in_the_scale_it_attaches_a_given_value():
+    '''`min (x - 3)^2` on `1e8 (x - 1) = 0`, read in its attached `s = 1e8`: `x = 1`. The
+    scale is a parameter, so a value the graph is given like any other.'''
+    s = V('s')
+    held = Relation(V('h'), None, Eq, OrderedMap({ResidualScale: s}))
+    opt = ImplementedDriven(
+        Driven(RelationalCondition((held,), (Objective(V('f'), Min),), (V('x'),), (s,)),
+               ConstrainedMinimisation(steps=False), ((STARTS(V('x')),),), ()), SLSQP())
+    nodes = {N('m'): call(['x'], ['f', 'h'], lambda x: ((x - 3.0) ** 2, 1e8 * (x - 1.0))),
+             N('opt'): opt}
+    out = solve(nodes, {STARTS(V('x')): 0.0, s: 1e8})
+    assert float(out[V('x')]) == pytest.approx(1.0, abs=1e-6)
+    with pytest.raises(KeyError, match='no value given'):
+        solve(nodes, {STARTS(V('x')): 0.0})
 
 
 BOWL = {N('m'): call(['x'], ['f'], lambda x: (x - 3.0) ** 2)}

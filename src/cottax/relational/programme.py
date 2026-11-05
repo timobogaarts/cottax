@@ -26,10 +26,13 @@ class Programme[V: Place](Frozen):
 
 
 def check_programmable(condition: RelationalCondition) -> Iterator[Violation]:
-    '''Every relation an `Eq` or a `Le`: a programme has no other group.'''
+    '''Every relation an `Eq` or a `Le`: a programme has no other group. A bound attaches
+    nothing: it goes to the box, which has no residual to read an attachment.'''
     for r in condition.relations:
         if r.op is not Eq and r.op is not Le:
             yield NotProgrammable(r)
+        elif r.attached and _bounding(condition, r) is not None:
+            yield AttachedBound(r)
 
 
 def programme[V: Place](condition: RelationalCondition[V]) -> Programme[V]:
@@ -70,3 +73,10 @@ class NotProgrammable(Violation):
     error    = TypeError
     template = ('{relation!r}: a nonlinear programme reads `Eq` and `Le` alone, so another '
                 '`Rel` has no group')
+
+
+class AttachedBound(Violation):
+    relation : object
+    error    = ValueError
+    template = ('{relation!r}: a bound attaches nothing -- it goes to the box, which has no '
+                'residual to read it')

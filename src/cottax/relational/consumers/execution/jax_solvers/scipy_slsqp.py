@@ -18,7 +18,7 @@ from .....core.driven import Start, Steps
 from .....relational.contracts import ConstrainedMinimiser
 from .....consumers.execution.interface import DriverImplementation
 from .....consumers.execution.interface_types import ByRole, Context, Posed, Unknowns
-from .canonical_nlp import Canonical, box, canonical
+from .canonical_nlp import Canonical, scaled
 
 
 type Unravel = Callable[[jax.Array], tuple[Any, ...]]
@@ -37,12 +37,13 @@ class _Flat[V: Place](Frozen):
         return self.evaluated(context, x)[0]
 
     def evaluated(self, context: Context, x: jax.Array) -> tuple[Canonical, jax.Array]:
-        '''The groups at `x`, and the box parallel to `x` as `(2, n)`: lower then upper,
-        `-inf` / `inf` where unbounded. One walk of the model for both.'''
+        '''The groups at `x`, each residual over the scale its relation attaches, and the
+        box parallel to `x` as `(2, n)`: lower then upper, `-inf` / `inf` where unbounded.
+        One walk of the model for both.'''
         unknowns = self.unravel(x)
         values   = self.posed.conditions(unknowns, context)
-        form     = canonical(self.posed.condition, unknowns, values)
-        lower, upper = box(self.posed.condition, unknowns, values)
+        ones     = tuple(jax.tree.map(jnp.ones_like, u) for u in unknowns)
+        form, (lower, upper) = scaled(self.posed.condition, unknowns, values, ones)
         over = lambda bounds, free: ravel_pytree(tuple(
             jnp.broadcast_to(jnp.asarray(free if b is None else b, jnp.result_type(u)),
                              jnp.shape(u))

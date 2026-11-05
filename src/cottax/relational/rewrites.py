@@ -3,7 +3,7 @@
 from collections.abc import Iterator, Sequence
 
 from ..core import (
-    ComposedOp, Cut, GraphOp, Insert, Label, NestingGraph, Place, Violation,
+    ComposedOp, Cut, GraphOp, Insert, Label, Mint, NestingGraph, Place, Violation,
 )
 from ..core.frozen import OrderedMap
 from .relational_condition import Eq, Relation, RelationalCondition
@@ -19,6 +19,8 @@ def check_cuts(op: 'FixedPointCut') -> Iterator[Violation]:
         return
     if dupes := tuple(dict.fromkeys(v for v in op.vars if op.vars.count(v) > 1)):
         yield CutTwice(dupes)
+    if wrong := tuple(m for m in op.attach if not (isinstance(m, type) and issubclass(m, Mint))):
+        yield NotAPurpose(wrong)
 
 
 class FixedPointCut[N: Label, V: Place](ComposedOp[N, V]):
@@ -27,9 +29,13 @@ class FixedPointCut[N: Label, V: Place](ComposedOp[N, V]):
     cut, so the condition *is* the next iterate and the loop is re-closed through it.
     '''
 
-    cuts : tuple[Cut[N, V], ...]
-    at   : N
+    cuts   : tuple[Cut[N, V], ...]
+    at     : N
     '''Where the problem closing the cuts is bound -- a binding of its own.'''
+    attach : tuple[type[Mint], ...] = ()
+    '''Purposes each coupling attaches, minted on its copy and held fixed by the closure
+    (`ResidualScale`: `^residualscale.^copy.x`); for an arm that reads the coupling as a
+    residual.'''
 
     checks = (check_cuts,)
 
@@ -45,11 +51,15 @@ class FixedPointCut[N: Label, V: Place](ComposedOp[N, V]):
 
     @property
     def definition(self) -> RelationalCondition[V]:
-        '''One relation per cut, paired by the order the cuts were given.'''
+        '''One relation per cut, paired by the order the cuts were given, each attaching
+        `attach` minted on its copy.'''
+        attached = tuple(OrderedMap((p, p()(m)) for p in self.attach) for m in self.copies)
         return RelationalCondition(
-            relations  = tuple(Relation(m, v, Eq) for m, v in zip(self.copies, self.vars)),
+            relations  = tuple(Relation(m, v, Eq, a)
+                               for m, v, a in zip(self.copies, self.vars, attached)),
             objectives = (),
-            unknowns   = self.copies, parameters=(),
+            unknowns   = self.copies,
+            parameters = tuple(p for a in attached for p in a.values()),
         )
 
     def composed(self, graph: NestingGraph[N, V]) -> Sequence[GraphOp[N, V]]:
@@ -65,6 +75,11 @@ class FixedPointCut[N: Label, V: Place](ComposedOp[N, V]):
 class NothingCut(Violation):
     error    = ValueError
     template = 'fixed_point_cut(): nothing cut'
+
+class NotAPurpose(Violation):
+    attach : tuple
+    error    = TypeError
+    template = '{attach!r}: a cut attaches purposes, `Mint` classes'
 
 class CutTwice(Violation):
     places : tuple

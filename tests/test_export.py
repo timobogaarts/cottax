@@ -13,7 +13,7 @@ import pytest
 from jax.tree_util import DictKey, GetAttrKey, SequenceKey
 
 from cottax.core import Function, answer_for_labels, answer_for_places
-from cottax.core.frozen import answers, violations
+from cottax.core.frozen import OrderedMap, answers, violations
 from cottax.core.maths.plan import Plan
 from cottax.relational.contracts import RootFinding
 from cottax.core.maths.definition import relabelled
@@ -35,6 +35,7 @@ from cottax.pytree.path import NodePath, VarPath
 from cottax.core.realisation import ImplementedFunction, is_implemented
 from cottax.relational import Eq, Le, Max, Min, Objective, Rel, Relation, RelationalCondition
 from cottax.relational.consumers.json import RELS
+from cottax.relational.mints import ResidualScale
 from graphs import graph_of
 from test_cutting import D1, D2, OPT, call, mdf, optimise, V, N
 from test_cx import double, square
@@ -433,6 +434,18 @@ def test_the_file_words_of_relations_and_senses_are_pinned():
     down, up = (data['nodes'][i]['definition'] for i in (1, 2))
     assert [x['op'] for x in down['relations']] == ['le', 'eq']
     assert [o['sense'] for o in down['objectives'] + up['objectives']] == ['min', 'max']
+    assert 'attached' not in down['relations'][0]                  # nothing attached: unwritten
+    assert read_json(data) == graph
+
+
+def test_an_attachment_is_written_by_its_purposes_word_and_round_trips():
+    u, f, g, s = (VarPath((DictKey(k),)) for k in 'ufgs')
+    graph = graph_of({NodePath((DictKey('body'),)): Function((u,), (f, g)),
+                      NodePath((DictKey('down'),)): RelationalCondition(
+                          (Relation(g, None, Eq, OrderedMap({ResidualScale: s})),),
+                          (Objective(f, Min),), (u,), (s,))})
+    data = written(graph)
+    assert list(data['nodes'][1]['definition']['relations'][0]['attached']) == ['residual_scale']
     assert read_json(data) == graph
 
 
