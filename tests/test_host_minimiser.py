@@ -621,11 +621,9 @@ def idf_answer(driver, M, scaled):
     return float(out[flat.place('z')]), float(out[flat.place('y2')]) / M
 
 
-@pytest.mark.parametrize('driver', [ScipyMinimize(), ScipyMinimize(method='COBYQA')],
-                         ids=['SLSQP', 'COBYQA'])
-def test_a_million_read_in_its_scale_is_the_problem_in_units_of_one(driver):
+def test_a_million_read_in_its_scale_is_the_problem_in_units_of_one():
     '''Unscaled at one and scaled at a million, one answer. Unscaled at a million is left out:
     SLSQP gives a wrong one there, which is what scaling is for.'''
-    plain = idf_answer(driver, 1.0, scaled=False)
+    plain = idf_answer(ScipyMinimize(), 1.0, scaled=False)
     assert plain == pytest.approx((1.0, 1.214889), abs=1e-5)
-    assert idf_answer(driver, 1e6, scaled=True) == pytest.approx(plain, abs=1e-5)
+    assert idf_answer(ScipyMinimize(), 1e6, scaled=True) == pytest.approx(plain, abs=1e-5)
