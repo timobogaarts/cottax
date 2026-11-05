@@ -15,10 +15,11 @@ from scipy.optimize import minimize
 from .....core import Place
 from .....core.frozen import Frozen, choice
 from .....core.driven import Start, Steps
-from .....relational.contracts import ConstrainedMinimiser
+from .....relational import Scaling
+from .....relational.contracts import ConstrainedMinimiser, Scales
 from .....consumers.execution.interface import DriverImplementation
 from .....consumers.execution.interface_types import ByRole, Context, Posed, Unknowns
-from .canonical_nlp import Canonical, box, canonical
+from .canonical_nlp import Canonical, scaled, scaled_unknowns, unscaled_unknowns
 
 
 type Unravel = Callable[[jax.Array], tuple[Any, ...]]
@@ -32,39 +33,43 @@ class _Flat[V: Place](Frozen):
     unravel : Unravel
     '''The flat vector back into the unknowns.'''
 
-    def groups(self, context: Context, x: jax.Array) -> Canonical:
+    def groups(self, context: Context, scaling: Scaling, x: jax.Array) -> Canonical:
         '''The canonical form at `x`, each group stacked into one array of scalars.'''
-        return self.evaluated(context, x)[0]
+        return self.evaluated(context, scaling, x)[0]
 
-    def evaluated(self, context: Context, x: jax.Array) -> tuple[Canonical, jax.Array]:
+    def evaluated(self, context: Context, scaling: Scaling, x: jax.Array
+                  ) -> tuple[Canonical, jax.Array]:
         '''The groups at `x`, and the box parallel to `x` as `(2, n)`: lower then upper,
-        `-inf` / `inf` where unbounded. One walk of the model for both.'''
-        unknowns = self.unravel(x)
+        `-inf` / `inf` where unbounded, all read in `scaling`, which `x` is in too. One walk of
+        the model for both.'''
+        solved   = self.unravel(x)
+        unknowns = unscaled_unknowns(self.posed.condition, solved, scaling)
         values   = self.posed.conditions(unknowns, context)
-        form     = canonical(self.posed.condition, unknowns, values)
-        lower, upper = box(self.posed.condition, unknowns, values)
+        form, (lower, upper) = scaled(self.posed.condition, unknowns, values, scaling)
         over = lambda bounds, free: ravel_pytree(tuple(
             jnp.broadcast_to(jnp.asarray(free if b is None else b, jnp.result_type(u)),
                              jnp.shape(u))
-            for b, u in zip(bounds, unknowns, strict=True)))[0]
+            for b, u in zip(bounds, solved, strict=True)))[0]
         return (Canonical(*(jnp.stack([jnp.asarray(v) for v in group]) if group
                             else jnp.zeros(0) for group in form)),
                 jnp.stack([over(lower, -jnp.inf), over(upper, jnp.inf)]))
 
-    def vector(self, context: Context, x: jax.Array) -> jax.Array:
+    def vector(self, context: Context, scaling: Scaling, x: jax.Array) -> jax.Array:
         '''The groups as one vector: what a Jacobian transform differentiates.'''
-        return jnp.concatenate(self.groups(context, x))
+        return jnp.concatenate(self.groups(context, scaling, x))
 
 
 @functools.partial(jax.jit, static_argnums=0)
-def _values(flat: _Flat, context: Context, x: jax.Array) -> tuple[Canonical, jax.Array]:
-    return flat.evaluated(context, x)
+def _values(flat: _Flat, context: Context, scaling: Scaling, x: jax.Array
+            ) -> tuple[Canonical, jax.Array]:
+    return flat.evaluated(context, scaling, x)
 
 
 @functools.partial(jax.jit, static_argnums=(0, 1))
-def _jacobian(transform: Callable, flat: _Flat, context: Context, x: jax.Array) -> jax.Array:
+def _jacobian(transform: Callable, flat: _Flat, context: Context, scaling: Scaling,
+              x: jax.Array) -> jax.Array:
     '''One row per entry of `flat.vector`, in its order.'''
-    return transform(functools.partial(flat.vector, context))(x)
+    return transform(functools.partial(flat.vector, context, scaling))(x)
 
 
 class _Memo:
@@ -107,7 +112,8 @@ class _Memo:
 class SLSQP(DriverImplementation[ConstrainedMinimiser]):
     '''`scipy.optimize.minimize(method='SLSQP')` on the canonical form: the objective,
     the equalities as `eq`, the inequalities negated as `ineq` (scipy's `>= 0`), and the
-    box as scipy's `bounds`, so every iterate stays inside it.'''
+    box as scipy's `bounds`, so every iterate stays inside it. Under a contract taking
+    `Scales`, scipy sees all of them read in that `Scaling`, its tolerance included.'''
 
     needs    = frozenset({Start})
     provides = frozenset({Steps})
@@ -122,18 +128,20 @@ class SLSQP(DriverImplementation[ConstrainedMinimiser]):
 
     def __call__[V: Place](self, posed: Posed[V], context: Context,
                            data: ByRole) -> tuple[Unknowns, ByRole]:
-        start, unravel = ravel_pytree(data[Start])
+        (scaling,) = data.get(Scales, (Scaling(),))
+        start, unravel = ravel_pytree(scaled_unknowns(posed.condition, tuple(data[Start]), scaling))
         host = functools.partial(_minimise, self, _Flat(posed, unravel),
                                  jax.devices()[0])    # asked here: in the callback it is the CPU
         if any(isinstance(leaf, jax.core.Tracer)
-               for leaf in jax.tree.leaves((context, start))):
+               for leaf in jax.tree.leaves((context, scaling, start))):
             answer, steps = jax.pure_callback(
                 host, (jax.ShapeDtypeStruct(start.shape, start.dtype),
                        jax.ShapeDtypeStruct((), jax.dtypes.canonicalize_dtype(int))),
-                context, start, vmap_method='sequential')
+                context, scaling, start, vmap_method='sequential')
         else:
-            answer, steps = map(jnp.asarray, host(context, start))
-        return tuple(unravel(answer)), ({Steps: (steps,)} if Steps in posed.reports else {})
+            answer, steps = map(jnp.asarray, host(context, scaling, start))
+        return (unscaled_unknowns(posed.condition, tuple(unravel(answer)), scaling),
+                {Steps: (steps,)} if Steps in posed.reports else {})
 
 
 def _objective(x: np.ndarray, memo: _Memo) -> float:
@@ -158,14 +166,15 @@ SCIPY = (('eq', 'equalities', 1.0), ('ineq', 'inequalities', -1.0))
 '''Each constraint group as scipy's kind, and its sign: `g <= 0` is scipy's `-g >= 0`.'''
 
 
-def _minimise(slsqp: SLSQP, flat: _Flat, device: Any, context: Context,
+def _minimise(slsqp: SLSQP, flat: _Flat, device: Any, context: Context, scaling: Scaling,
               start: Any) -> tuple[np.ndarray, np.ndarray]:
     '''One scipy solve on the host: `(x, nit)`, `x` in the start's dtype, the model
     evaluated on `device`.'''
     dtype, x0 = np.asarray(start).dtype, np.asarray(start, float)
-    context = jax.device_put(context, device)
-    memo = _Memo(functools.partial(_values, flat, context),
-                 functools.partial(_jacobian, slsqp.jacobian, flat, context), dtype, device)
+    context, scaling = jax.device_put((context, scaling), device)
+    memo = _Memo(functools.partial(_values, flat, context, scaling),
+                 functools.partial(_jacobian, slsqp.jacobian, flat, context, scaling),
+                 dtype, device)
     at_start = memo.values_at(x0)
     constraints = [{'type': kind, 'fun': _group, 'jac': _group_jacobian,
                     'args': (memo, group, sign)}

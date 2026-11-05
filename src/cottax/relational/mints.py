@@ -21,3 +21,7 @@ class Upper(Mint):
 
 class Target(Mint):
     '''An equality's target written as a value: `^target.h`.'''
+
+
+class Scales(Mint):
+    '''Where a driver reads a problem's `Scaling`: `^scales.<the problem>`.'''

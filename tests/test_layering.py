@@ -1,5 +1,5 @@
 '''
-The layering, as rules over the tree (see `consumers_and_features.md`).
+The layering, as rules over the tree.
 
 The static rules read each module's imports with `ast`: an import inside a function is not a
 dependency. The runtime rules run once, in one interpreter forking a child per module, so
@@ -346,11 +346,11 @@ def test_the_assembly_defines_only_what_is_pinned():
 
 
 CONDITION_NODES = {'declare', 'requirement', 'satisfy', 'optimise', 'run', 'valued',
-                   'copy', 'reading', 'parameter_reads', 'term', 'per_place'}
+                   'copy', 'reading', 'parameter_reads', 'term', 'per_place', 'scaling'}
 '''What a part offers beside the kinds it declares (`declares`) and the ops it builds: the
 model declared, relational's condition nodes, a run on values written by name or held in a
-caller's structure, where its cuts put a copy, and a declaring
-part's conventions, changed or asked.'''
+caller's structure, a driver's scales written by name for such a run, where its cuts put a
+copy, and a declaring part's conventions, changed or asked.'''
 
 
 def test_a_part_writes_or_runs_the_model_and_never_draws_it():
