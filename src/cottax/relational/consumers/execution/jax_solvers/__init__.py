@@ -4,7 +4,7 @@ contract in `ImplementDrivers`.
 
 Dependency:
 
-canonical_nlp                    (canonical, box: `relational.programme` computed over the
+canonical_nlp                    (canonical, box, scaled: `relational.programme` computed over the
  ||-----------------              values at the condition's reads; next_values, Picard's
  ||                               step; NotSquare)
  \/               \/

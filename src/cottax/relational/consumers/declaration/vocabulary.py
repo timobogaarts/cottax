@@ -9,7 +9,7 @@ from typing import Any
 
 from ....core import NodeDefinition, Place, PlaceToPlace
 from ....core.frozen import OrderedMap, choice
-from ... import Eq, Max, Min, Objective, Rel, Relation, RelationalCondition
+from ... import Eq, Max, Min, Objective, Rel, Relation, RelationalCondition, Scaling
 from ....consumers.declaration.interface import Declaring
 from ....consumers.declaration.interface_types import (
     Declaration, Keyword, PlaceWithValue, Side, declares,
@@ -108,6 +108,17 @@ class RelationalDeclaring(Declaring):
                             '`maximise=`')
         objective, sense = (minimise, Min) if maximise is None else (maximise, Max)
         return _problem(self, (Objective(objective, sense),), design, subject_to)
+
+    # ------------------------------------------------------------ a driver's scales
+
+    def scaling(self, *, unknowns: Mapping[Named, Any] = OrderedMap(), objective: Any = None,
+                constraints: Mapping[Named | Relation, Any] = OrderedMap()) -> Scaling:
+        '''A problem's `Scaling`, its keys written by name: `flat.scaling(unknowns={'z': 10.},
+        objective=1e3, constraints={'h': 5., cx.copy('y'): 1e6})`. A name means every constraint
+        about that place, as `Scaling` reads it; a `Relation` means itself.'''
+        return Scaling(OrderedMap((self.place(u), s) for u, s in unknowns.items()), objective,
+                       OrderedMap((k if isinstance(k, Relation) else self.place(k), s)
+                                  for k, s in constraints.items()))
 
 
 

@@ -32,11 +32,13 @@ class Driving(Part):
         read off the problem when the op is applied.'''
         return AssignByRule(problem, contract, self.role_places)
 
-    def drive(self, *implementations: Any) -> Drive:
+    def drive(self, *implementations: Any,
+              contracts: tuple[DriverContract, ...] | None = None) -> Drive:
         '''Every undriven problem driven by the first of `implementations` accepting it, under
-        the first of the contracts it implements; a problem driven already implemented by the
-        first covering its contract.'''
-        return Drive(implementations, self.contracts, self.role_places)
+        the first of the contracts it implements, of `contracts` or else the surface's; a
+        problem driven already implemented by the first covering its contract.'''
+        return Drive(implementations, self.contracts if contracts is None else contracts,
+                     self.role_places)
 
 
 class Results(Mapping):

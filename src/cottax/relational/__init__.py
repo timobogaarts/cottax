@@ -29,7 +29,7 @@ from .classification import (
     is_unconstrained_optimise,
 )
 from .rewrites import FixedPointCut
-from .programme import Programme, programme
+from .programme import Programme, Scaling, programme
 
 __all__ = [
     'Eq', 'Le', 'Rel', 'Relation', 'RelationalCondition', 'Sense', 'Min', 'Max', 'Objective',
@@ -37,5 +37,5 @@ __all__ = [
     'is_optimise', 'is_root_find',
     'is_unconstrained_optimise',
     'FixedPointCut',
-    'Programme', 'programme',
+    'Programme', 'Scaling', 'programme',
 ]

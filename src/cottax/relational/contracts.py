@@ -7,8 +7,12 @@ Driver contracts:
 '''
 
 from ..core import Place
-from ..core.driven import DriverContract, Role, Start, Steps
+from ..core.driven import DriverContract, PerProblem, Role, Start, Steps
 from .classification import is_equalities, is_fixed_point, is_optimise, is_unconstrained_optimise
+
+
+class Scales(PerProblem):
+    '''A problem's one `Scaling`.'''
 
 
 # ---------------------------------------------------------------- the levels
@@ -73,12 +77,14 @@ class Minimisation[V: Place](Minimiser[V]):
     def reports(self) -> tuple[type[Role], ...]: return (Steps,) if self.steps else ()
 
 class ConstrainedMinimisation[V: Place](ConstrainedMinimiser[V]):
-    '''From a `Start`; `steps` reports `Steps`. Its bounds are relations of the problem
-    over parameters, not data of the driver: they change the answer.'''
+    '''From a `Start`; `steps` reports `Steps`; `scaled` takes `Scales` too. Its bounds are
+    relations of the problem over parameters, not data of the driver: they change the answer.
+    Scales are the driver's data: they do not.'''
     steps   : bool
+    scaled  : bool = False
 
     @property
-    def takes(self) -> tuple[type[Role], ...]:   return (Start,)
+    def takes(self) -> tuple[type[Role], ...]:   return (Start, Scales) if self.scaled else (Start,)
     @property
     def reports(self) -> tuple[type[Role], ...]: return (Steps,) if self.steps else ()
 

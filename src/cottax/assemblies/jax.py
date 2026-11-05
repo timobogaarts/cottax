@@ -25,11 +25,11 @@ from ..pytree.consumers.execution import completed
 from ..pytree.consumers.declaration import Static
 from ..pytree.consumers.surface import InFull, N, PytreeLocator, Under, V, Var
 from ..relational import (
-    Eq, FixedPointCut, Le, Max, Min, Objective, Relation, RelationalCondition,
+    Eq, FixedPointCut, Le, Max, Min, Objective, Relation, RelationalCondition, Scaling,
 )
 from ..relational.contracts import (
     CONTRACTS as _RELATIONAL_CONTRACTS, ConstrainedMinimisation, ConstrainedMinimiser, FixedPointIteration, FixedPointIterator,
-    Minimisation, Minimiser, RootFinder, RootFinding,
+    Minimisation, Minimiser, RootFinder, RootFinding, Scales,
 )
 from ..ode import Dt, OdeCondition
 from ..ode.contracts import (
@@ -48,7 +48,7 @@ from ..relational.consumers.declaration import (
 from ..relational.consumers.surface import RelationalEditing
 from ..relational.consumers.execution.jax_solvers import BFGS, SLSQP, Newton, Picard
 from ..relational.consumers.execution.jax_solvers.canonical_nlp import (
-    Box, NotSquare, box, canonical,
+    Box, NotSquare, box, canonical, scaled, scaled_unknowns, unscaled_unknowns,
 )
 from ..consumers.declaration import (
     Conventions, Declared, Description, Explicit, Shipped, Unimplemented, tags_of,
@@ -73,6 +73,10 @@ CONTRACTS = (*_RELATIONAL_CONTRACTS, *_ODE_CONTRACTS)
 '''The default contracts, every shipped language's: an implementation answers a problem by the
 first one it implements.'''
 
+SCALED = (ConstrainedMinimisation(steps=False, scaled=True), *CONTRACTS)
+'''The defaults, a constrained minimisation taking `Scales`: `flat.drive(..., contracts=SCALED)`,
+its `Scaling` a value like a start's, `flat.run(model, {Scales: {'z': flat.scaling(...)}})`.'''
+
 @choice(Part)
 class ShippedSurface(RelationalDeclaring, OdeDeclaring, RelationalEditing, Architecting,
                      Driving, Running):
@@ -81,7 +85,8 @@ class ShippedSurface(RelationalDeclaring, OdeDeclaring, RelationalEditing, Archi
     copies      : PlaceToPlace = Copy()
     contracts   : tuple = CONTRACTS
     role_places : RolePlaces = core_role_places | RolePlaces(OrderedMap((
-        (Times, _ode_mints.Times()), (Trajectory, _ode_mints.Trajectory()))))
+        (Times, _ode_mints.Times()), (Trajectory, _ode_mints.Trajectory()),
+        (Scales, _relational_mints.Scales()))))
 
     @property
     def closing(self) -> Closing:
@@ -109,10 +114,10 @@ copy, closure, given, start, steps = (
     Purpose(m) for m in (Copy(), Closure(), _surface_mints.Given(), _surface_mints.Start(),
                          _surface_mints.Steps()))
 solve = Purpose(_Solve())
-cond, require, lower, upper, target = (
+cond, require, lower, upper, target, scales = (
     Purpose(m) for m in (_relational_mints.Cond(), _relational_mints.Require(),
                          _relational_mints.Lower(), _relational_mints.Upper(),
-                         _relational_mints.Target()))
+                         _relational_mints.Target(), _relational_mints.Scales()))
 rate, initial, span, times, trajectory = (
     Purpose(m) for m in (_ode_mints.Rate(), _ode_mints.Initial(), _ode_mints.Span(),
                          _ode_mints.Times(), _ode_mints.Trajectory()))
@@ -174,7 +179,7 @@ __all__ = [
     'Architecting', 'Driving', 'ShippedSurface', 'Drive', 'RolePlaces', 'core_role_places',
     'Mint', 'Copy', 'Closure', 'Purpose',
     'copy', 'closure', 'given', 'start', 'steps', 'solve', 'cond', 'require', 'lower', 'upper',
-    'target', 'rate', 'initial', 'span', 'times', 'trajectory',
+    'target', 'scales', 'rate', 'initial', 'span', 'times', 'trajectory',
     'Locator', 'Conventions', 'Shipped', 'PytreeLocator', 'Under', 'InFull',
     'Scope', 'flat', 'absolute', 'Declared', 'tags_of',
     'Static', 'DictKey', 'GetAttrKey', 'SequenceKey',
@@ -186,6 +191,7 @@ __all__ = [
     'Eq', 'Le', 'Min', 'Max', 'Objective', 'Relation', 'RelationalCondition',
     'RootFinder', 'FixedPointIterator', 'Minimiser', 'ConstrainedMinimiser',
     'RootFinding', 'FixedPointIteration', 'Minimisation', 'ConstrainedMinimisation', 'CONTRACTS',
+    'SCALED', 'Scales', 'Scaling', 'scaled', 'scaled_unknowns', 'unscaled_unknowns',
     'OdeDeclaring', 'Rate', 'Dt', 'OdeCondition', 'Integration', 'Integrator',
     'Times', 'Trajectory',
     'Newton', 'Picard', 'BFGS', 'SLSQP', 'canonical', 'box', 'Box', 'NotSquare', 'JitGraph',
