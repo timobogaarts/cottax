@@ -23,5 +23,6 @@ class Target(Mint):
     '''An equality's target written as a value: `^target.h`.'''
 
 
-class ResidualScale(Mint):
-    '''The magnitude a relation's residual is read in, attached to it: `^residualscale.h`.'''
+class Scale(Mint):
+    '''The magnitude something is read in: an objective's, attached to it, `^scale.f`; a
+    relation's residual, attached to it, off the place it is named by, `^scale.^cond.^copy.x`.'''

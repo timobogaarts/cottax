@@ -16,10 +16,10 @@ from ....consumers.declaration.interface_types import (
 )
 from ....consumers.surface.interface import Part
 from ....consumers.surface.interface_types import Named
-from ...mints import Lower, Target, Upper
+from ...mints import Lower, Scale, Target, Upper
 from .declarations import (
     Bounds, Constraint, EqualityConstraint, FixedPoint, InequalityConstraint, NotAPair, Problem,
-    Residual,
+    Residual, ZeroScale,
 )
 
 
@@ -99,24 +99,29 @@ class RelationalDeclaring(Declaring):
         return _problem(self, (), design, subject_to)
 
     def optimise(self, *, design: Design, minimise: Place | None = None,
-                 maximise: Place | None = None, subject_to: SubjectTo = ()) -> Problem:
+                 maximise: Place | None = None, subject_to: SubjectTo = (),
+                 scale: Side | None = None) -> Problem:
         '''Minimise or maximise one objective over `design` (names, or a mapping to
         `(lo, hi)`), subject to constraints -- one, or a collection: constraint wrappers in
-        the model, or bare requirements, held by the problem.'''
+        the model, or bare requirements, held by the problem. `scale`: the objective's
+        magnitude, a name or a value at `^scale.<objective>`; a scaled driver reads
+        the objective in it.'''
         if (minimise is None) == (maximise is None):
             raise TypeError('an optimisation drives one objective: give `minimise=` or '
                             '`maximise=`')
         objective, sense = (minimise, Min) if maximise is None else (maximise, Max)
-        return _problem(self, (Objective(objective, sense),), design, subject_to)
-
-
+        term = None if scale is None else self.term(objective, scale, Scale())
+        if scale is not None and term is None:
+            raise ZeroScale(objective).raised
+        attached = OrderedMap() if term is None else OrderedMap({Scale: term.place})
+        return _problem(self, (Objective(objective, sense, attached),), design, subject_to, term)
 
 
 def _problem(surface: Declaring, objectives: tuple[Objective, ...], design: Design,
-             subject_to: SubjectTo) -> Problem:
+             subject_to: SubjectTo, scale: PlaceWithValue | None = None) -> Problem:
     unknowns, bounds = design_of(surface, design)
     one = isinstance(subject_to, (Declaration, NodeDefinition))
-    return Problem(unknowns, bounds, objectives, (subject_to,) if one else tuple(subject_to))
+    return Problem(unknowns, bounds, objectives, (subject_to,) if one else tuple(subject_to), scale)
 
 
 # ---------------------------------------------------------------- the relational readings

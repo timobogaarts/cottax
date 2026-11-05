@@ -631,9 +631,24 @@ def test_an_architecture_takes_its_top_and_defaults_the_rest():
 
 
 def test_the_purpose_a_closing_attaches_is_the_mint_a_study_writes_a_scale_at():
-    '''A closing attaches the class, `cx.residual_scale` writes a place with its mint.'''
-    closing = cx.FixedPointClosing(cx.flat.copies, cx.AtFirstMember(cx.Closure()), (cx.ResidualScale,))
-    assert closing.attach == (type(cx.residual_scale.mint),)
+    '''A closing attaches the class, `cx.scale` writes a place with its mint.'''
+    closing = cx.FixedPointClosing(cx.flat.copies, cx.AtFirstMember(cx.Closure()), (cx.Scale,))
+    assert closing.attach == (type(cx.scale.mint),)
+
+
+def test_an_objective_is_given_its_scale_as_a_value_or_a_name():
+    '''A value at `^scale.f`, given by the problem; a name, read at that name; none
+    attaching nothing; and zero refused, as it would otherwise read as none.'''
+    place = cx.flat.place('f')
+    by_value = cx.flat.optimise(minimise='f', design=('x',), scale=1e8)
+    minted = cx.scale.mint(place)
+    assert by_value.condition.objectives[0].attached == OrderedMap({cx.Scale: minted})
+    assert by_value.condition.parameters == (minted,) and dict(by_value.given) == {minted: 1e8}
+    by_name = cx.flat.optimise(maximise='f', design=('x',), scale='f0')
+    assert by_name.condition.parameters == (cx.flat.place('f0'),) and not by_name.given
+    assert not cx.flat.optimise(minimise='f', design=('x',)).condition.objectives[0].attached
+    with pytest.raises(ValueError, match='a scale of zero reads nothing'):
+        cx.flat.optimise(minimise='f', design=('x',), scale=0)
 
 
 def test_implement_names_its_nodes_with_n():

@@ -6,7 +6,7 @@ from ...consumers.visualization.interface import MintDrawing, NodeDrawing
 from ...consumers.visualization.interface_types import Around, Drawn, Kind, Slot, Text
 from ..classification import (fixed_point_shaped, is_feasibility, is_fixed_point, is_optimise,
                               is_root_find)
-from ..mints import Cond, ResidualScale
+from ..mints import Cond, Scale
 from ..relational_condition import Eq, Le, Max, Min, RelationalCondition
 
 
@@ -35,9 +35,9 @@ class CondDrawing(MintDrawing):
 
 SLOT_TEXT = {Min: Text('min', r'\min'), Max: Text('max', r'\max'), '= 0': Text('= 0', '= 0'),
              '≤ 0': Text('≤ 0', r'\leq 0'), '0 ≤': Text('0 ≤', r'0 \leq'),
-             ResidualScale: Text('scale', r'\mathrm{scale}')}
-'''What labels a slot of each kind, plain and in LaTeX: an objective's by its sense, what a
-relation attaches by its purpose.'''
+             Scale: Text('scale', r'\mathrm{scale}')}
+'''What labels a slot of each kind, plain and in LaTeX: an objective's by its sense, what is
+attached by its purpose.'''
 
 EQUALS, EQUALS_OWN = Text(' = ', ' = '), Text('= ', '= ')
 AT_MOST, AT_MOST_OWN, OWN_AT_MOST = (Text(' ≤ ', r' \leq '), Text('≤ ', r'\leq '),
@@ -67,16 +67,17 @@ def slots_of(node: RelationalCondition) -> tuple[Slot, ...]:
     '''
     A condition node's reads by what each one says, in the order its driver is handed them:
     the objectives, then the relations against zero -- vanishing, bounded above, bounded
-    below -- then what the relations attach, one slot per purpose and a place shared by
-    several relations once, then each relation between two places, labelled by the side the
-    node owns (`= u`, `≤ u`, `u ≤`) or, owning neither or both, as written.
+    below -- then what the objectives and relations attach, one slot per purpose and a place
+    attached several times once, then each relation between two places, labelled by the side
+    the node owns (`= u`, `≤ u`, `u ≤`) or, owning neither or both, as written.
     '''
     out = [Slot((SLOT_TEXT[o.sense],), (o.place,)) for o in node.objectives]
     eq0, le, ge, two = [], [], [], []
     attached = {}
+    for held in (*node.objectives, *node.relations):
+        for purpose, place in held.attached.items():
+            attached.setdefault(SLOT_TEXT[purpose], {})[place] = None
     for rel in node.relations:
-        for purpose, place in rel.attached.items():
-            attached.setdefault(purpose, {})[place] = None
         reads = tuple(t for t in rel.sides if t not in node.unknowns)
         owned = tuple(t for t in rel.sides if t in node.unknowns)
         if None in (rel.lhs, rel.rhs):
@@ -92,7 +93,7 @@ def slots_of(node: RelationalCondition) -> tuple[Slot, ...]:
     for label, found in (('= 0', eq0), ('≤ 0', le), ('0 ≤', ge)):
         if found:
             out.append(Slot((SLOT_TEXT[label],), tuple(found)))
-    out.extend(Slot((SLOT_TEXT[purpose],), tuple(places)) for purpose, places in attached.items())
+    out.extend(Slot((label,), tuple(places)) for label, places in attached.items())
     return (*out, *two)                             # a consistency last, at the right
 
 

@@ -11,7 +11,7 @@ import pytest
 
 from cottax.core.frozen import OrderedMap
 from cottax.relational.consumers.execution.jax_solvers.canonical_nlp import box, canonical, scaled
-from cottax.relational.mints import ResidualScale
+from cottax.relational.mints import Scale
 from cottax.relational import (
     Eq, Le, Max, Min, Objective, Programme, Rel, Relation, RelationalCondition, programme,
 )
@@ -92,7 +92,7 @@ def test_an_unknown_rel_is_refused():
 def test_scaled_reads_each_residual_in_what_it_attaches_and_the_box_in_y():
     '''`x - y = 6` read in `|k| = 2` (a scale is a magnitude, its sign dropped), `g <= 0`
     attaching nothing as it is; the box `1 <= x` over a column of -2, its sides swapped.'''
-    scale = OrderedMap({ResidualScale: k})
+    scale = OrderedMap({Scale: k})
     node = RelationalCondition((Relation(x, y, Eq, scale), Relation(g, None, Le), Relation(lo, x, Le)),
                                (), (x,), (k, lo))
     form, (lower, upper) = scaled(node, (8.0,), (2.0, 5.0, -2.0, 1.0), (-2.0,))
@@ -100,7 +100,14 @@ def test_scaled_reads_each_residual_in_what_it_attaches_and_the_box_in_y():
     assert (float(lower[0]), float(upper[0])) == (-jnp.inf, -0.5)
 
 
+def test_scaled_reads_an_objective_in_what_it_attaches_keeping_its_sense():
+    '''`max f` is `min -f`, then over `|k| = 2`: a negative scale does not flip the sense.'''
+    objective = Objective(f, Max, OrderedMap({Scale: k}))
+    node = RelationalCondition((), (objective,), (x,), (k,))
+    assert scaled(node, (1.0,), (6.0, -2.0), (1.0,))[0].objectives == (-3.0,)
+
+
 def test_a_bound_attaches_nothing():
-    rel  = Relation(lo, x, Le, OrderedMap({ResidualScale: k}))
+    rel  = Relation(lo, x, Le, OrderedMap({Scale: k}))
     node = RelationalCondition((rel,), (Objective(f, Min),), (x,), (lo, k))
     assert list(check_programmable(node)) == [AttachedBound(rel)]

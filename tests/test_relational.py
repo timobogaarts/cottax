@@ -21,7 +21,7 @@ from cottax.relational import (
 from cottax.relational.relational_condition import (
     AttachedNotAParameter, FixedAndMoved, FixedRelation, NotARel, ParameterUnrelated, RelatesNothing,
 )
-from cottax.relational.mints import ResidualScale
+from cottax.relational.mints import Scale
 from cottax.pytree.path import NodePath, VarPath
 from cottax.core import Function, problems, violations
 from cottax.core.maths.definition import ReadsOwn
@@ -216,9 +216,9 @@ def test_an_attached_place_is_a_given_term_renamed_and_written_never_a_condition
     '''A relation's attachment is a term (so a parameter relates through it), renamed with
     its sides and written after them; it is no condition, and it must be held fixed.'''
     u, g, s, t = v('u'), v('g'), v('s'), v('t')
-    r = Relation(u, g, Eq, OrderedMap({ResidualScale: s}))
+    r = Relation(u, g, Eq, OrderedMap({Scale: s}))
     assert (r.sides, r.terms) == ((u, g), (u, g, s))
-    assert r.relabel({s: t}) == Relation(u, g, Eq, OrderedMap({ResidualScale: t}))
+    assert r.relabel({s: t}) == Relation(u, g, Eq, OrderedMap({Scale: t}))
     assert repr(r) == f'{u} = {g} with {s}'
     node = RelationalCondition((r,), (), (u,), (s,))
     assert (node.conditions, node.reads) == ((g,), (g, s))
@@ -230,11 +230,25 @@ def test_an_attached_place_is_drawn_in_a_slot_of_its_purpose_and_not_as_a_side()
     equals; two relations reading one scale show it once, and a consistency stays last.'''
     from cottax.relational.consumers.visualization import slots_of
     u, w, g, h, s = v('u'), v('w'), v('g'), v('h'), v('s')
-    scale = OrderedMap({ResidualScale: s})
+    scale = OrderedMap({Scale: s})
     node  = RelationalCondition((Relation(g, None, Eq, scale), Relation(u, h, Eq, scale)),
                                 (), (u, w), (s,))
     assert [(tuple(p.plain if hasattr(p, 'plain') else p for p in slot.label), slot.reads)
             for slot in slots_of(node)] == [(('= 0',), (g,)), (('scale',), (s,)), (('= ', u), (h,))]
+
+
+def test_an_objective_attaches_as_a_relation_does():
+    '''A given parameter it relates through, renamed with its place, drawn beside a residual's
+    scale in one slot, and refused where it is not held fixed.'''
+    from cottax.relational.consumers.visualization import slots_of
+    u, f, g, s, t = v('u'), v('f'), v('g'), v('s'), v('t')
+    o = Objective(f, Min, OrderedMap({Scale: s}))
+    assert o.relabel({s: t}) == Objective(f, Min, OrderedMap({Scale: t}))
+    assert repr(o) == f'min {f} with {s}'
+    node = RelationalCondition((Relation(g, None, Eq, OrderedMap({Scale: t})),), (o,), (u,), (s, t))
+    assert (node.conditions, node.reads) == ((f, g), (f, g, s, t))
+    assert [slot.reads for slot in slots_of(node)] == [(f,), (g,), (s, t)]
+    assert [type(x) for x in violations(RelationalCondition, (), (o,), (u,), ())] == [AttachedNotAParameter]
 
 
 def test_the_join_holds_fixed_what_either_side_does_once():

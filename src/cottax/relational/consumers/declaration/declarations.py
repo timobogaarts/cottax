@@ -207,6 +207,9 @@ class Problem[N: Label, V: Place](Declaration[N, V]):
     '''One for `optimise`, none for `satisfy`.'''
     subject_to : tuple[Constraint[N, V] | RelationalCondition[V], ...]
     '''Constraints and requirements held in this problem's one condition node.'''
+    scale      : PlaceWithValue[V] | None = None
+    '''What its objective attaches as its magnitude, a parameter; with its value where a
+    number was written.'''
 
     checks = (check_subject_to, check_bounds_on_unknowns, check_condition)
 
@@ -232,7 +235,8 @@ class Problem[N: Label, V: Place](Declaration[N, V]):
         return ((*self.bounds.relations(self.unknowns), *(r for h in self.held for r in h.relations)),
                 self.objectives, self.unknowns,
                 tuple(dict.fromkeys((*self.bounds.parameters,
-                                     *(p for h in self.held for p in h.parameters)))))
+                                     *(p for h in self.held for p in h.parameters),
+                                     *(() if self.scale is None else (self.scale.place,))))))
 
     @property
     def condition(self) -> RelationalCondition[V]:
@@ -240,11 +244,12 @@ class Problem[N: Label, V: Place](Declaration[N, V]):
 
     @property
     def given(self) -> OrderedMap[V, Any]:
-        return given_in(self.bounds.terms)
+        return given_in(self.bounds.terms, (self.scale,))
 
     @property
     def tags(self) -> Tags[V]:
-        return merged_tags((t.place, t.tags) for t in self.bounds.terms if t is not None)
+        return merged_tags((t.place, t.tags) for t in (*self.bounds.terms, self.scale)
+                           if t is not None)
 
     def nodes(self, at: N) -> tuple[tuple[N, NodeDefinition[V]], ...]:
         return ((at, self.condition),)
@@ -282,6 +287,12 @@ class NotHeldAs(Violation):
     constraint : str
     error    = TypeError
     template = '{constraint}: a problem is subject to a constraint or a requirement'
+
+
+class ZeroScale(Violation):
+    place : object
+    error    = ValueError
+    template = '{place!r}: a scale of zero reads nothing -- leave `scale=` out for none'
 
 
 class NotAPair(Violation):

@@ -35,7 +35,7 @@ from cottax.pytree.path import NodePath, VarPath
 from cottax.core.realisation import ImplementedFunction, is_implemented
 from cottax.relational import Eq, Le, Max, Min, Objective, Rel, Relation, RelationalCondition
 from cottax.relational.consumers.json import RELS
-from cottax.relational.mints import ResidualScale
+from cottax.relational.mints import Scale
 from graphs import graph_of
 from test_cutting import D1, D2, OPT, call, mdf, optimise, V, N
 from test_cx import double, square
@@ -442,10 +442,20 @@ def test_an_attachment_is_written_by_its_purposes_word_and_round_trips():
     u, f, g, s = (VarPath((DictKey(k),)) for k in 'ufgs')
     graph = graph_of({NodePath((DictKey('body'),)): Function((u,), (f, g)),
                       NodePath((DictKey('down'),)): RelationalCondition(
-                          (Relation(g, None, Eq, OrderedMap({ResidualScale: s})),),
+                          (Relation(g, None, Eq, OrderedMap({Scale: s})),),
                           (Objective(f, Min),), (u,), (s,))})
     data = written(graph)
-    assert list(data['nodes'][1]['definition']['relations'][0]['attached']) == ['residual_scale']
+    assert list(data['nodes'][1]['definition']['relations'][0]['attached']) == ['scale']
+    assert read_json(data) == graph
+
+
+def test_an_objectives_attachment_is_written_by_its_purposes_word_and_round_trips():
+    u, f, s = (VarPath((DictKey(k),)) for k in 'ufs')
+    graph = graph_of({NodePath((DictKey('body'),)): Function((u,), (f,)),
+                      NodePath((DictKey('down'),)): RelationalCondition(
+                          (), (Objective(f, Min, OrderedMap({Scale: s})),), (u,), (s,))})
+    data = written(graph)
+    assert list(data['nodes'][1]['definition']['objectives'][0]['attached']) == ['scale']
     assert read_json(data) == graph
 
 

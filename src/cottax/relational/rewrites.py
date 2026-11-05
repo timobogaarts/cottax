@@ -6,6 +6,7 @@ from ..core import (
     ComposedOp, Cut, GraphOp, Insert, Label, Mint, NestingGraph, Place, Violation,
 )
 from ..core.frozen import OrderedMap
+from .mints import Cond
 from .relational_condition import Eq, Relation, RelationalCondition
 
 
@@ -33,8 +34,8 @@ class FixedPointCut[N: Label, V: Place](ComposedOp[N, V]):
     at     : N
     '''Where the problem closing the cuts is bound -- a binding of its own.'''
     attach : tuple[type[Mint], ...] = ()
-    '''Purposes each coupling attaches, minted on its copy and held fixed by the closure
-    (`ResidualScale`: `^residualscale.^copy.x`); for an arm that reads the coupling as a
+    '''Purposes each coupling attaches, minted on its copy's condition and held fixed by the
+    closure (`Scale`: `^scale.^cond.^copy.x`); for an arm that reads the coupling as a
     residual.'''
 
     checks = (check_cuts,)
@@ -52,8 +53,8 @@ class FixedPointCut[N: Label, V: Place](ComposedOp[N, V]):
     @property
     def definition(self) -> RelationalCondition[V]:
         '''One relation per cut, paired by the order the cuts were given, each attaching
-        `attach` minted on its copy.'''
-        attached = tuple(OrderedMap((p, p()(m)) for p in self.attach) for m in self.copies)
+        `attach` minted on its copy's condition: a residual is no place, so it is named so.'''
+        attached = tuple(OrderedMap((p, p()(Cond()(m))) for p in self.attach) for m in self.copies)
         return RelationalCondition(
             relations  = tuple(Relation(m, v, Eq, a)
                                for m, v, a in zip(self.copies, self.vars, attached)),

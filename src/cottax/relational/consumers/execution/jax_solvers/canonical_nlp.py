@@ -11,7 +11,7 @@ import jax.numpy as jnp
 
 from .....core import Place, Violation
 from .....relational import Max, RelationalCondition, programme
-from .....relational.mints import ResidualScale
+from .....relational.mints import Scale
 
 
 class Canonical(NamedTuple):
@@ -65,36 +65,42 @@ def _tightest(fold, bounds) -> Any:
 
 def scaled[V: Place](condition: RelationalCondition[V], unknowns: tuple[Any, ...],
                      values: tuple[Any, ...], column: tuple[Any, ...]) -> tuple[Canonical, Box]:
-    '''`canonical` and `box` in `y = x / column`, for `unknowns` the values `x` at which
-    `values` were read: each relation's residual over the magnitude of the place it attaches
-    as its `ResidualScale` (one attaching none read as it is; a scale neither finite nor
-    non-zero refused when evaluated), the box over `column`, its sides swapped where a column
-    is negative (a side then `-inf` / `inf` where unbounded). Objectives as they are.'''
+    '''What a driver solving in `y = x / column` reads, for `unknowns` the values `x` at which
+    `values` were read: the driver substitutes `x = y * column` and differentiates in `y`.
+    `canonical`, each objective and each relation's residual over the magnitude of the place
+    it attaches as its `Scale` (one attaching none read as it is; a scale neither finite nor
+    non-zero refused when evaluated), and `box` over `column`.'''
     value = _values(condition, unknowns, values)
     form  = programme(condition)
-    def held(r):
-        residual = _residual(value(r.lhs), value(r.rhs))
-        if (scale := r.attached.get(ResidualScale)) is None:
-            return residual
-        return jax.tree.map(lambda e, s: e / _magnitude(s), residual, value(scale))
-    lower, upper = box(condition, unknowns, values)
-    def scaled_box(lo, hi, c):
+    read  = canonical(condition, unknowns, values)
+    def over(group, held):
+        return tuple(e if (scale := h.attached.get(Scale)) is None
+                     else jax.tree.map(lambda v, s: v / _magnitude(s), e, value(scale))
+                     for e, h in zip(group, held, strict=True))
+    return (Canonical(over(read.objectives, form.objectives),
+                      over(read.equalities, form.equalities),
+                      over(read.inequalities, form.inequalities)),
+            _box_over(box(condition, unknowns, values), column))
+
+
+def _box_over(limits: Box, column: tuple[Any, ...]) -> Box:
+    '''The box over `column`, its sides swapped where a column is negative, a side then `-inf`
+    / `inf` where unbounded; `None` on both sides of an unknown with no bound.'''
+    def over(lo, hi, c):
         if lo is None and hi is None:
             return None, None
         lo = -jnp.inf if lo is None else lo
         hi =  jnp.inf if hi is None else hi
         return jnp.where(c > 0, lo, hi) / c, jnp.where(c > 0, hi, lo) / c
-    sides = tuple(scaled_box(*b) for b in zip(lower, upper, column, strict=True))
-    return (Canonical(tuple(_minimised(value(o.place), o.sense) for o in form.objectives),
-                      tuple(map(held, form.equalities)), tuple(map(held, form.inequalities))),
-            Box(tuple(lo for lo, _ in sides), tuple(hi for _, hi in sides)))
+    sides = tuple(over(*b) for b in zip(limits.lower, limits.upper, column, strict=True))
+    return Box(tuple(lo for lo, _ in sides), tuple(hi for _, hi in sides))
 
 
 def _magnitude(scale: Any) -> Any:
     '''`|scale|`, refused at run time, as a traced value can only be, unless finite and non-zero.'''
     scale = jnp.asarray(scale)
     return jnp.abs(eqx.error_if(scale, ~jnp.isfinite(scale) | (scale == 0),
-                                'a residual scale must be finite and non-zero'))
+                                'a scale must be finite and non-zero'))
 
 
 def next_values[V: Place](condition: RelationalCondition[V], unknowns: tuple[Any, ...],

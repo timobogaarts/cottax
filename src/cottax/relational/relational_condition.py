@@ -42,15 +42,15 @@ def check_op(relation: 'Relation') -> Iterator[Violation]:
     if not (isinstance(relation.op, type) and issubclass(relation.op, Rel)):
         yield NotARel(relation.op)
 
-def check_attached(relation: 'Relation') -> Iterator[Violation]:
+def check_attached(held: 'Relation | Objective') -> Iterator[Violation]:
     '''Each attachment is a purpose, a `Mint` class, and a place.'''
-    for purpose, place in relation.attached.items():
+    for purpose, place in held.attached.items():
         if not (isinstance(purpose, type) and issubclass(purpose, Mint)) or place is None:
             yield NotAnAttachment(purpose, place)
 
 class Relation[V: Place](Frozen):
     '''`lhs op rhs` between two places; a side of `None` is zero. `attached`: given places it
-    refers to beside its sides, each under its purpose (`ResidualScale`: the magnitude its
+    refers to beside its sides, each under its purpose (`Scale`: the magnitude its
     residual is read in). A purpose exists only where something reads it.'''
 
     lhs      : V | None
@@ -109,18 +109,21 @@ def check_sense(objective: 'Objective') -> Iterator[Violation]:
 
 class Objective[V: Place](Frozen):
     '''A place and the way it is driven: which way changes the answer, so it is the
-    problem's, stored with the place it drives.'''
+    problem's, stored with the place it drives. `attached`: as a relation's
+    (`Scale`: the magnitude it is read in).'''
 
-    place : V
-    sense : type[Sense]
+    place    : V
+    sense    : type[Sense]
+    attached : OrderedMap[type[Mint], V] = OrderedMap()
 
-    checks = (check_sense,)
+    checks = (check_sense, check_attached)
 
     def relabel(self, renaming: Renaming[V]) -> 'Objective[V]':
-        return Objective(renaming.get(self.place, self.place), self.sense)
+        return Objective(renaming.get(self.place, self.place), self.sense,
+                         OrderedMap((m, renaming.get(p, p)) for m, p in self.attached.items()))
 
     def __repr__(self) -> str:
-        return f'{self.sense.symbol} {self.place}'
+        return f'{self.sense.symbol} {self.place}' + ''.join(f' with {p}' for p in self.attached.values())
 
 #---------------------- relational condition
 
@@ -136,14 +139,14 @@ def check_parameters(node: 'RelationalCondition') -> Iterator[Violation]:
     driven = {o.place for o in node.objectives}
     if moved := tuple(p for p in node.parameters if p in node.unknowns or p in driven):
         yield FixedAndMoved(moved)
-    terms = {t for r in node.relations for t in r.terms}
+    attached = tuple(p for held in (*node.relations, *node.objectives) for p in held.attached.values())
+    terms = {t for r in node.relations for t in r.sides} | set(attached)
     if unrelated := tuple(p for p in node.parameters if p not in terms):
         yield ParameterUnrelated(unrelated)
     if fixed := tuple(r for r in node.relations
                       if r.sides and all(t in node.parameters for t in r.sides)):
         yield FixedRelation(fixed)
-    if loose := tuple(dict.fromkeys(p for r in node.relations for p in r.attached.values()
-                                    if p not in node.parameters)):
+    if loose := tuple(dict.fromkeys(p for p in attached if p not in node.parameters)):
         yield AttachedNotAParameter(loose)
 
 class RelationalCondition[V: Place](ConditionalNode[V]):
@@ -223,8 +226,8 @@ class NotAnAttachment(Violation):
     purpose : object
     place   : object
     error    = TypeError
-    template = ('{purpose!r}: {place!r} is no attachment -- a relation attaches a place under '
-                'a `Mint` class, its purpose')
+    template = ('{purpose!r}: {place!r} is no attachment -- a relation or an objective attaches '
+                'a place under a `Mint` class, its purpose')
 
 
 class NotASense(Violation):
@@ -261,8 +264,8 @@ class ParameterUnrelated(Violation):
 class AttachedNotAParameter(Violation):
     places : tuple
     error    = ValueError
-    template = ('{places!r} attached to a relation, but not held fixed: an attached place is '
-                'given, a parameter of the condition')
+    template = ('{places!r} attached, but not held fixed: an attached place is given, a '
+                'parameter of the condition')
 
 
 class FixedRelation(Violation):

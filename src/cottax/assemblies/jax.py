@@ -59,7 +59,7 @@ from ..consumers.surface import Purpose, RolePlaces, Surface, core_role_places
 from ..consumers.surface import interface_types as _surface_mints
 from ..consumers.declaration.interface_types import Solve as _Solve
 from ..relational import mints as _relational_mints
-from ..relational.mints import ResidualScale
+from ..relational.mints import Scale
 from ..ode import mints as _ode_mints
 from ..consumers.surface.interface import Editing, Locator, Part
 from ..consumers.visualization import (
@@ -110,10 +110,10 @@ copy, closure, given, start, steps = (
     Purpose(m) for m in (Copy(), Closure(), _surface_mints.Given(), _surface_mints.Start(),
                          _surface_mints.Steps()))
 solve = Purpose(_Solve())
-cond, require, lower, upper, target, residual_scale = (
+cond, require, lower, upper, target, scale = (
     Purpose(m) for m in (_relational_mints.Cond(), _relational_mints.Require(),
                          _relational_mints.Lower(), _relational_mints.Upper(),
-                         _relational_mints.Target(), _relational_mints.ResidualScale()))
+                         _relational_mints.Target(), _relational_mints.Scale()))
 rate, initial, span, times, trajectory = (
     Purpose(m) for m in (_ode_mints.Rate(), _ode_mints.Initial(), _ode_mints.Span(),
                          _ode_mints.Times(), _ode_mints.Trajectory()))
@@ -173,9 +173,9 @@ __all__ = [
     'EqualityConstraint', 'Problem', 'Tagged',
     'Surface', 'Part', 'Declaring', 'Editing', 'RelationalDeclaring', 'RelationalEditing',
     'Architecting', 'Driving', 'ShippedSurface', 'Drive', 'RolePlaces', 'core_role_places',
-    'Mint', 'Copy', 'Closure', 'ResidualScale', 'Purpose',
+    'Mint', 'Copy', 'Closure', 'Scale', 'Purpose',
     'copy', 'closure', 'given', 'start', 'steps', 'solve', 'cond', 'require', 'lower', 'upper',
-    'target', 'residual_scale', 'rate', 'initial', 'span', 'times', 'trajectory',
+    'target', 'scale', 'rate', 'initial', 'span', 'times', 'trajectory',
     'Locator', 'Conventions', 'Shipped', 'PytreeLocator', 'Under', 'InFull',
     'Scope', 'flat', 'absolute', 'Declared', 'tags_of',
     'Static', 'DictKey', 'GetAttrKey', 'SequenceKey',

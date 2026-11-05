@@ -43,7 +43,7 @@ class RelationalModel(ModelReading):
 class FixedPointClosing[N: Label, V: Place](Closing[N, V]):
     '''One group closed as one problem: a copy per variable, named by `copies`, and
     the closure bound where `at` says; each coupling attaching `attach` (an arm folding
-    closures into a residual, IDF or SAND, is handed one attaching `ResidualScale`).'''
+    closures into a residual, IDF or SAND, is handed one attaching `Scale`).'''
 
     copies : PlaceToPlace[V]
     at     : At[N, V]

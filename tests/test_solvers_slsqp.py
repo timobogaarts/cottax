@@ -22,7 +22,7 @@ import purposes
 from cottax.pytree.path import NodePath, VarPath
 from cottax.core.realisation import ImplementedDriven, ImplementedFunction
 from cottax.relational import Eq, Le, Relation, RelationalCondition
-from cottax.relational.mints import ResidualScale
+from cottax.relational.mints import Scale
 from cottax.relational.consumers.execution.jax_solvers.canonical_nlp import Canonical, box, canonical
 from cottax.relational.consumers.execution.jax_solvers import SLSQP, scipy_slsqp
 from cottax.relational.consumers.execution.jax_solvers.scipy_slsqp import _Memo
@@ -124,7 +124,7 @@ def test_a_residual_is_read_in_the_scale_it_attaches_a_given_value(monkeypatch):
         return minimize(fun, x0, constraints=constraints, **options)
     monkeypatch.setattr(scipy_slsqp, 'minimize', recording)
     s = V('s')
-    held = Relation(V('h'), None, Eq, OrderedMap({ResidualScale: s}))
+    held = Relation(V('h'), None, Eq, OrderedMap({Scale: s}))
     opt = ImplementedDriven(
         Driven(RelationalCondition((held,), (Objective(V('f'), Min),), (V('x'),), (s,)),
                ConstrainedMinimisation(steps=False), ((STARTS(V('x')),),), ()), SLSQP())
@@ -143,14 +143,33 @@ def test_a_scale_neither_finite_nor_non_zero_is_refused_by_name(scale, traced):
     '''Not a solver's failure to converge at the end of its iterations: under a jit too, where
     the scale is traced, and SLSQP runs inside a callback.'''
     s = V('s')
-    held = Relation(V('h'), None, Eq, OrderedMap({ResidualScale: s}))
+    held = Relation(V('h'), None, Eq, OrderedMap({Scale: s}))
     opt = ImplementedDriven(
         Driven(RelationalCondition((held,), (Objective(V('f'), Min),), (V('x'),), (s,)),
                ConstrainedMinimisation(steps=False), ((STARTS(V('x')),),), ()), SLSQP())
     nodes = {N('m'): call(['x'], ['f', 'h'], lambda x: ((x - 3.0) ** 2, x - 1.0)), N('opt'): opt}
     solved = lambda value: solve(nodes, {STARTS(V('x')): 0.0, s: value})[V('x')]
-    with pytest.raises(Exception, match='a residual scale must be finite and non-zero'):
+    with pytest.raises(Exception, match='a scale must be finite and non-zero'):
         jax.block_until_ready((jax.jit(solved) if traced else solved)(jnp.asarray(scale)))
+
+
+def test_an_objective_is_read_in_the_scale_it_attaches_and_its_answer_stays(monkeypatch):
+    '''`min (x - 3)^2` read in `s = 3`: scipy is handed `3` at `x = 0`, not `9`, and `x = 3`.'''
+    handed = []
+    minimize = scipy_slsqp.minimize
+    def recording(fun, x0, *, args, **options):
+        handed.append(fun(x0, *args))
+        return minimize(fun, x0, args=args, **options)
+    monkeypatch.setattr(scipy_slsqp, 'minimize', recording)
+    s = V('s')
+    objective = Objective(V('f'), Min, OrderedMap({Scale: s}))
+    opt = ImplementedDriven(
+        Driven(RelationalCondition((), (objective,), (V('x'),), (s,)),
+               ConstrainedMinimisation(steps=False), ((STARTS(V('x')),),), ()), SLSQP())
+    out = solve({N('m'): call(['x'], ['f'], lambda x: (x - 3.0) ** 2), N('opt'): opt},
+                {STARTS(V('x')): 0.0, s: 3.0})
+    assert handed == [3.0]
+    assert float(out[V('x')]) == pytest.approx(3.0, abs=1e-5)
 
 
 BOWL = {N('m'): call(['x'], ['f'], lambda x: (x - 3.0) ** 2)}
