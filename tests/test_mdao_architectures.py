@@ -662,7 +662,7 @@ def test_mdf_and_idf_reach_the_same_optimum():
     from cottax.consumers.execution import CallableGraph
     from cottax.assemblies.jax import Start, absolute, flat
     assign = absolute.assign
-    from cottax.relational.consumers.execution.jax_solvers import SLSQP, Picard
+    from cottax.relational.consumers.execution.jax_solvers import Picard, ScipyMinimize
     from cottax.core.realisation import ImplementDrivers
 
     def D(name):
@@ -684,7 +684,7 @@ def test_mdf_and_idf_reach_the_same_optimum():
     mda = MINT_MDA(D1)
 
     optimiser = ConstrainedMinimisation(steps=False)
-    backend   = ImplementDrivers(OrderedMap({ConstrainedMinimiser: SLSQP(),
+    backend   = ImplementDrivers(OrderedMap({ConstrainedMinimiser: ScipyMinimize(),
                                       FixedPointIterator: Picard(rtol=1e-12, atol=1e-12)}))
 
     def assigned(plan, problem, contract):

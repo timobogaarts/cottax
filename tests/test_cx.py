@@ -697,7 +697,7 @@ def test_the_mdf_absorbs_constraints_declared_where_computed(x64):
     a limit held in the tree: the MDF absorbs both requirements into the optimiser, the
     limit a parameter of it, and it reaches the reference optimum."""
     pytest.importorskip('scipy')
-    from cottax.relational.consumers.execution.jax_solvers import SLSQP
+    from cottax.relational.consumers.execution.jax_solvers import ScipyMinimize
 
     @flat.inequality_constraint('g1')
     def margin1(y1):
@@ -718,7 +718,7 @@ def test_the_mdf_absorbs_constraints_declared_where_computed(x64):
         driver = (ConstrainedMinimisation(steps=False) if p == n('opt')
                   else RootFinding(steps=False))
         model += cx.absolute.assign(p, driver)
-    model += ImplementDrivers({RootFinder: newton(), ConstrainedMinimiser: SLSQP()})
+    model += ImplementDrivers({RootFinder: newton(), ConstrainedMinimiser: ScipyMinimize()})
     tree = flat.run(model, {cx.Inputs: {'g2_max': 1.0},
                             cx.Start: {'z1': 5.0, 'z2': 2.0, 'x1': 1.0, 'y1': 1.0,
                                        flat.copy('y2'): 1.0}})
@@ -801,7 +801,7 @@ def test_sellar_declared_loose_reaches_the_optimum_of_the_problem_in_a_slot(x64)
     '''The study as written: one constraint bare, the problem loose and standing for its own
     node name; the same optimum as `{'OPT': opt}` and `mdf('OPT')`, under all three.'''
     pytest.importorskip('scipy')
-    from cottax.assemblies.jax import SLSQP, Newton, Picard
+    from cottax.assemblies.jax import Newton, Picard, ScipyMinimize
 
     @flat.function('f')
     def N1(x, z_2, y_1, y_2):
@@ -822,7 +822,7 @@ def test_sellar_declared_loose_reaches_the_optimum_of_the_problem_in_a_slot(x64)
     bounds = {'z_1': (-10, 10), 'z_2': (0, 10), 'x': (0, 10)}
     opt    = flat.optimise(minimise='f', design=bounds, subject_to=N2)
     model  = cx.absolute.declare(N1, N2, R3, N4, opt)
-    drive  = cx.flat.drive(SLSQP(), Picard(), Newton())
+    drive  = cx.flat.drive(ScipyMinimize(), Picard(), Newton())
     design = {'z_1': 5., 'z_2': 2., 'x': 1.}
     guess  = {'mdf': {**design, 'y_1': 1., flat.copy('y_2'): 1.},    # each architecture's unknowns
               'idf': {**design, 'y_1': 1., flat.copy('y_2'): 1.},
@@ -961,7 +961,7 @@ def test_a_value_is_a_number_or_an_array_and_zero_is_no_place():
 
 def test_a_problem_subject_to_a_constraint_holds_it_without_an_architecture(x64):
     pytest.importorskip('scipy')
-    from cottax.relational.consumers.execution.jax_solvers import SLSQP
+    from cottax.relational.consumers.execution.jax_solvers import ScipyMinimize
 
     @flat.inequality_constraint('g', within=(None, 'g_max'))
     def margin(z):
@@ -969,7 +969,7 @@ def test_a_problem_subject_to_a_constraint_holds_it_without_an_architecture(x64)
 
     square = flat.function(lambda z: (z - 5.0) ** 2, 'f')
     opt    = flat.optimise(minimise='f', design=('z',), subject_to=(margin,))
-    model  = cx.absolute.declare({'f': square, 'margin': margin, 'opt': opt}) + cx.flat.drive(SLSQP())
+    model  = cx.absolute.declare({'f': square, 'margin': margin, 'opt': opt}) + cx.flat.drive(ScipyMinimize())
     assert cx.Relation(v('g'), v('g_max'), cx.Le) in model.graph[n('opt')].condition.relations
     assert cx.absolute.node(cx.require(N['margin'])) not in model.graph
     tree = flat.run(model, {cx.Inputs: {'g_max': 2.0}, cx.Start: {'z': 0.0}})
@@ -993,12 +993,12 @@ def test_a_root_find_is_a_satisfy_over_equalities_held_bare():
 def test_a_model_runs_its_values_and_refuses_a_run_without_them(x64):
     pytest.importorskip('scipy')
     import equinox as eqx
-    from cottax.relational.consumers.execution.jax_solvers import SLSQP
+    from cottax.relational.consumers.execution.jax_solvers import ScipyMinimize
 
     square = flat.function(lambda z: (z - 5.0) ** 2, 'f')
     def model(hi):
         return cx.absolute.declare({'f': square, 'opt': flat.optimise(minimise='f', design={'z': (None, hi)})}
-                          ) + cx.flat.drive(SLSQP())
+                          ) + cx.flat.drive(ScipyMinimize())
     two, three = model(2.0), model(3.0)
     assert two == three                                  # one plan; the values are data
     with pytest.raises(KeyError) as refused:                # the graph alone holds no bound
@@ -1052,14 +1052,14 @@ def test_a_feasibility_of_constraints_alone_is_their_join_over_its_unknowns():
 
 def test_an_objective_is_minimised_or_maximised(x64):
     pytest.importorskip('scipy')
-    from cottax.relational.consumers.execution.jax_solvers import SLSQP
+    from cottax.relational.consumers.execution.jax_solvers import ScipyMinimize
     from cottax.relational import Max, Min, Objective
 
     hill = flat.function(lambda z: -(z - 5.0) ** 2, 'f')
     up   = flat.optimise(maximise='f', design={'z': (None, 2)})
     assert up.condition.objectives == (Objective(v('f'), Max),)
     assert flat.optimise(minimise='f', design=('z',)).condition.objectives == (Objective(v('f'), Min),)
-    tree = flat.run(cx.absolute.declare({'f': hill, 'opt': up}) + cx.flat.drive(SLSQP()),
+    tree = flat.run(cx.absolute.declare({'f': hill, 'opt': up}) + cx.flat.drive(ScipyMinimize()),
                     {cx.Start: {'z': 0.0}})
     assert tree['z'] == pytest.approx(2.0, abs=1e-6)
     for neither_or_both in ({}, {'minimise': 'f', 'maximise': 'f'}):

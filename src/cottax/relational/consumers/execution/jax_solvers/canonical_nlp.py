@@ -49,20 +49,22 @@ def _minimised(value: Any, sense: type) -> Any:
 
 def box[V: Place](condition: RelationalCondition[V], unknowns: tuple[Any, ...],
                   values: tuple[Any, ...]) -> Box:
-    '''Each unknown's bounds: the tightest of its lower bounds, and of its upper ones.'''
+    '''Each unknown's bounds: the tightest of its lower bounds, and of its upper ones, over the
+    unknown's shape. A scalar spreads over it, as it does in a relation's residual.'''
     value = _values(condition, unknowns, values)
     form  = programme(condition)
     bound = lambda side: 0.0 if side is None else value(side)
-    return Box(tuple(_tightest(jnp.maximum, map(bound, form.lower[u])) for u in condition.unknowns),
-               tuple(_tightest(jnp.minimum, map(bound, form.upper[u])) for u in condition.unknowns))
+    sides = lambda fold, bounds: tuple(_tightest(fold, map(bound, bounds[name]), jnp.shape(u))
+                                       for name, u in zip(condition.unknowns, unknowns, strict=True))
+    return Box(sides(jnp.maximum, form.lower), sides(jnp.minimum, form.upper))
 
 
-def _tightest(fold, bounds) -> Any:
-    '''The bounds folded in the order met, the first as it is; `None` for none.'''
+def _tightest(fold, bounds, shape: tuple[int, ...]) -> Any:
+    '''The bounds folded in the order met, over `shape`; `None` for none.'''
     tightest = None
     for i, b in enumerate(bounds):
         tightest = b if i == 0 else fold(tightest, b)
-    return tightest
+    return None if tightest is None else jnp.broadcast_to(tightest, shape)
 
 
 def scaled_unknowns[V: Place](condition: RelationalCondition[V], unknowns: tuple[Any, ...],
@@ -88,9 +90,8 @@ def scaled[V: Place](condition: RelationalCondition[V], unknowns: tuple[Any, ...
     form = canonical(condition, unknowns, values)
     over = functools.partial(_over, operator.truediv)
     limits = box(condition, unknowns, values)
-    side = lambda bounds: tuple(b if b is None or c is None
-                                else over(jnp.broadcast_to(b, jnp.shape(u)), c)
-                                for b, c, u in zip(bounds, columns, unknowns, strict=True))
+    side = lambda bounds: tuple(None if b is None else over(b, c)
+                                for b, c in zip(bounds, columns, strict=True))
     return (Canonical(tuple(over(o, scaling.objective) for o in form.objectives),
                       tuple(map(over, form.equalities, equalities)),
                       tuple(map(over, form.inequalities, inequalities))),

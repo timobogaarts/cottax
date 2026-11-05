@@ -28,7 +28,7 @@ from cottax.core.realisation import ImplementedDriven, ImplementedFunction
 from cottax.pytree.path import NodePath, VarPath
 from cottax.relational import Eq, Le, Min, Objective, Relation, RelationalCondition, programme
 from cottax.relational.consumers.execution.jax_solvers import (
-    SLSQP, HostMinimiser, ScipyMinimize, host,
+    HostMinimiser, ScipyMinimize, host,
 )
 from cottax.relational.consumers.execution.jax_solvers.scipy_minimize import METHODS
 from cottax.relational.contracts import ConstrainedMinimiser, ConstrainedMinimisation
@@ -437,7 +437,7 @@ def test_a_weak_float32_input_under_x64_compiles_ahead_to_what_the_callback_gets
     with jax.enable_x64(False):
         values = OrderedMap({STARTS(V('x')): jnp.asarray(0.0), V('a'): jnp.asarray(3.0)})
     nodes = {N('m'): call(['x', 'a'], ['f'], lambda x, a: (x - a) ** 2),
-             N('opt'): optimise('f', ['x'], (), SLSQP())}
+             N('opt'): optimise('f', ['x'], (), ScipyMinimize())}
     x = eqx.filter_jit(lambda g, v: traced_run(g, v)[V('x')])(graph(nodes), values)
     assert float(x) == pytest.approx(3.0, abs=1e-5)
 
@@ -450,7 +450,7 @@ def test_a_python_scalar_reaches_the_model_as_it_is():
         return (x - (3.0 if a > 1.0 else 7.0)) ** 2
 
     opt = flat.optimise(minimise='f', design=('x',))
-    ran = cx.absolute.declare(model, {'OPT': opt}) + flat.drive(SLSQP())
+    ran = cx.absolute.declare(model, {'OPT': opt}) + flat.drive(ScipyMinimize())
     assert type(flat.valued(ran, {cx.Start: {'x': 0.0}, cx.Inputs: {'a': 2.0}}).values[flat.place('a')]) is float
     for a, want in ((2.0, 3.0), (0.5, 7.0)):
         out = flat.run(ran, {cx.Start: {'x': jnp.asarray(0.0)}, cx.Inputs: {'a': a}})
@@ -459,7 +459,7 @@ def test_a_python_scalar_reaches_the_model_as_it_is():
 
 # ---------------------------------------------------------------- what the old SLSQP refused
 
-@pytest.mark.parametrize('name, implementation', [('SLSQP', SLSQP()), ('layer', GradientDescent())])
+@pytest.mark.parametrize('name, implementation', [('SLSQP', ScipyMinimize()), ('layer', GradientDescent())])
 def test_a_bound_over_a_vector_unknown(name, implementation):
     out = solve({N('m'): call(['x'], ['f'], lambda x: jnp.sum((x - 3.0) ** 2)),
                  N('opt'): optimise('f', ['x'], (), implementation, bounded=True)},
@@ -470,7 +470,7 @@ def test_a_bound_over_a_vector_unknown(name, implementation):
 def test_an_array_valued_constraint_on_a_vector_unknown():
     '''It was a `TypeError` while stacking the groups; each entry is a row of its own.'''
     out = solve({N('m'): call(['x'], ['f', 'g'], lambda x: (jnp.sum((x - 3.0) ** 2), x - 1.0)),
-                 N('opt'): optimise('f', ['x'], CAPPED, SLSQP())},
+                 N('opt'): optimise('f', ['x'], CAPPED, ScipyMinimize())},
                 {STARTS(V('x')): jnp.zeros(3)})
     assert out[V('x')].tolist() == pytest.approx([1.0] * 3, abs=1e-6)
 
@@ -478,7 +478,7 @@ def test_an_array_valued_constraint_on_a_vector_unknown():
 def test_a_vector_objective_is_refused_and_not_read_for_its_first_entry():
     with pytest.raises(ValueError):
         solve({N('m'): call(['x'], ['f'], lambda x: (x - 3.0) ** 2),
-               N('opt'): optimise('f', ['x'], (), SLSQP())},
+               N('opt'): optimise('f', ['x'], (), ScipyMinimize())},
               {STARTS(V('x')): jnp.zeros(3)})
 
 
@@ -486,7 +486,7 @@ def moded(mode):
     '''A model branching on a value that is no array, as one under a `filter_jit` may.'''
     return graph({N('m'): call(['x', 'mode'], ['f'],
                                lambda x, mode: (x - (3.0 if mode == 'three' else 7.0)) ** 2),
-                  N('opt'): optimise('f', ['x'], (), SLSQP())})
+                  N('opt'): optimise('f', ['x'], (), ScipyMinimize())})
 
 
 @pytest.mark.parametrize('go', [traced_run, eqx.filter_jit(traced_run)], ids=['eager', 'jit'])
@@ -571,10 +571,10 @@ def test_max_steps_reaches_each_method_and_strict_names_it(method):
                   {STARTS(V('x')): jnp.full(3, 50.0)})
 
 
-def test_slsqp_is_the_method_of_that_name():
-    assert SLSQP().method == 'SLSQP' == ScipyMinimize().method
-    assert SLSQP(1e-6).jacobian is jax.jacfwd
-    assert SLSQP(1e-6, 5).tol == 1e-6 and SLSQP(1e-6, 5).max_steps == 5
+def test_the_method_is_slsqp_unless_named():
+    assert ScipyMinimize().method == 'SLSQP'
+    assert ScipyMinimize(1e-6).jacobian is jax.jacfwd
+    assert ScipyMinimize(1e-6, 5).tol == 1e-6 and ScipyMinimize(1e-6, 5).max_steps == 5
 
 
 # ---------------------------------------------------------------- a real IDF, scaled or not
@@ -621,8 +621,8 @@ def idf_answer(driver, M, scaled):
     return float(out[flat.place('z')]), float(out[flat.place('y2')]) / M
 
 
-@pytest.mark.parametrize('driver', [SLSQP(), ScipyMinimize(method='SLSQP'),
-                                    ScipyMinimize(method='COBYQA')], ids=['SLSQP', 'named', 'COBYQA'])
+@pytest.mark.parametrize('driver', [ScipyMinimize(), ScipyMinimize(method='COBYQA')],
+                         ids=['SLSQP', 'COBYQA'])
 def test_a_million_read_in_its_scale_is_the_problem_in_units_of_one(driver):
     '''Unscaled at one and scaled at a million, one answer. Unscaled at a million is left out:
     SLSQP gives a wrong one there, which is what scaling is for.'''

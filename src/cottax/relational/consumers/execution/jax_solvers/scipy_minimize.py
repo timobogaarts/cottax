@@ -1,10 +1,8 @@
 '''
-`scipy.optimize.minimize` as a `HostMinimiser`: `SLSQP`, and `ScipyMinimize` for any method,
-refusing a problem it would not honour: scipy itself only warns of what it drops, and answers
-without it.
+`scipy.optimize.minimize` as a `HostMinimiser`, by any method, refusing a problem it would not
+honour: scipy itself only warns of what it drops, and answers without it.
 '''
 
-from abc import abstractmethod
 from collections.abc import Callable, Iterator
 from typing import NamedTuple
 
@@ -64,11 +62,17 @@ def check_method(method: str, condition: RelationalCondition) -> Iterator[Violat
             yield MethodDropsIt(method, name, len(stated))
 
 
-class Scipy(HostMinimiser[ConstrainedMinimiser]):
-    '''`scipy.optimize.minimize` by `method`: the equalities as `eq`, the inequalities negated
-    as `ineq`, the box as `bounds`, and a Jacobian only where the method takes one. Under a
-    contract taking `Scales`, scipy sees everything read in that `Scaling`, its tolerance
-    included.'''
+@choice(DriverImplementation)
+class ScipyMinimize(HostMinimiser[ConstrainedMinimiser]):
+    '''`scipy.optimize.minimize` by `method`, one of `METHODS`: the equalities as `eq`, the
+    inequalities negated as `ineq`, the box as `bounds`, and a Jacobian only where the method
+    takes one. Under a contract taking `Scales`, scipy sees everything read in that `Scaling`,
+    its tolerance included. `max_steps` is scipy's `maxiter`, `maxfun` for `TNC`; `Steps` is its
+    `nit`, the evaluations for `COBYLA`, which counts none.
+
+    `tol` is each method's own test, so answers differ by more than it. `trust-constr` is an
+    interior point: `tol` ends it on a barrier still in force, inside an active inequality or
+    bound, by about 4e-4 at `tol=1e-8` on a unit problem and 1.6e-5 at `1e-12`.'''
 
     reported = {Steps: int}
     provides = frozenset(reported)
@@ -80,11 +84,7 @@ class Scipy(HostMinimiser[ConstrainedMinimiser]):
     jacobian  : Callable = jax.jacfwd
     '''How the Jacobian is taken: `jax.jacfwd`, `jax.jacrev`, or any hashable function of a
     function taking `has_aux=True`, such as one pulling rows back one at a time to save memory.'''
-
-    @property
-    @abstractmethod
-    def method(self) -> str:
-        '''The method of `minimize`: a final's class attribute, or its field.'''
+    method    : str = 'SLSQP'
 
     @property
     def asks(self) -> frozenset:
@@ -110,25 +110,6 @@ class Scipy(HostMinimiser[ConstrainedMinimiser]):
         if self.strict and not result.success:
             raise RuntimeError(f'{self.method} did not converge: {result.message}')
         return result.x, {Steps: result.get('nit', result.nfev)}
-
-
-@choice(DriverImplementation)
-class SLSQP(Scipy):
-    '''`minimize(method='SLSQP')`, so every iterate stays inside the box.'''
-
-    method = 'SLSQP'
-
-
-@choice(DriverImplementation)
-class ScipyMinimize(Scipy):
-    '''`minimize` by the method named, one of `METHODS`. `max_steps` is scipy's `maxiter`,
-    `maxfun` for `TNC`; `Steps` is its `nit`, the evaluations for `COBYLA`, which counts none.
-
-    `tol` is each method's own test, so answers differ by more than it. `trust-constr` is an
-    interior point: `tol` ends it on a barrier still in force, inside an active inequality or
-    bound, by about 4e-4 at `tol=1e-8` on a unit problem and 1.6e-5 at `1e-12`.'''
-
-    method : str = 'SLSQP'
 
 
 # ----------------------------------------------------------------- violation finals

@@ -196,7 +196,7 @@ def study(*beside, architecture=flat.idf, **drive):
 
     opt = flat.optimise(minimise='f', design=('z',), subject_to=con)
     return (cx.absolute.declare(d1, d2, objective, con, *beside, {'OPT': opt}) + architecture('OPT')
-            + flat.drive(cx.SLSQP(), cx.Picard(), cx.Newton(), **drive))
+            + flat.drive(cx.ScipyMinimize(), cx.Picard(), cx.Newton(), **drive))
 
 
 COPY = flat.copy('y2')
@@ -265,7 +265,7 @@ def test_scipy_is_handed_everything_in_the_scaling(monkeypatch):
 
     opt = flat.optimise(minimise='f', design={'x': (None, 4.0)},
                         subject_to=flat.requirement(flat.place('h')))
-    ran = cx.absolute.declare(model, {'OPT': opt}) + flat.drive(cx.SLSQP(), contracts=cx.SCALED)
+    ran = cx.absolute.declare(model, {'OPT': opt}) + flat.drive(cx.ScipyMinimize(), contracts=cx.SCALED)
     out = flat.run(ran, {cx.Start: {'x': 0.0}, Scales: {'x': flat.scaling(
         unknowns={'x': 2.0}, objective=3.0, constraints={'h': 1e8})}})
     assert handed == {'objective': 3.0, 'bounds': [(None, 2.0)], 'residual': [[-1.0]]}

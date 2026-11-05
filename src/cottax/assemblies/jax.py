@@ -47,7 +47,7 @@ from ..relational.consumers.declaration import (
 )
 from ..relational.consumers.surface import RelationalEditing
 from ..relational.consumers.execution.jax_solvers import (
-    BFGS, SLSQP, HostMinimiser, HostProblem, Newton, Picard, ScipyMinimize,
+    BFGS, HostMinimiser, HostProblem, Newton, Picard, ScipyMinimize,
 )
 from ..relational.consumers.execution.jax_solvers.canonical_nlp import (
     Box, NotSquare, box, canonical, scaled, scaled_unknowns, unscaled_unknowns,
@@ -196,7 +196,7 @@ __all__ = [
     'SCALED', 'Scales', 'Scaling', 'scaled', 'scaled_unknowns', 'unscaled_unknowns',
     'OdeDeclaring', 'Rate', 'Dt', 'OdeCondition', 'Integration', 'Integrator',
     'Times', 'Trajectory',
-    'Newton', 'Picard', 'BFGS', 'SLSQP', 'ScipyMinimize', 'HostMinimiser', 'HostProblem',
+    'Newton', 'Picard', 'BFGS', 'ScipyMinimize', 'HostMinimiser', 'HostProblem',
     'canonical', 'box', 'Box', 'NotSquare', 'JitGraph',
     'Running', 'Results', 'Inputs', 'Traced', 'Start', 'Driven', 'CallableGraph', 'completed',
     'PlainFormat', 'LatexFormatter', 'render_xdsm_svg', 'render_matrix_svg', 'by_namespace',

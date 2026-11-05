@@ -1,5 +1,5 @@
 r'''
-The jax backend of the driver contracts: Newton, Picard, BFGS, SLSQP and any method of
+The jax backend of the driver contracts: Newton, Picard, BFGS and any method of
 `scipy.optimize.minimize`, each chosen per contract in `ImplementDrivers`; `HostMinimiser` for
 writing another solver that runs on the host.
 
@@ -14,16 +14,16 @@ canonical_nlp                    (canonical, box, scaled: `relational.programme`
  \/                \/
 optimistix      scipy_minimize   (optimistix: Newton for a RootFinder, Picard for a
                                   FixedPointIterator, BFGS for a Minimiser;
-                                  scipy_minimize: SLSQP and ScipyMinimize for a ConstrainedMinimiser,
+                                  scipy_minimize: ScipyMinimize for a ConstrainedMinimiser, and
                                   `METHODS`: what each method honours, refusing the rest)
 
 '''
 
 from .optimistix import BFGS, Newton, Picard
 from .host import HostMinimiser, HostProblem
-from .scipy_minimize import SLSQP, ScipyMinimize
+from .scipy_minimize import ScipyMinimize
 
 __all__ = [
     'Newton', 'Picard', 'BFGS',
-    'SLSQP', 'ScipyMinimize', 'HostMinimiser', 'HostProblem',
+    'ScipyMinimize', 'HostMinimiser', 'HostProblem',
 ]

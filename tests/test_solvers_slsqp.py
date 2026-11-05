@@ -1,5 +1,5 @@
 '''
-`jax_solvers.SLSQP` answering a `ConstrainedMinimisation` through `execution`: the
+`jax_solvers.ScipyMinimize`, by its default SLSQP, answering a `ConstrainedMinimisation` through `execution`: the
 constraints and their signs, bounds, what it reports, the Jacobian transform, the memo,
 and running under a trace and without one. Float64, as `test_solvers.py`.
 '''
@@ -23,7 +23,7 @@ from cottax.pytree.path import NodePath, VarPath
 from cottax.core.realisation import ImplementedDriven, ImplementedFunction
 from cottax.relational import Eq, Le, Relation, RelationalCondition
 from cottax.relational.consumers.execution.jax_solvers.canonical_nlp import Canonical, box, canonical
-from cottax.relational.consumers.execution.jax_solvers import SLSQP
+from cottax.relational.consumers.execution.jax_solvers import ScipyMinimize
 from cottax.relational.consumers.execution.jax_solvers.host import HostProblem
 from graphs import graph_of
 
@@ -88,7 +88,7 @@ def test_an_equality_and_an_inequality_are_both_respected():
         N('m')  : call(['x', 'y'], ['f', 'h', 'two', 'g'],
                        lambda x, y: (x ** 2 + y ** 2, x + y, 2.0 + 0.0 * x, 1.5 - x)),
         N('opt'): optimise('f', ['x', 'y'], (Relation(V('h'), V('two'), Eq),
-                                             Relation(V('g'), None, Le)), SLSQP()),
+                                             Relation(V('g'), None, Le)), ScipyMinimize()),
     }, {STARTS(V('x')): 3.0, STARTS(V('y')): -1.0})
     assert float(out[V('x')]) == pytest.approx(1.5, abs=1e-6)
     assert float(out[V('y')]) == pytest.approx(0.5, abs=1e-6)
@@ -98,7 +98,7 @@ def test_the_inequality_sign_is_cottaxs_not_scipys():
     '''`(x - 5)^2` under `x - 1 <= 0` is `x = 1`; the wrong negation converges to 5.'''
     out = solve({
         N('m')  : call(['x'], ['f', 'g'], lambda x: ((x - 5.0) ** 2, x - 1.0)),
-        N('opt'): optimise('f', ['x'], (Relation(V('g'), None, Le),), SLSQP()),
+        N('opt'): optimise('f', ['x'], (Relation(V('g'), None, Le),), ScipyMinimize()),
     }, {STARTS(V('x')): 0.0})
     assert float(out[V('x')]) == pytest.approx(1.0, abs=1e-6)
 
@@ -106,7 +106,7 @@ def test_the_inequality_sign_is_cottaxs_not_scipys():
 def test_a_bound_is_broadcast_over_an_unknown_that_holds_an_array():
     out = solve({
         N('m')  : call(['x'], ['f'], lambda x: jnp.sum((x - 3.0) ** 2)),
-        N('opt'): optimise('f', ['x'], (), SLSQP(), bounded=True),
+        N('opt'): optimise('f', ['x'], (), ScipyMinimize(), bounded=True),
     }, {STARTS(V('x')): jnp.zeros(4), LOWER(V('x')): -1.0, UPPER(V('x')): 0.5})
     assert out[V('x')].shape == (4,)
     assert out[V('x')].tolist() == pytest.approx([0.5] * 4, abs=1e-6)
@@ -116,9 +116,9 @@ BOWL = {N('m'): call(['x'], ['f'], lambda x: (x - 3.0) ** 2)}
 
 
 def test_steps_are_reported_only_when_the_driver_asks_for_them():
-    quiet = solve(BOWL | {N('opt'): optimise('f', ['x'], (), SLSQP())},
+    quiet = solve(BOWL | {N('opt'): optimise('f', ['x'], (), ScipyMinimize())},
                   {STARTS(V('x')): 0.0})
-    loud  = solve(BOWL | {N('opt'): optimise('f', ['x'], (), SLSQP(), steps=True)},
+    loud  = solve(BOWL | {N('opt'): optimise('f', ['x'], (), ScipyMinimize(), steps=True)},
                   {STARTS(V('x')): 0.0})
     assert V('n') not in quiet
     assert int(loud[V('n')]) >= 1
@@ -127,9 +127,9 @@ def test_steps_are_reported_only_when_the_driver_asks_for_them():
 def test_strict_refuses_a_solve_that_did_not_converge_and_lax_takes_it():
     steep = {N('m'): call(['x'], ['f'], lambda x: jnp.sum((x - 3.0) ** 4 + x ** 2))}
     with pytest.raises(RuntimeError, match='did not converge'):
-        solve(steep | {N('opt'): optimise('f', ['x'], (), SLSQP(max_steps=1))},
+        solve(steep | {N('opt'): optimise('f', ['x'], (), ScipyMinimize(max_steps=1))},
               {STARTS(V('x')): jnp.full(3, 50.0)})
-    out = solve(steep | {N('opt'): optimise('f', ['x'], (), SLSQP(max_steps=1,
+    out = solve(steep | {N('opt'): optimise('f', ['x'], (), ScipyMinimize(max_steps=1,
                                                                   strict=False))},
                 {STARTS(V('x')): jnp.full(3, 50.0)})
     assert out[V('x')].shape == (3,)
@@ -153,13 +153,13 @@ def test_one_model_call_per_program_not_one_per_condition_or_point():
     '''One trace for the values, which the Jacobian program reuses, one walk after convergence
     -- and the same two from a start that takes a different number of steps.'''
     calls: dict = {}
-    out = solve(counting(calls, SLSQP()), {STARTS(V('x')): 0.0})
+    out = solve(counting(calls, ScipyMinimize()), {STARTS(V('x')): 0.0})
     assert float(out[V('x')]) == pytest.approx(2.0, abs=1e-6)
     assert calls == {'m': 2, 'c1': 2, 'c2': 2}
 
     for x0 in (-5.0, 1.7):
         again: dict = {}
-        solve(counting(again, SLSQP()), {STARTS(V('x')): x0})
+        solve(counting(again, ScipyMinimize()), {STARTS(V('x')): x0})
         assert again == calls
 
 
@@ -172,7 +172,7 @@ def by_rows(fn, has_aux):
 
 
 def test_the_jacobian_is_whichever_transform_the_implementation_holds():
-    out = solve(counting({}, SLSQP(jacobian=by_rows)), {STARTS(V('x')): 0.0})
+    out = solve(counting({}, ScipyMinimize(jacobian=by_rows)), {STARTS(V('x')): 0.0})
     assert float(out[V('x')]) == pytest.approx(2.0, abs=1e-6)
 
 
@@ -183,7 +183,7 @@ def test_a_limit_held_fixed_is_read_as_a_parameter():
     out = solve({
         N('m')  : call(['x'], ['f', 'g'], lambda x: ((x - 5.0) ** 2, x)),
         N('opt'): ImplementedDriven(Driven(condition, ConstrainedMinimisation(steps=False),
-                                           ((STARTS(V('x')),),), ()), SLSQP()),
+                                           ((STARTS(V('x')),),), ()), ScipyMinimize()),
     }, {STARTS(V('x')): 0.0, V('g_max'): 2.0})
     assert float(out[V('x')]) == pytest.approx(2.0, abs=1e-6)
 
@@ -242,7 +242,7 @@ def test_a_line_search_asks_values_it_never_differentiates(monkeypatch):
                         init(self, counting_program('values', values),
                              counting_program('jacobian', jacobians), *rest))
     out = solve({N('m')  : call(['x'], ['f'], lambda x: jnp.exp(x) - 2.0 * x),
-                 N('opt'): optimise('f', ['x'], (), SLSQP())}, {STARTS(V('x')): 5.0})
+                 N('opt'): optimise('f', ['x'], (), ScipyMinimize())}, {STARTS(V('x')): 5.0})
     assert float(out[V('x')]) == pytest.approx(np.log(2.0), abs=1e-5)
     assert counts['values'] > counts['jacobian'] >= 1
 
@@ -254,7 +254,7 @@ def test_under_a_jit_it_runs_through_pure_callback_tracing_once():
     traces: list = []
     graph = CallableGraph(graph_of(OrderedMap({
         N('m')  : call(['x', 'a'], ['f', 'g'], lambda x, a: ((x - a) ** 2, x - 1.0)),
-        N('opt'): optimise('f', ['x'], (Relation(V('g'), None, Le),), SLSQP(),
+        N('opt'): optimise('f', ['x'], (Relation(V('g'), None, Le),), ScipyMinimize(),
                            bounded=True, steps=True),
     })))
 
@@ -278,13 +278,13 @@ def test_with_nothing_traced_the_host_is_called_directly(monkeypatch):
         raise AssertionError('pure_callback entered with nothing traced')
 
     monkeypatch.setattr(jax, 'pure_callback', refuse)
-    out = solve(BOWL | {N('opt'): optimise('f', ['x'], (), SLSQP())}, {STARTS(V('x')): 0.0})
+    out = solve(BOWL | {N('opt'): optimise('f', ['x'], (), ScipyMinimize())}, {STARTS(V('x')): 0.0})
     assert float(out[V('x')]) == pytest.approx(3.0, abs=1e-6)
 
 
 def test_an_eager_solve_compiles_once_per_node_not_once_per_solve():
     calls: dict = {}
-    nodes = counting(calls, SLSQP())
+    nodes = counting(calls, ScipyMinimize())
     for x0 in (0.0, -5.0, 1.7):
         solve(nodes, {STARTS(V('x')): x0})
     assert calls['m'] == 1 + 3     # one trace, then one walk per solve
@@ -306,7 +306,7 @@ def test_under_a_jit_the_model_is_evaluated_on_the_gpu_and_not_the_callbacks_cpu
     monkeypatch.setattr(HostProblem, '_read', recording)
     graph = CallableGraph(graph_of(OrderedMap({
         N('m')  : call(['x', 'a'], ['f'], lambda x, a: jnp.sum((x - a) ** 2)),
-        N('opt'): optimise('f', ['x'], (), SLSQP()),
+        N('opt'): optimise('f', ['x'], (), ScipyMinimize()),
     })))
     x = eqx.filter_jit(lambda g, v: run(GraphWithValues(g, v))[V('x')])(
         graph, OrderedMap({V('a'): jnp.full(4, 3.0), STARTS(V('x')): jnp.zeros(4)}))
@@ -315,6 +315,6 @@ def test_under_a_jit_the_model_is_evaluated_on_the_gpu_and_not_the_callbacks_cpu
 
 
 def test_the_answer_comes_back_in_the_callers_dtype():
-    out = solve({N('m'): call(['x'], ['f'], lambda x: jnp.sum((x - 3.0) ** 2)), N('opt'): optimise('f', ['x'], (), SLSQP())},
+    out = solve({N('m'): call(['x'], ['f'], lambda x: jnp.sum((x - 3.0) ** 2)), N('opt'): optimise('f', ['x'], (), ScipyMinimize())},
                 {STARTS(V('x')): jnp.zeros(2, jnp.float32)})
     assert out[V('x')].dtype == jnp.float32

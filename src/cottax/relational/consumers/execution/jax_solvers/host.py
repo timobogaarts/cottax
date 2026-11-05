@@ -37,7 +37,7 @@ def _values(posed: Posed, unravel: Callable, context: Context, scaling: Scaling,
     form, (lower, upper) = scaled(posed.condition, unknowns, posed.conditions(unknowns, context),
                                   scaling)
     over = lambda bounds, free: ravel_pytree(tuple(
-        jnp.broadcast_to(jnp.asarray(free if b is None else b, jnp.result_type(u)), jnp.shape(u))
+        jnp.full(jnp.shape(u), free) if b is None else b
         for b, u in zip(bounds, solved, strict=True)))[0]
     return (Canonical(*(ravel_pytree(group)[0] for group in form)),
             jnp.stack([over(lower, -jnp.inf), over(upper, jnp.inf)]))
@@ -109,9 +109,9 @@ class HostProblem:
         return self._jacobian[2]
 
     def unknowns(self, y: np.ndarray) -> np.ndarray:
-        '''`y` in the model's units, flat: for reporting a point. Plain numpy, at the flat
-        vector's precision: nothing compiles or evaluates for it.'''
-        return np.asarray(np.asarray(y, self.magnitudes.dtype) * self.magnitudes, float)
+        '''`y` in the model's units, flat: for reporting a point. Plain numpy: nothing compiles
+        or evaluates for it.'''
+        return y * self.magnitudes
 
     def _read(self, groups: Canonical, limits: Any) -> Canonical:
         groups = Canonical(*(np.asarray(group, float) for group in groups))
