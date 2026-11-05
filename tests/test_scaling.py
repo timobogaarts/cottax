@@ -16,7 +16,7 @@ from cottax.consumers.json import read_json, write_json
 from cottax.core.frozen import OrderedMap
 from cottax.pytree.path import VarPath
 from cottax.relational import Eq, Le, Max, Min, Objective, Relation, RelationalCondition, Scaling
-from cottax.relational.consumers.execution.jax_solvers import scipy_slsqp
+from cottax.relational.consumers.execution.jax_solvers import scipy_minimize
 from cottax.relational.consumers.execution.jax_solvers.canonical_nlp import (
     Box, Canonical, canonical, scaled, scaled_unknowns, unscaled_unknowns,
 )
@@ -252,12 +252,12 @@ def test_scipy_is_handed_everything_in_the_scaling(monkeypatch):
     '''`min (x - 3)^2` on `1e8 (x - 1) = 0` with `x <= 4`, its unknown in units of 2: from
     `x = 0` the start is 0, the objective 9 over 3, the residual `-1e8` over `1e8`, the box 2.'''
     handed = {}
-    minimize = scipy_slsqp.minimize
-    def recording(fun, x0, *, args, bounds, constraints, **options):
-        handed.update(objective=fun(x0, *args), bounds=bounds,
-                      residual=[c['fun'](x0, *c['args']).tolist() for c in constraints])
-        return minimize(fun, x0, args=args, bounds=bounds, constraints=constraints, **options)
-    monkeypatch.setattr(scipy_slsqp, 'minimize', recording)
+    minimize = scipy_minimize.minimize
+    def recording(fun, x0, *, bounds, constraints, **options):
+        handed.update(objective=fun(x0), bounds=bounds,
+                      residual=[c['fun'](x0).tolist() for c in constraints])
+        return minimize(fun, x0, bounds=bounds, constraints=constraints, **options)
+    monkeypatch.setattr(scipy_minimize, 'minimize', recording)
 
     @flat.function('f', 'h')
     def model(x):

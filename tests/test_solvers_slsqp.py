@@ -23,8 +23,8 @@ from cottax.pytree.path import NodePath, VarPath
 from cottax.core.realisation import ImplementedDriven, ImplementedFunction
 from cottax.relational import Eq, Le, Relation, RelationalCondition
 from cottax.relational.consumers.execution.jax_solvers.canonical_nlp import Canonical, box, canonical
-from cottax.relational.consumers.execution.jax_solvers import SLSQP, scipy_slsqp
-from cottax.relational.consumers.execution.jax_solvers.scipy_slsqp import _Memo
+from cottax.relational.consumers.execution.jax_solvers import SLSQP
+from cottax.relational.consumers.execution.jax_solvers.host import HostProblem
 from graphs import graph_of
 
 
@@ -150,12 +150,12 @@ def counting(calls, implementation):
 
 
 def test_one_model_call_per_program_not_one_per_condition_or_point():
-    '''One trace for the values, one for the Jacobian, one walk after convergence -- and
-    the same three from a start that takes a different number of steps.'''
+    '''One trace for the values, which the Jacobian program reuses, one walk after convergence
+    -- and the same two from a start that takes a different number of steps.'''
     calls: dict = {}
     out = solve(counting(calls, SLSQP()), {STARTS(V('x')): 0.0})
     assert float(out[V('x')]) == pytest.approx(2.0, abs=1e-6)
-    assert calls == {'m': 3, 'c1': 3, 'c2': 3}
+    assert calls == {'m': 2, 'c1': 2, 'c2': 2}
 
     for x0 in (-5.0, 1.7):
         again: dict = {}
@@ -163,11 +163,11 @@ def test_one_model_call_per_program_not_one_per_condition_or_point():
         assert again == calls
 
 
-def by_rows(fn):
+def by_rows(fn, has_aux):
     '''A consumer's own Jacobian: rows pulled back one at a time off one forward pass.'''
     def jacobian(x):
-        primal, pull_back = jax.vjp(fn, x)
-        return jnp.stack([pull_back(row)[0] for row in jnp.eye(primal.shape[0])])
+        primal, pull_back, aux = jax.vjp(fn, x, has_aux=True)
+        return jnp.stack([pull_back(row)[0] for row in jnp.eye(primal.shape[0])]), aux
     return jacobian
 
 
@@ -208,20 +208,23 @@ def test_a_bound_is_the_boxs_and_every_other_relation_the_forms():
 
 def test_the_memo_computes_each_kind_once_per_point_and_keeps_the_last_of_each():
     '''A value is the form's groups; a Jacobian comes as one matrix and is split into
-    them by the values' sizes. Each kind keeps its own last point.'''
+    them by the values' sizes. Each kind keeps its own last point, and a Jacobian's values
+    are kept with it.'''
     calls: list = []
-    memo = _Memo(lambda x: calls.append('v') or (Canonical(x, x[:0], 2 * x), jnp.zeros((2, 1))),
-                 lambda x: calls.append('j') or jnp.stack([x, 2 * x]),
-                 jnp.float64, jax.devices()[0])
+    limits = jnp.zeros((2, 1))
+    form = lambda x: Canonical(x, x[:0], 2 * x)
+    memo = HostProblem(lambda x: calls.append('v') or (form(x), limits),
+                       lambda x: calls.append('j') or (form(x), limits, jnp.stack([x, 2 * x])),
+                       np.array([1.0]), gradient=False)
     one, two = np.array([1.0]), np.array([2.0])
-    memo.values_at(one), memo.values_at(one)
-    jacobian = memo.jacobian_at(one)
+    memo.values(one), memo.values(one)
+    jacobian = memo.jacobians(one)
     assert calls == ['v', 'j']
     assert [group.tolist() for group in jacobian] == [[[1.0]], [], [[2.0]]]
-    memo.values_at(two), memo.jacobian_at(one)          # the Jacobian at one is still kept
+    memo.values(two), memo.jacobians(one)               # the Jacobian at one is still kept
     assert calls == ['v', 'j', 'v']
-    memo.values_at(one), memo.jacobian_at(two)          # values moved on to two: both anew
-    assert calls == ['v', 'j', 'v', 'v', 'j']
+    memo.values(one), memo.jacobians(two)               # one's values came with its Jacobian
+    assert calls == ['v', 'j', 'v', 'j']
 
 
 def test_a_line_search_asks_values_it_never_differentiates(monkeypatch):
@@ -234,9 +237,10 @@ def test_a_line_search_asks_values_it_never_differentiates(monkeypatch):
             return program(*a)
         return counted
 
-    for kind in counts:
-        monkeypatch.setattr(scipy_slsqp, f'_{kind}',
-                            counting_program(kind, getattr(scipy_slsqp, f'_{kind}')))
+    init = HostProblem.__init__
+    monkeypatch.setattr(HostProblem, '__init__', lambda self, values, jacobians, *rest:
+                        init(self, counting_program('values', values),
+                             counting_program('jacobian', jacobians), *rest))
     out = solve({N('m')  : call(['x'], ['f'], lambda x: jnp.exp(x) - 2.0 * x),
                  N('opt'): optimise('f', ['x'], (), SLSQP())}, {STARTS(V('x')): 5.0})
     assert float(out[V('x')]) == pytest.approx(np.log(2.0), abs=1e-5)
@@ -283,22 +287,23 @@ def test_an_eager_solve_compiles_once_per_node_not_once_per_solve():
     nodes = counting(calls, SLSQP())
     for x0 in (0.0, -5.0, 1.7):
         solve(nodes, {STARTS(V('x')): x0})
-    assert calls['m'] == 2 + 3     # two traces, then one walk per solve
+    assert calls['m'] == 1 + 3     # one trace, then one walk per solve
 
 
 @pytest.mark.skipif(jax.default_backend() != 'gpu', reason='needs a GPU')
 def test_under_a_jit_the_model_is_evaluated_on_the_gpu_and_not_the_callbacks_cpu(monkeypatch):
-    '''Inside `pure_callback` a numpy point would be computed on the CPU; the memo puts it
-    on the default device first.'''
+    '''Inside `pure_callback` a numpy point would be computed on the CPU; the problem puts it
+    on the default device first. That it finishes at all is compiling ahead: a first compile
+    in the callback never returns, on XLA's GPU autotuner.'''
     platforms: set = set()
-    values = scipy_slsqp._values
+    read = HostProblem._read
 
-    def recording(*a):
-        out = values(*a)
-        platforms.update(device.platform for group in out for device in group.devices())
-        return out
+    def recording(self, groups, limits):
+        platforms.update(device.platform for leaf in jax.tree.leaves(groups)
+                         for device in leaf.devices())
+        return read(self, groups, limits)
 
-    monkeypatch.setattr(scipy_slsqp, '_values', recording)
+    monkeypatch.setattr(HostProblem, '_read', recording)
     graph = CallableGraph(graph_of(OrderedMap({
         N('m')  : call(['x', 'a'], ['f'], lambda x, a: jnp.sum((x - a) ** 2)),
         N('opt'): optimise('f', ['x'], (), SLSQP()),
