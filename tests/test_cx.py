@@ -630,6 +630,12 @@ def test_an_architecture_takes_its_top_and_defaults_the_rest():
     assert cx.flat.mda() == MDA(GaussSeidel(), cx.flat.closing)
 
 
+def test_the_purpose_a_closing_attaches_is_the_mint_a_study_writes_a_scale_at():
+    '''A closing attaches the class, `cx.residual_scale` writes a place with its mint.'''
+    closing = cx.FixedPointClosing(cx.flat.copies, cx.AtFirstMember(cx.Closure()), (cx.ResidualScale,))
+    assert closing.attach == (type(cx.residual_scale.mint),)
+
+
 def test_implement_names_its_nodes_with_n():
     op = cx.absolute.implement({N['disc2']: disc2.fn})
     assert tuple(op.implementations) == (n('disc2'),)

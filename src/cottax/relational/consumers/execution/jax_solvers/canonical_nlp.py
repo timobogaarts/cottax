@@ -5,6 +5,7 @@ driver's units, and `next_values`.'''
 import operator
 from typing import Any, NamedTuple
 
+import equinox as eqx
 import jax
 import jax.numpy as jnp
 
@@ -66,16 +67,16 @@ def scaled[V: Place](condition: RelationalCondition[V], unknowns: tuple[Any, ...
                      values: tuple[Any, ...], column: tuple[Any, ...]) -> tuple[Canonical, Box]:
     '''`canonical` and `box` in `y = x / column`, for `unknowns` the values `x` at which
     `values` were read: each relation's residual over the magnitude of the place it attaches
-    as its `ResidualScale` (one attaching none read as it is), the box over `column`, its
-    sides swapped where a column is negative (a side then `-inf` / `inf` where unbounded).
-    Objectives as they are.'''
+    as its `ResidualScale` (one attaching none read as it is; a scale neither finite nor
+    non-zero refused when evaluated), the box over `column`, its sides swapped where a column
+    is negative (a side then `-inf` / `inf` where unbounded). Objectives as they are.'''
     value = _values(condition, unknowns, values)
     form  = programme(condition)
     def held(r):
         residual = _residual(value(r.lhs), value(r.rhs))
         if (scale := r.attached.get(ResidualScale)) is None:
             return residual
-        return jax.tree.map(lambda e, s: e / jnp.abs(s), residual, value(scale))
+        return jax.tree.map(lambda e, s: e / _magnitude(s), residual, value(scale))
     lower, upper = box(condition, unknowns, values)
     def scaled_box(lo, hi, c):
         if lo is None and hi is None:
@@ -87,6 +88,13 @@ def scaled[V: Place](condition: RelationalCondition[V], unknowns: tuple[Any, ...
     return (Canonical(tuple(_minimised(value(o.place), o.sense) for o in form.objectives),
                       tuple(map(held, form.equalities)), tuple(map(held, form.inequalities))),
             Box(tuple(lo for lo, _ in sides), tuple(hi for _, hi in sides)))
+
+
+def _magnitude(scale: Any) -> Any:
+    '''`|scale|`, refused at run time, as a traced value can only be, unless finite and non-zero.'''
+    scale = jnp.asarray(scale)
+    return jnp.abs(eqx.error_if(scale, ~jnp.isfinite(scale) | (scale == 0),
+                                'a residual scale must be finite and non-zero'))
 
 
 def next_values[V: Place](condition: RelationalCondition[V], unknowns: tuple[Any, ...],

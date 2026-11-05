@@ -225,6 +225,18 @@ def test_an_attached_place_is_a_given_term_renamed_and_written_never_a_condition
     assert [type(x) for x in violations(RelationalCondition, (r,), (), (u,), ())] == [AttachedNotAParameter]
 
 
+def test_an_attached_place_is_drawn_in_a_slot_of_its_purpose_and_not_as_a_side():
+    '''A scale read beside `g = 0` is no term that vanishes, one beside `u = h` no term that
+    equals; two relations reading one scale show it once, and a consistency stays last.'''
+    from cottax.relational.consumers.visualization import slots_of
+    u, w, g, h, s = v('u'), v('w'), v('g'), v('h'), v('s')
+    scale = OrderedMap({ResidualScale: s})
+    node  = RelationalCondition((Relation(g, None, Eq, scale), Relation(u, h, Eq, scale)),
+                                (), (u, w), (s,))
+    assert [(tuple(p.plain if hasattr(p, 'plain') else p for p in slot.label), slot.reads)
+            for slot in slots_of(node)] == [(('= 0',), (g,)), (('scale',), (s,)), (('= ', u), (h,))]
+
+
 def test_the_join_holds_fixed_what_either_side_does_once():
     a = RelationalCondition((Relation(v('lo'), v('u'), Le),), (), (v('u'),), (v('lo'),))
     b = RelationalCondition((Relation(v('lo'), v('w'), Le),), (), (v('w'),), (v('lo'),))

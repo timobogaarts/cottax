@@ -113,9 +113,16 @@ def test_a_bound_is_broadcast_over_an_unknown_that_holds_an_array():
     assert out[V('x')].tolist() == pytest.approx([0.5] * 4, abs=1e-6)
 
 
-def test_a_residual_is_read_in_the_scale_it_attaches_a_given_value():
-    '''`min (x - 3)^2` on `1e8 (x - 1) = 0`, read in its attached `s = 1e8`: `x = 1`. The
-    scale is a parameter, so a value the graph is given like any other.'''
+def test_a_residual_is_read_in_the_scale_it_attaches_a_given_value(monkeypatch):
+    '''`min (x - 3)^2` on `1e8 (x - 1) = 0`, read in its attached `s = 1e8`: `x = 1`, and
+    scipy is handed the residual over `s`, `-1` at the start. The scale is a parameter, so a
+    value the graph is given like any other.'''
+    handed = []
+    minimize = scipy_slsqp.minimize
+    def recording(fun, x0, *, constraints, **options):
+        handed.extend(c['fun'](x0, *c['args']) for c in constraints)
+        return minimize(fun, x0, constraints=constraints, **options)
+    monkeypatch.setattr(scipy_slsqp, 'minimize', recording)
     s = V('s')
     held = Relation(V('h'), None, Eq, OrderedMap({ResidualScale: s}))
     opt = ImplementedDriven(
@@ -125,8 +132,25 @@ def test_a_residual_is_read_in_the_scale_it_attaches_a_given_value():
              N('opt'): opt}
     out = solve(nodes, {STARTS(V('x')): 0.0, s: 1e8})
     assert float(out[V('x')]) == pytest.approx(1.0, abs=1e-6)
+    assert [e.tolist() for e in handed] == [[-1.0]]
     with pytest.raises(KeyError, match='no value given'):
         solve(nodes, {STARTS(V('x')): 0.0})
+
+
+@pytest.mark.parametrize('scale', [0.0, float('nan'), float('inf')])
+@pytest.mark.parametrize('traced', [False, True])
+def test_a_scale_neither_finite_nor_non_zero_is_refused_by_name(scale, traced):
+    '''Not a solver's failure to converge at the end of its iterations: under a jit too, where
+    the scale is traced, and SLSQP runs inside a callback.'''
+    s = V('s')
+    held = Relation(V('h'), None, Eq, OrderedMap({ResidualScale: s}))
+    opt = ImplementedDriven(
+        Driven(RelationalCondition((held,), (Objective(V('f'), Min),), (V('x'),), (s,)),
+               ConstrainedMinimisation(steps=False), ((STARTS(V('x')),),), ()), SLSQP())
+    nodes = {N('m'): call(['x'], ['f', 'h'], lambda x: ((x - 3.0) ** 2, x - 1.0)), N('opt'): opt}
+    solved = lambda value: solve(nodes, {STARTS(V('x')): 0.0, s: value})[V('x')]
+    with pytest.raises(Exception, match='a residual scale must be finite and non-zero'):
+        jax.block_until_ready((jax.jit(solved) if traced else solved)(jnp.asarray(scale)))
 
 
 BOWL = {N('m'): call(['x'], ['f'], lambda x: (x - 3.0) ** 2)}

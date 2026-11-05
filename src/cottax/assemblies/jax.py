@@ -59,6 +59,7 @@ from ..consumers.surface import Purpose, RolePlaces, Surface, core_role_places
 from ..consumers.surface import interface_types as _surface_mints
 from ..consumers.declaration.interface_types import Solve as _Solve
 from ..relational import mints as _relational_mints
+from ..relational.mints import ResidualScale
 from ..ode import mints as _ode_mints
 from ..consumers.surface.interface import Editing, Locator, Part
 from ..consumers.visualization import (
@@ -172,7 +173,7 @@ __all__ = [
     'EqualityConstraint', 'Problem', 'Tagged',
     'Surface', 'Part', 'Declaring', 'Editing', 'RelationalDeclaring', 'RelationalEditing',
     'Architecting', 'Driving', 'ShippedSurface', 'Drive', 'RolePlaces', 'core_role_places',
-    'Mint', 'Copy', 'Closure', 'Purpose',
+    'Mint', 'Copy', 'Closure', 'ResidualScale', 'Purpose',
     'copy', 'closure', 'given', 'start', 'steps', 'solve', 'cond', 'require', 'lower', 'upper',
     'target', 'residual_scale', 'rate', 'initial', 'span', 'times', 'trajectory',
     'Locator', 'Conventions', 'Shipped', 'PytreeLocator', 'Under', 'InFull',

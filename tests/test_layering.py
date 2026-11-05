@@ -1,5 +1,5 @@
 '''
-The layering, as rules over the tree (see `consumers_and_features.md`).
+The layering, as rules over the tree.
 
 The static rules read each module's imports with `ast`: an import inside a function is not a
 dependency. The runtime rules run once, in one interpreter forking a child per module, so
