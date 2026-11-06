@@ -8,7 +8,7 @@ The core: `frozen/` (the frozen values), `maths/` (the mathematics), and beside 
 
 from .frozen import Violation, first, violations
 from .maths import (
-    Label, Place, PlaceToPlace, comparables_in, prefixes,
+    Label, Place, PlaceToPlace, comparable, comparables_in, prefixes,
     Closure, Copy, Mint, Minting, mint_of, minted, unminted,
     NodeDefinition, Renaming, relabelled,
     ConditionalNode, Function, FunctionalNode, is_requirement, is_problem, requirements, problems,

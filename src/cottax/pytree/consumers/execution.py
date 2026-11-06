@@ -7,7 +7,7 @@ from ...core.frozen import OrderedMap, answers, dotted
 from ...consumers.execution.interface import DataStructure
 from ...consumers.execution.refusals import ForeignPlace
 from ...core import NestingGraph, ProvedGraph, mint_of
-from ..crossings import check_pytree_readable, complete_at, read_at, resolves, write_at
+from ..crossings import check_pytree_readable, complete_at, leaf_paths, read_at, resolves, write_at
 from ..path import VarPath
 
 
@@ -27,6 +27,9 @@ class PytreeStructure(DataStructure[VarPath]):
     def holds(self, data: Any, place: VarPath) -> bool:
         own((place,))
         return resolves(data, place.segments)
+
+    def places(self, data: Any) -> tuple[VarPath, ...]:
+        return tuple(VarPath(keys) for keys in leaf_paths(data))
 
     def read(self, data: Any, places: Iterable[VarPath]) -> OrderedMap[VarPath, Any]:
         places = tuple(places)

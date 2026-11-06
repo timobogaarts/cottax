@@ -26,8 +26,9 @@ interface, refusals
 structures                       (Inputs, the key of a variable's own value; slots, each place
  ||                               a run takes a value at and what the caller calls it;
  ||                               read_from, each read where a caller's structure holds it;
- ||                               valued_once, one value per input; write_back,
- ||                               write_role)
+ ||                               unasked, what a structure holds that none reads; unvalued,
+ ||                               valued_once, one value per input; Assessed, that lookup kept
+ ||                               for asking; write_back, write_role)
  \/
 drive                            (Drive: every undriven problem driven and implemented by the
  ||                               first implementation accepting it, its data and reports at
@@ -42,9 +43,9 @@ Imported by name, not here: `jax_jit`; `run`'s `blamed` and `check_callable`.
 '''
 
 from .run import CallableGraph, run
-from .structures import Inputs, read_from, slots, valued_once, write_back, write_role
+from .structures import Assessed, Inputs, read_from, slots, unasked, unvalued, valued_once, write_back, write_role
 from .drive import Drive
 from .part import Driving, Results, Running
 
-__all__ = ['CallableGraph', 'run', 'Inputs', 'read_from', 'slots', 'valued_once', 'write_back', 'write_role', 'Drive', 'Driving',
-           'Running', 'Results']
+__all__ = ['CallableGraph', 'run', 'Inputs', 'read_from', 'slots', 'unasked', 'unvalued', 'valued_once', 'write_back', 'write_role', 'Drive', 'Driving',
+           'Running', 'Results', 'Assessed']

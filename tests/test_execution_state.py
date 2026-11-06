@@ -32,6 +32,9 @@ class Table(DataStructure[Word]):
     def holds(self, data, place) -> bool:
         return place in data
 
+    def places(self, data) -> tuple:
+        return tuple(p for p, v in data.items() if v is not None)
+
     def read(self, data, places) -> OrderedMap:
         places = tuple(places)
         if missing := tuple(p for p in places if p not in data):
@@ -189,6 +192,7 @@ def test_a_place_class_indexed_twice_is_refused():
     '''A second structure for a class would be chosen by import order.'''
     class Again(DataStructure):
         def holds(self, data, place): ...
+        def places(self, data): ...
         def read(self, data, places): ...
         def write(self, data, values): ...
 

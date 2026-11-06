@@ -345,7 +345,7 @@ def test_the_assembly_defines_only_what_is_pinned():
             if callable(v) and getattr(v, '__module__', None) == ASSEMBLY} == ASSEMBLY_DEFINES
 
 
-CONDITION_NODES = {'declare', 'requirement', 'satisfy', 'optimise', 'run', 'valued',
+CONDITION_NODES = {'declare', 'requirement', 'satisfy', 'optimise', 'run', 'valued', 'assess',
                    'copy', 'reading', 'parameter_reads', 'term', 'per_place', 'scaling'}
 '''What a part offers beside the kinds it declares (`declares`) and the ops it builds: the
 model declared, relational's condition nodes, a run on values written by name or held in a
