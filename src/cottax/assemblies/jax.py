@@ -46,7 +46,9 @@ from ..relational.consumers.declaration import (
     Residual,
 )
 from ..relational.consumers.surface import RelationalEditing
-from ..relational.consumers.execution.jax_solvers import BFGS, SLSQP, Newton, Picard
+from ..relational.consumers.execution.jax_solvers import (
+    BFGS, HostMinimiser, HostProblem, Newton, Picard, ScipyMinimize,
+)
 from ..relational.consumers.execution.jax_solvers.canonical_nlp import (
     Box, NotSquare, box, canonical, scaled, scaled_unknowns, unscaled_unknowns,
 )
@@ -194,7 +196,8 @@ __all__ = [
     'SCALED', 'Scales', 'Scaling', 'scaled', 'scaled_unknowns', 'unscaled_unknowns',
     'OdeDeclaring', 'Rate', 'Dt', 'OdeCondition', 'Integration', 'Integrator',
     'Times', 'Trajectory',
-    'Newton', 'Picard', 'BFGS', 'SLSQP', 'canonical', 'box', 'Box', 'NotSquare', 'JitGraph',
+    'Newton', 'Picard', 'BFGS', 'ScipyMinimize', 'HostMinimiser', 'HostProblem',
+    'canonical', 'box', 'Box', 'NotSquare', 'JitGraph',
     'Running', 'Results', 'Inputs', 'Traced', 'Start', 'Driven', 'CallableGraph', 'completed',
     'PlainFormat', 'LatexFormatter', 'render_xdsm_svg', 'render_matrix_svg', 'by_namespace',
     'render_html', 'draw', 'render', 'to_dot', 'Style', 'STYLES', 'TERRACOTTA', 'PYXDSM', 'DARK',
