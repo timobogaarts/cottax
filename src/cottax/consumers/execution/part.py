@@ -4,7 +4,7 @@ name or read from a caller's structures, as a surface's methods.'''
 from collections.abc import Callable, Iterator, Mapping
 from typing import Any
 
-from ...core import GraphWithValues, Label, Minting, NestingGraph, PlaceToPlace, ProvedGraph, is_problem
+from ...core import GraphWithValues, Label, Minting, NestingGraph, Place, PlaceToPlace, ProvedGraph, is_problem
 from ...core.driven import AssignByRule, DriverContract, Role, is_driven, role_slots
 from ...core.frozen import AbstractVar, OrderedMap, answer
 from ..surface.interface import Part
@@ -12,8 +12,8 @@ from ..surface.interface_types import RolePlaces, Surface
 from .interface_types import Model
 from .refusals import NoRoleAt, NotAnInput, NotAnUnknown, NotDriverData, TakesNoValue
 from .drive import Drive
-from .structures import (Inputs, Slot, read_from as _read_from, slots, valued_once, write_back as _write_back,
-                         write_role as _write_role)
+from .structures import (Assessed, Inputs, Slot, read_from as _read_from, slots,
+                         write_back as _write_back, write_role as _write_role)
 from .run import CallableGraph, run as _run
 
 
@@ -108,6 +108,17 @@ class Running(Part):
         Refused: a value nothing reads, a place given twice, a key that is no problem's
         unknown, a role its driver does not take, and any input left without a value.
         '''
+        return self.assess(model, values, read_from, proof=proof).valued()
+
+    def assess(self, model: NestingGraph | ProvedGraph | Model, values: Mapping[type, Mapping[Any, Any]] = OrderedMap(),
+               read_from: Mapping[type, Any] = OrderedMap(), *,
+               proof: type = CallableGraph) -> Assessed:
+        '''
+        `valued`'s lookup, stopped before holding it to one value per input: an input without
+        a value and a place given twice are asked of what it returns, and refused by its
+        `valued()`. The other refusals are a caller's errors, and raise here. What `read_from`
+        holds that no run takes is asked of it too, and no refusal: `unread`, `overwritten`.
+        '''
         declared, graph, nesting = _model(model)
         inputs = nesting.graph.boundary_inputs
         table = slots(nesting, self._at(nesting))
@@ -117,8 +128,7 @@ class Running(Part):
                     f'values[{key.__name__}][{written!r}]')
                    for key, written_values in values.items()
                    for written, value in written_values.items()]
-        found = valued_once(table, inputs, (*given, *by_name, *_read_from(nesting, table, read_from)))
-        return GraphWithValues(graph if isinstance(graph, proof) else proof(nesting), found)
+        return Assessed(graph, proof, table, (*given, *by_name, *_read_from(nesting, table, read_from)), read_from)
 
     def _at(self, graph: NestingGraph) -> Callable[[Any], Any]:
         '''Where an unknown's datum sits in a structure: at what it copies, by this surface's
@@ -127,7 +137,7 @@ class Running(Part):
                   if answer(Minting, p, None) is not None}
         return lambda unknown: copied.get(unknown, unknown)
 
-    def _slot(self, graph: NestingGraph, table: tuple[Slot, ...], key: type, written: Any) -> Any:
+    def _slot[N: Label, V: Place](self, graph: NestingGraph[N, V], table: tuple[Slot[V, N], ...], key: type, written: Any) -> V:
         '''The open slot of `table` a name written under `key` gives: an input itself, or the
         datum of the problem owning the unknown written, at that unknown or, per problem, at
         any. Refused with why it gives none.'''

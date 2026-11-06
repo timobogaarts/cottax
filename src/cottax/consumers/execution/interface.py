@@ -34,6 +34,10 @@ class DataStructure[V: Place](Answer):
         '''Whether `data` has a slot at `place`.'''
 
     @abstractmethod
+    def places(self, data: Any) -> tuple[V, ...]:
+        '''Every place `data` holds a value at, the innermost: a slot holding `None` is none.'''
+
+    @abstractmethod
     def read(self, data: Any, places: Iterable[V]) -> OrderedMap[V, Any]:
         '''The value in `data` at each of `places`, in that order, `None` where its slot
         holds none; refuses a place it does not hold.'''

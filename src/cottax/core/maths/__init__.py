@@ -31,7 +31,7 @@ plan/      cut_rules     executable      (plan/: algebra -> primitive -> ops, th
 '''
 
 from .places import (
-    Label, Place, PlaceToPlace, comparables_in, prefixes,
+    Label, Place, PlaceToPlace, comparable, comparables_in, prefixes,
 )
 from .mints import Closure, Copy, Mint, Minting, mint_of, minted, unminted
 from .definition import NodeDefinition, Renaming, relabelled

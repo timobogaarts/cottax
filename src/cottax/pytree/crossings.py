@@ -36,6 +36,11 @@ def _step(key: KeyEntry, node: Any) -> Any:
     raise KeyError(key)
 
 
+def leaf_paths(tree: Any) -> tuple[KeyPath, ...]:
+    '''The key path of each leaf of `tree`: a `None` is none, jax flattening it to nothing.'''
+    return tuple(tuple(keys) for keys, _ in tree_flatten_with_path(tree)[0])
+
+
 KEY_KINDS: set[type] = set()
 '''Every class registered as a key kind (`key_kind`): what a place's segment may be.'''
 
