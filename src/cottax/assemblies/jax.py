@@ -120,9 +120,10 @@ cond, require, lower, upper, target, scales = (
     Purpose(m) for m in (_relational_mints.Cond(), _relational_mints.Require(),
                          _relational_mints.Lower(), _relational_mints.Upper(),
                          _relational_mints.Target(), _relational_mints.Scales()))
-rate, initial, span, times, trajectory = (
+rate, initial, span, kinks, jumps, times, trajectory = (
     Purpose(m) for m in (_ode_mints.Rate(), _ode_mints.Initial(), _ode_mints.Span(),
-                         _ode_mints.Times(), _ode_mints.Trajectory()))
+                         _ode_mints.Kinks(), _ode_mints.Jumps(), _ode_mints.Times(),
+                         _ode_mints.Trajectory()))
 '''Each shipped purpose, called on a name as written for the name derived from it:
 `cx.copy('y_2')` is `^copy['y_2']`, `cx.solve('f')` the problem named after `f`,
 `cx.given.beside('y', 'k')` a read written as a value.'''
@@ -181,7 +182,7 @@ __all__ = [
     'Architecting', 'Driving', 'ShippedSurface', 'Drive', 'RolePlaces', 'core_role_places',
     'Mint', 'Copy', 'Closure', 'Purpose',
     'copy', 'closure', 'given', 'start', 'steps', 'solve', 'cond', 'require', 'lower', 'upper',
-    'target', 'scales', 'rate', 'initial', 'span', 'times', 'trajectory',
+    'target', 'scales', 'rate', 'initial', 'span', 'kinks', 'jumps', 'times', 'trajectory',
     'Locator', 'Conventions', 'Shipped', 'PytreeLocator', 'Under', 'InFull',
     'Scope', 'flat', 'absolute', 'Declared', 'tags_of',
     'Static', 'DictKey', 'GetAttrKey', 'SequenceKey',

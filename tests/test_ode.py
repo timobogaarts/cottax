@@ -558,3 +558,149 @@ def test_an_ode_runs_through_the_shipped_surface_alone():
     tree  = cx.flat.run(model, {cx.Inputs: {'k': 2.0, 'x0': 1.5, 'span': (0.0, 0.8)}})
     assert tree['x'] == pytest.approx(1.5 * math.exp(-1.6), rel=1e-8)
     assert 'rate(' in cx.render_xdsm_svg(cx.flat.declare(decay))
+
+
+
+# ================================================================ kinks
+
+KNOTS = np.linspace(0.0, 1.0, 11)
+'''A control's knots on `[0, 1]`, spacing `H`: numpy's, so float64 under the fixture (a jax
+array made at import would be float32).'''
+H = 0.1
+
+
+def pushing(x, v, tau, u, tk):
+    '''`x'' = u(t)`, `u` piecewise linear between the knots at `tk`, `tau` the clock.'''
+    return v, jnp.interp(tau, tk, u), jnp.ones_like(tau)
+
+
+def pushed(**kinks):
+    '''`pushing` from `x = 0` at unit speed, its kinks declared as asked.'''
+    return s.rate(pushing, 'x', 'v', 'tau', initial={'x': 0.0, 'v': 1.0, 'tau': 0.0},
+                  span='span', **kinks)
+
+
+def final_x(rate, wrt: str = 'u'):
+    '''`x(1)` as a function of `u`, or of the knots with `wrt='tk'`, then of the other.'''
+    model = declare(rate) + drive(diffrax_run())
+    def x1(value, other):
+        inputs = {'u': value, 'tk': other} if wrt == 'u' else {'u': other, 'tk': value}
+        return s.run(model, {cx.Inputs: {**inputs, 'span': (0.0, 1.0)}})['x']
+    return x1
+
+
+def test_kinks_are_read_as_a_parameter_where_named_or_given_as_a_value():
+    ode = declare(pushed(kinks='tk')).graph[solve_at('pushing')]
+    assert ode.kinks == (s.place('tk'),)
+    assert ode.parameters[-2:] == (s.place('span'), s.place('tk'))
+    d = declare(pushed(kinks=KNOTS))
+    assert d.graph[solve_at('pushing')].kinks == (s.place(cx.kinks('x')),)
+    assert d.given[s.place(cx.kinks('x'))] is KNOTS
+    assert declare(pushed()).graph[solve_at('pushing')].kinks == ()
+
+
+def test_a_join_steps_on_the_kinks_of_both_sides():
+    a = OdeCondition((Dt(*map(s.place, ('x', 'rx', 'x0'))),), s.place('span'), (s.place('k1'),))
+    b = OdeCondition((Dt(*map(s.place, ('y', 'ry', 'y0'))),), s.place('span'),
+                     (s.place('k1'), s.place('k2')))
+    assert (a + b).kinks == (s.place('k1'), s.place('k2'))
+    assert 'kinks at' in repr(a + b) and 'kinks' not in repr(a._carried(kinks=()))
+
+
+def test_without_its_kinks_the_gradient_across_a_stride_is_wrong_and_with_them_exact():
+    '''`x(1) = 1 + int (1 - s) u(s) ds`, so `dx(1)/du_j` is `H (1 - t_j)` inside and
+    `H/2 - H^2/6`, `H^2/6` at the ends. At `u = -2` the solution is a parabola the steps
+    stride over knots on, unless they are told to land on them.'''
+    exact = jnp.asarray(H * (1.0 - KNOTS)).at[0].set(H / 2 - H ** 2 / 6).at[-1].set(H ** 2 / 6)
+    u = -2.0 * jnp.ones(KNOTS.shape)
+    told  = jax.grad(final_x(pushed(kinks='tk')))(u, KNOTS)
+    blind = jax.grad(final_x(pushed()))(u, KNOTS)
+    print(f'\n[kinks] max |error| told {float(jnp.max(jnp.abs(told - exact))):.1e}, '
+          f'not told {float(jnp.max(jnp.abs(blind - exact))):.1e}')
+    assert jnp.allclose(told, exact, atol=1e-8)
+    assert jnp.max(jnp.abs(blind - exact)) > 1e-2
+
+
+def test_the_knots_are_values_of_the_run_differentiated_like_any():
+    '''The knots the rate reads and the steps land on are one place, a traced input. With
+    `u` zero at the fourth knot and -2 beside it, `dx(1)/dt_3 = -1/15` (by hand: -11/15 from
+    the interval before it, 10/15 from the one after). A finite difference is no check here:
+    moving a knot moves the steps.'''
+    u = (-2.0 * jnp.ones(KNOTS.shape)).at[3].set(0.0)
+    grad = jax.grad(final_x(pushed(kinks='tk'), wrt='tk'))(jnp.asarray(KNOTS), u)
+    assert float(grad[3]) == pytest.approx(-1 / 15, rel=1e-6)
+
+
+def test_an_ode_with_kinks_is_written_to_json_and_read_back():
+    g = (declare(pushed(kinks='tk')) + drive(diffrax_run())).graph
+    assert read_json(write_json(g)) == g
+    plain = write_json(declare(pushed()).graph)
+    assert not any('kinks' in n['definition'] for n in plain['nodes'])
+
+
+# ================================================================ time, and jumps
+
+def forced(x, t):
+    '''`x' = cos t`: a rate reading the integration's time.'''
+    return jnp.cos(t)
+
+
+def holding(x, v, t, u, tk):
+    '''`x'' = u(t)`, `u` held on each interval between the knots at `tk`, looked up at the
+    solver's own time.'''
+    at = jnp.clip(jnp.searchsorted(tk, t, side='right') - 1, 0, u.shape[0] - 1)
+    return v, u[at]
+
+
+def held(**breaks):
+    return s.rate(holding, 'x', 'v', initial={'x': 0.0, 'v': 1.0}, span='span', time='t',
+                  **breaks)
+
+
+def test_time_is_owned_by_the_ode_given_inside_and_t1_outside():
+    rate = s.rate(forced, 'x', initial=0.0, span='span', time='t',
+                  record='xs', times='ts')
+    ode = declare(rate).graph[solve_at('forced')].condition
+    assert ode.unknowns == ode.owns == (s.place('x'), s.place('t'))
+    assert ode.determined((s.place('x'), s.place('t'))) is ode
+    ts = jnp.linspace(0.0, 1.5, 4)
+    out = s.run(declare(rate) + drive(diffrax_run()),
+                {cx.Inputs: {'span': (0.0, 1.5), 'ts': ts}})
+    assert out['x'] == pytest.approx(math.sin(1.5), rel=1e-9)
+    assert out['t'] == 1.5
+    assert jnp.allclose(out['xs'], jnp.sin(ts), atol=1e-9)
+    assert jnp.array_equal(out[cx.Trajectory, 't'], ts)
+
+
+def test_a_join_runs_on_the_one_clock_either_names_and_refuses_two():
+    from cottax.ode.ode_condition import TimesDiffer
+    a = OdeCondition((Dt(*map(s.place, ('x', 'rx', 'x0'))),), s.place('span'), time=s.place('t'))
+    b = OdeCondition((Dt(*map(s.place, ('y', 'ry', 'y0'))),), s.place('span'))
+    assert (a + b).time == (b + a).time == s.place('t')
+    with pytest.raises(ValueError, match='one clock gives one time') as refused:
+        a + b._carried(time=s.place('s'))
+    assert refused.value.violation == TimesDiffer(s.place('t'), s.place('s'))
+
+
+def test_a_held_control_read_at_the_solvers_time_steps_on_its_jumps_exactly():
+    '''`u_j` held on `[t_j, t_j+1)`: `x(1) = 1 + sum u_j H (1 - t_j - H/2)`, its gradient
+    each term's, exact to rounding. Without the jumps a step straddles each, ~1e-9 off.'''
+    u = jnp.linspace(-3.0, 3.0, KNOTS.shape[0] - 1)
+    weights = H * (1.0 - KNOTS[:-1] - H / 2)
+    def x1(rate):
+        model = declare(rate) + drive(diffrax_run())
+        return lambda u: s.run(model, {cx.Inputs: {'u': u, 'tk': KNOTS, 'span': (0.0, 1.0)}})['x']
+    told, blind = x1(held(jumps='tk')), x1(held())
+    exact = 1.0 + float(jnp.sum(u * weights))
+    print(f'\n[jumps] |error| told {abs(float(told(u)) - exact):.1e}, '
+          f'not told {abs(float(blind(u)) - exact):.1e}')
+    assert told(u) == pytest.approx(exact, abs=1e-12)
+    assert abs(float(blind(u)) - exact) > 1e-11
+    assert jnp.allclose(jax.grad(told)(u), weights, atol=1e-12)
+
+
+def test_an_ode_with_a_time_and_jumps_is_written_to_json_and_read_back():
+    ode = declare(held(jumps='tk', kinks='tk2')).graph[solve_at('holding')]
+    assert (ode.time, ode.jumps, ode.kinks) == (s.place('t'), (s.place('tk'),), (s.place('tk2'),))
+    g = (declare(held(jumps='tk', kinks='tk2')) + drive(diffrax_run())).graph
+    assert read_json(write_json(g)) == g
