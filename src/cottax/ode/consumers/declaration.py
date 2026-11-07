@@ -28,7 +28,9 @@ def check_named(rate: 'Rate') -> Iterator[Violation]:
 class Rate[N: Label, V: Place](Paired[N, V]):
     '''A function writing `^rate.x` per state (its `outputs`), in that order, and at
     `^solve.at` the ODE determining the states from their initial values (`initial`, else
-    `^initial.x`) over the span (`span`, else `^span` of the first state). Where a study names
+    `^initial.x`) over the span (`span`, else `^span` of the first state), giving its time
+    where `time` names a place, stepping on the times it bends at (`kinks`) and jumps at
+    (`jumps`). Where a study names
     a history (`record`, at `times`) the ODE is declared driven, by `Integration(trajectory=True)`,
     so a model reading a history is coupled to it from the declaration on.'''
 
@@ -40,6 +42,12 @@ class Rate[N: Label, V: Place](Paired[N, V]):
     '''Where each named state's initial value is read.'''
     span    : PlaceWithValue[V] | None
     '''Where the span is read.'''
+    kinks   : PlaceWithValue[V] | None = None
+    '''Where the times the rate bends at are read.'''
+    jumps   : PlaceWithValue[V] | None = None
+    '''Where the times the rate jumps at are read.'''
+    time    : V | None = None
+    '''Where the integration's time is given, for the rate (or anything on its cycle) to read.'''
 
     checks = (check_named,)
     condition_mint = Solve
@@ -50,7 +58,8 @@ class Rate[N: Label, V: Place](Paired[N, V]):
 
     @property
     def terms(self) -> tuple[PlaceWithValue[V], ...]:
-        return tuple(t for t in (self.times, self.span, *self.initial.values()) if t is not None)
+        return tuple(t for t in (self.times, self.span, *self.initial.values(), self.kinks,
+                                 self.jumps) if t is not None)
 
     @property
     def condition(self) -> OdeCondition[V]:
@@ -58,15 +67,19 @@ class Rate[N: Label, V: Place](Paired[N, V]):
             return self.initial[x].place if x in self.initial else minted(mints.Initial(), x)
         first = self.outputs[0]
         span = self.span.place if self.span is not None else minted(mints.Span(), first)
+        breaks = lambda at: () if at is None else (at.place,)
         return OdeCondition(tuple(map(Dt, self.outputs, self.function_outputs,
-                                      map(initial, self.outputs))), span)
+                                      map(initial, self.outputs))), span,
+                            breaks(self.kinks), breaks(self.jumps), self.time)
 
     def condition_node(self, at: N) -> ConditionalNode[V]:
         '''The ODE, driven where a history is recorded: the times where `times` says, each
-        history where `record` names it, else at `^trajectory.x`.'''
+        history where `record` names it, else at `^trajectory.x` -- the time's too, the
+        times themselves.'''
         if not self.record:
             return self.condition
-        histories = tuple(self.record.get(x) or minted(mints.Trajectory(), x) for x in self.outputs)
+        histories = tuple(self.record.get(x) or minted(mints.Trajectory(), x)
+                          for x in self.condition.unknowns)
         return Driven(self.condition, Integration(trajectory=True), ((self.times.place,),),
                       (histories,))
 
@@ -104,13 +117,20 @@ def initial_of[V](surface: Declaring, fn: Any, outputs: tuple[V, ...], initial: 
 
 
 def per_problem(purpose: Mint):
-    '''`times=` or `span=`: a place, or a value given at `purpose`'s name of the first state.'''
+    '''`times=`, `span=`, `kinks=` or `jumps=`: a place, or a value given at `purpose`'s name
+    of the first state.'''
     def read[V](surface: Declaring, fn: Any, outputs: tuple[V, ...], written: Any
                 ) -> PlaceWithValue[V] | None:
         if written is None:
             return None
         return given_at(surface, outputs[0], written, purpose)
     return read
+
+
+def time_of[V](surface: Declaring, fn: Any, outputs: tuple[V, ...], time: Any) -> V | None:
+    '''`time=`: the place the integration's time is given at, a name or a place; a value
+    is no time.'''
+    return None if time is None else surface.place(time)
 
 
 @choice(Part)
@@ -122,12 +142,18 @@ class OdeDeclaring(Declaring):
         '''A function returning the rate of each state, and the ODE determining the states:
         `rate(fn, *states)`, or `@rate(*states)`. `initial=` (a mapping, or one for the one
         state) and `span=` say where those are read, a value written there given; two rates
-        joined by `combine` read one span. `record={'x': 'x_history'}` with `times='ts'`
+        joined by `combine` read one span. `time='t'` gives the integration's time at `t`, for
+        the rate to read. `kinks=` and `jumps=` say where the times the rate bends or jumps at
+        are read -- the knots of a control it interpolates or holds -- for the integrator to
+        step on; a jump is found exactly only by a rate reading `time`. `record={'x': 'x_history'}` with `times='ts'`
         declares the ODE driven, writing each named state at every time.''',
         record=Keyword('record', record_of),
         times=Keyword('times', per_problem(mints.Times())),
         initial=Keyword('initial', initial_of),
-        span=Keyword('span', per_problem(mints.Span())))
+        span=Keyword('span', per_problem(mints.Span())),
+        kinks=Keyword('kinks', per_problem(mints.Kinks())),
+        jumps=Keyword('jumps', per_problem(mints.Jumps())),
+        time=Keyword('time', time_of))
 
 
 # ----------------------------------------------------------------- violation finals
