@@ -79,12 +79,13 @@ def test_the_page_holds_the_static_picture(sellar):
 
 def test_the_key_is_the_pages_and_does_not_pan(sellar):
     '''The pictures on a page carry no key; each view carries its key as data, drawn in a
-    strip outside the stage.'''
+    strip outside the stage, the N2's keying its boxes as the XDSM keys its rings.'''
     doc = render_html(_cut_closed(sellar), blocks=True)
     assert all('class="key' not in x for x in _svgs(doc))
     xdsm, n2 = _frames(doc)[0]['views']
     assert [e['text'] for e in xdsm['legend']] == ['fixed-point (u = g(u))', 'solved together']
-    assert [e['shape'] for e in n2['legend']] == ['hex']
+    assert [e['text'] for e in n2['legend']] == [e['text'] for e in xdsm['legend']]
+    assert [e['shape'] for e in n2['legend']] == ['hex', 'band']
     assert '<div class="key"></div><div class="stage">' in _shell(doc)
 
 

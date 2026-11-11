@@ -13,7 +13,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from ...core import NestingGraph, Label
 from ...core.driven import is_driven
 from .lookup import minted_from, namespace_of
-from .sequencing import Block, graph_drawn, ordered_graph, problems_first, walk
+from .sequencing import Block, graph_drawn, ordered_graph, walk
 from .style import TERRACOTTA, Style, mix, style_of
 from .page import TIP_VARS, Pictures, changed
 from .interface import Formatter
@@ -23,6 +23,7 @@ from .kinds import (answered, block_type, by_name, category_of, key_entry, probl
 from .naming import PlainFormat, marked, markup_html, shown
 from .svg import (BASE_FONT_SIZE, SvgDoc, attr, cut_hexagon, cut_rect, hexagon, label, tw,
                   xesc)
+from .xdsm_struct import ring_entries
 
 type Group = tuple[str, ...]
 type Grouping = Mapping[str | Group, Iterable[Label]] | Callable[[Label], str | Group | None]
@@ -93,10 +94,7 @@ def _structure(graph: NestingGraph) -> tuple[list[Label], tuple[Block, ...]]:
     '''The run order at every level, each solve contiguous and its problem first -- the
     XDSMs' diagonal -- and the blocks of the graph ordered so.'''
     ordered = ordered_graph(graph)
-    blocks = walk(ordered)
-    names = problems_first(ordered.nodes, [(b.nodes, b.problem) for b in blocks],
-                           lambda n: problem_type_of(ordered[n]) is not None)
-    return names, blocks
+    return list(ordered.nodes), walk(ordered)
 
 
 def _order(graph: NestingGraph, order, at: Mapping[Label, Group],
@@ -241,29 +239,31 @@ def colour_of(kinds: Mapping[str, Kind], name: str | None) -> tuple[str, str] | 
 
 
 def key(struct: dict, sty: Style, *, outermost: bool = False) -> list[dict]:
-    '''The key of one N2: each group as a square of its colour, with its count -- or each
-    outermost group, its name alone (`outermost`, a figure keying several N2s) -- then each
-    category drawn (`key_entry`).'''
+    '''The key of one N2: each group as a square of its colour, with its count, each
+    category drawn (`key_entry`), then its boxes as an XDSM keys its rings (`ring_entries`).
+    A figure keying several N2s (`outermost`) keys each outermost group by its name alone,
+    and each category, and no box.'''
+    kinds = [key_entry(kind, sty) for kind in struct['kinds'].values()]
     if outermost:
-        groups = list({b['label']: {'shape': 'square', 'fill': b['colour'], 'text': b['label']}
-                       for b in struct['bands'] if b['level'] == 0}.values())
-    else:
-        groups = [{'shape': 'square', 'fill': e['colour'], 'stroke': e['colour'],
-                   'text': f'{e["group"]} ({e["count"]})'} for e in struct['legend']]
-    return groups + [key_entry(kind, sty) for kind in struct['kinds'].values()]
+        return list({b['label']: {'shape': 'square', 'fill': b['colour'], 'text': b['label']}
+                     for b in struct['bands'] if b['level'] == 0}.values()) + kinds
+    groups = [{'shape': 'square', 'fill': e['colour'], 'stroke': e['colour'],
+               'text': f'{e["group"]} ({e["count"]})'} for e in struct['legend']]
+    return groups + kinds + ring_entries(({'ring': 'solve', **b} for b in struct['boxes']), sty)
 
 
 def draw_key(entries: Sequence[dict], *, x0: float, y0: float, right: float, size: float,
              side: float, air: float, after: float, line: float, end: float,
              hexagon_at: Callable[[float, float], str], stroke: float, ink: str,
-             rx: float | None = None, titled: bool = False, digits: int = 2
-             ) -> tuple[str, float]:
+             rx: float | None = None, titled: bool = False, digits: int = 2,
+             cut: float = 0.0) -> tuple[str, float]:
     '''
     A key's entries (`key`) set in lines from `(x0, y0)` up to `right`: a group a square
     `side` across (corners `rx`), a category its hexagon (`hexagon_at(cx, cy)`, outlined
-    `stroke`, hovered for its `title` if `titled`), each named in `ink` at `size`, `air`
-    after the mark and `after` after the name, a line `line` below the last. Returns the
-    SVG and the y `end` below the last line.
+    `stroke`, hovered for its `title` if `titled`), a box (`band`) a square outlined
+    `stroke`, cut open by `cut` where no driver answers it (`open`), each named in `ink` at
+    `size`, `air` after the mark and `after` after the name, a line `line` below the last.
+    Returns the SVG and the y `end` below the last line.
     '''
     parts, x, y = [], x0, y0
     n = lambda v: f'{v:.{digits}f}'
@@ -277,6 +277,15 @@ def draw_key(entries: Sequence[dict], *, x0: float, y0: float, right: float, siz
             parts.append(f'<polygon points="{hexagon_at(x + side / 2, y + side / 2)}" '
                          f'fill="{e["fill"]}" stroke="{e["stroke"]}" stroke-width="{n(stroke)}"'
                          + close)
+        elif e['shape'] in ('band', 'open'):          # a box, as the matrix draws one
+            square = f'<rect x="{n(x)}" y="{n(y)}" width="{n(side)}" height="{n(side)}" '
+            if e['shape'] == 'open' and cut:
+                parts.append(square + f'fill="{e["fill"]}"/>')
+                parts += [f'<path d="{d}" fill="none" stroke="{e["stroke"]}" '
+                          f'stroke-width="{n(stroke)}"/>' for d in cut_rect(x, y, side, side, 0.0, cut)]
+            else:
+                parts.append(square + f'fill="{e["fill"]}" stroke="{e["stroke"]}" '
+                             f'stroke-width="{n(stroke)}"/>')
         else:
             corner = '' if rx is None else f' rx="{n(rx)}"'
             parts.append(f'<rect x="{n(x)}" y="{n(y)}" width="{n(side)}" height="{n(side)}"'
@@ -412,7 +421,7 @@ def _svg(struct: dict, sty: Style, *, names: bool, colour: bool, cell: float,
         drawn, bottom = draw_key(
             entries, x0=8.0, y0=H + 4, right=W, size=font_size, side=10, air=4, after=12,
             line=font_size * 1.6, end=font_size * 1.8, stroke=0.8, ink=sty.muted, rx=2,
-            titled=True, digits=1,
+            titled=True, digits=1, cut=sty.cut_em * 10 / 3 if sty.cuts else 0.0,
             hexagon_at=lambda cx, cy: hexagon(cx, cy, 10, 8, 10 / BASE_FONT_SIZE, cap=2.2))
         parts.append(drawn)
         H = bottom if entries else H

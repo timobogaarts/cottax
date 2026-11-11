@@ -47,6 +47,9 @@ UNORDERED_IN_P = (('q', 'p'), ('r', 'p'))
 '''`q` and `r` in `p`, nothing between them.'''
 NESTED = (('r', 'q'), ('q', 'p'))
 '''`r` in `q` in `p`: executable.'''
+NESTED_BESIDE_P = (('r', 'q'),)
+'''`r` in `q`, `p` beside them nested in nothing: a nesting inside a component no single
+problem answers.'''
 
 
 def graph_from_pytree(pytree: Any) -> NestingGraph:

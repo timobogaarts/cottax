@@ -35,7 +35,8 @@ import cottax.assemblies.jax as cx
 from cottax.consumers.visualization.refusals import SpelledAlike
 from cottax.consumers.visualization.interface import Formatter
 from cottax.consumers.visualization.sequencing import ordered_graph, walk
-from graphs import NESTED, NOTHING_NESTED, UNORDERED_IN_P, graph_of, three_problems
+from graphs import (NESTED, NESTED_BESIDE_P, NOTHING_NESTED, UNORDERED_IN_P, graph_of,
+                    three_problems)
 
 HAT, PROBLEM, START = purposes.Copy(), purposes.Solve(), purposes.Start()
 
@@ -444,6 +445,50 @@ def test_the_rings_of_three_problems_on_one_cycle():
                                    (run[1:], 'solve', 1, 'fixed-point'),
                                    (['.a'], 'run', 2, None),
                                    (['.r', '.b', '.obj'], 'solve', 2, 'optimise')])
+
+
+def test_the_diagonal_of_a_nesting_inside_a_grey_ring():
+    '''`r` in `q`, `p` beside them: `p`, drawn on the grey ring itself, comes first, then
+    `q`'s ring, `q` first, with `r`'s inside it, `r` first -- each ring a contiguous run of
+    the diagonal.'''
+    struct = xdsm_struct(three_problems(*NESTED_BESIDE_P), blocks=True)
+    assert struct['steps'] == ['.p', '.q', '.a', '.r', '.b', '.obj']
+    at = {s: i for i, s in enumerate(struct['steps'])}
+    for b in struct['blocks']:
+        slots = sorted(at[s] for s in b['steps'])
+        assert slots == list(range(slots[0], slots[-1] + 1))
+    assert [b['steps'][0] for b in struct['blocks']] == ['.p', '.q', '.a', '.r']
+
+
+def test_a_nesting_inside_a_grey_ring_is_ringed_inside_it():
+    '''The XDSM of `r` in `q` beside `p`: the grey ring, `q`'s ring one level in, unsettled
+    since `q`'s place relative to `p` is still open, `r`'s optimiser two -- in the struct and
+    in the picture, a ring per level.'''
+    graph = three_problems(*NESTED_BESIDE_P)
+    struct = xdsm_struct(graph, blocks=True)
+    run = struct['steps']
+    assert [(b['steps'], b['ring'], b['depth'], b['type']) for b in struct['blocks']] \
+        == [(run, 'solve', 0, 'unanswered'), (run[1:], 'solve', 1, 'unsettled'),
+            (['.a'], 'run', 2, None), (['.r', '.b', '.obj'], 'solve', 2, 'optimise')]
+    svg = render_xdsm_svg(graph, blocks=True)
+    assert [bool(re.search(rf'<rect class="group group-l{depth}[ "]', svg))
+            for depth in range(4)] == [True, True, True, False]
+
+
+def test_a_ring_whose_nesting_is_open_is_keyed_once():
+    '''`r` in `q` beside `p`: the key has the grey ring no driver answers, cut open, and
+    `q`'s ring, grey and closed, as a nesting still open; with `q` nested in `p`, neither.'''
+    from cottax.consumers.visualization.xdsm import key_entries
+    for nesting, keyed in ((NESTED_BESIDE_P, True), (NESTED, False)):
+        graph = three_problems(*nesting)
+        entries = {e['text']: e for e in key_entries(xdsm_struct(graph, blocks=True), TERRACOTTA)}
+        assert ('nesting still open' in entries) == ('no driver' in entries) == keyed
+        if keyed:
+            assert [entries[t]['shape'] for t in ('no driver', 'nesting still open')] \
+                == ['open', 'band']
+            assert {entries[t]['stroke'] for t in ('no driver', 'nesting still open')} \
+                == {TERRACOTTA.unanswered}
+        assert render_xdsm_svg(graph, blocks=True).count('>nesting still open</text>') == keyed
 
 
 @pytest.fixture

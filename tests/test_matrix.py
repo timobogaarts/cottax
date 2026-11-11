@@ -16,7 +16,8 @@ from cottax.consumers.visualization.matrix import (by_namespace, grouped_struct,
                                          namespace_of, render_matrix_svg)
 from cottax.consumers.visualization.interactive import render_html
 from cottax.consumers.visualization.style import TERRACOTTA
-from graphs import NESTED, NOTHING_NESTED, UNORDERED_IN_P, graph_of, three_problems
+from graphs import (NESTED, NESTED_BESIDE_P, NOTHING_NESTED, UNORDERED_IN_P, graph_of,
+                    three_problems)
 
 HAT = purposes.Copy()
 
@@ -180,3 +181,30 @@ def test_the_page_is_one_picture_with_its_toggles(closed):
     assert doc.count('\\u003csvg xmlns') == 1
     assert ':host([data-nocolour]) .mark' in doc and ':host([data-nonames]) .mlbl' in doc
     assert 'data-nonames' in render_html(closed, views=('n2',), names=False)
+
+
+def test_a_nesting_inside_a_grey_box_is_boxed_inside_it():
+    '''`r` in `q`, `p` beside them: the unanswered box over every row, `q`'s one row in,
+    unsettled since `q`'s place relative to `p` is still open, `r`'s inside that.'''
+    s = matrix_struct(three_problems(*NESTED_BESIDE_P))
+    assert [r['name'] for r in s['rows']] == ['.p', '.q', '.a', '.r', '.b', '.obj']
+    assert [(b['lo'], b['hi'], b['depth'], b['type']) for b in s['boxes']] \
+        == [(0, 5, 0, 'unanswered'), (1, 5, 1, 'unsettled'), (3, 5, 2, 'optimise')]
+
+
+def test_the_key_keys_the_boxes_as_the_xdsm_keys_its_rings():
+    '''`r` in `q` beside `p`: the N2's key has the XDSM's entries for its boxes -- a depth
+    each, the grey box no driver answers, the box whose nesting is still open -- each drawn
+    once; a figure keying several N2s keys none.'''
+    from cottax.consumers.visualization.matrix import key
+    from cottax.consumers.visualization.xdsm import key_entries, xdsm_struct
+    graph = three_problems(*NESTED_BESIDE_P)
+    boxed = lambda entries: [e['text'] for e in entries if e['shape'] in ('band', 'open')]
+    assert boxed(key(matrix_struct(graph), TERRACOTTA)) \
+        == boxed(key_entries(xdsm_struct(graph, blocks=True), TERRACOTTA)) \
+        == ['solved together', 'solved one level in', 'solved two levels in', 'no driver',
+            'nesting still open']
+    svg = str(render_matrix_svg(graph))
+    assert [t for t in boxed(key(matrix_struct(graph), TERRACOTTA))
+            if svg.count(f'>{t}</text>') != 1] == []
+    assert boxed(key(matrix_struct(graph), TERRACOTTA, outermost=True)) == []

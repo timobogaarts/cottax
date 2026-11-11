@@ -36,7 +36,8 @@ from cottax.consumers.visualization.visualization import (
     networkx_graph,
     to_dot,
 )
-from graphs import NESTED, NOTHING_NESTED, UNORDERED_IN_P, graph_of, three_problems
+from graphs import (NESTED, NESTED_BESIDE_P, NOTHING_NESTED, UNORDERED_IN_P, graph_of,
+                    three_problems)
 
 
 def V(*keys) -> VarPath:
@@ -352,3 +353,10 @@ def test_the_clusters_of_three_problems_on_one_cycle():
     assert drawn(UNORDERED_IN_P) == [(False, ['.p'], [(True, every[1:], [])])]
     assert drawn(NESTED) == [(False, ['.p'], [(False, ['.q', '.a'],
                                                [(False, ['.r', '.b', '.obj'], [])])])]
+
+
+def test_a_nesting_inside_a_grey_cluster_is_clustered_inside_it():
+    '''`r` in `q`, `p` beside them: `p` alone in the dashed cluster, `q`'s inside it, `r`'s
+    inside that, the run between them placed with `q`.'''
+    assert clusters(to_dot(three_problems(*NESTED_BESIDE_P), blocks=True)) \
+        == [(True, ['.p'], [(False, ['.q', '.a'], [(False, ['.r', '.b', '.obj'], [])])])]

@@ -27,7 +27,7 @@ from cottax.consumers.visualization.style import (DARK, PYXDSM, STYLES, TERRACOT
 from cottax.consumers.visualization.visualization import to_dot
 from cottax.consumers.visualization.naming import MARKUP
 from cottax.consumers.visualization.xdsm import render_xdsm_svg, xdsm_css, xdsm_struct
-from graphs import NESTED, UNORDERED_IN_P, graph_of, three_problems
+from graphs import NESTED, NESTED_BESIDE_P, UNORDERED_IN_P, graph_of, three_problems
 
 HAT = purposes.Copy()
 
@@ -243,3 +243,28 @@ def test_every_picture_rings_a_solve_alike(sellar, closed):
                              xdsm).group(1) == contour
             assert re.search(rf'subgraph cluster_{depth + 1} {{\s*style="[^"]*"; '
                              rf'fillcolor="[^"]*"; color="{hex_}"', dot).group(1) == contour
+
+
+def test_every_picture_rings_a_nesting_inside_a_grey_ring_alike():
+    '''`r` in `q` beside `p`: the grey ring's contour `unanswered` and cut open (in halves in
+    the N2); inside it `q`'s, grey too since `q`'s place is still open, but closed, since `q`
+    could solve it as it stands; inside that `r`'s in its hue -- alike in the XDSM, the N2 and
+    the node-link.'''
+    from cottax.consumers.visualization.matrix import render_matrix_svg
+    hex_ = '(#[0-9a-fA-F]+)'
+    grey, optimise = TERRACOTTA.unanswered, OPTIMISE.colour[1]
+    graph = three_problems(*NESTED_BESIDE_P)
+    xdsm, n2 = str(render_xdsm_svg(graph, blocks=True)), str(render_matrix_svg(graph))
+    dot = to_dot(graph, blocks=True)
+    assert re.findall(rf'<(path|rect) class="solve"[^>]* stroke="{hex_}"', n2) \
+        == [('path', grey), ('path', grey), ('rect', grey), ('rect', optimise)]
+    for depth, contour in enumerate((grey, grey, optimise)):
+        assert re.search(rf'class="group group-l{depth}[ "][^>]* stroke="{hex_}"',
+                         xdsm).group(1) == contour
+        assert re.search(rf'subgraph cluster_{depth + 1} {{\s*style="[^"]*"; '
+                         rf'fillcolor="[^"]*"; color="{hex_}"', dot).group(1) == contour
+    rings = [re.search(rf'<rect class="group group-l{depth}[ "][^>]*>', xdsm).group(0)
+             for depth in (0, 1)]
+    assert ['stroke:none' in ring for ring in rings] == [True, False]     # cut open, closed
+    assert [re.search(rf'subgraph cluster_{n} {{\s*style="([^"]*)"', dot).group(1)
+            for n in (1, 2, 3)] == ['filled,rounded,dashed', 'filled,rounded', 'filled,rounded']
