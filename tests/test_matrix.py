@@ -16,7 +16,7 @@ from cottax.consumers.visualization.matrix import (by_namespace, grouped_struct,
                                          namespace_of, render_matrix_svg)
 from cottax.consumers.visualization.interactive import render_html
 from cottax.consumers.visualization.style import TERRACOTTA
-from graphs import graph_of
+from graphs import NESTED, NOTHING_NESTED, UNORDERED_IN_P, graph_of, three_problems
 
 HAT = purposes.Copy()
 
@@ -95,6 +95,29 @@ def test_a_solve_is_boxed_in_the_structure_order(closed):
     assert [(b['depth'], b['type']) for b in s['boxes']] == [(0, 'fixed-point')]
     first = s['rows'][s['boxes'][0]['lo']]
     assert first['kind'] == 'fixed-point' and not first['driven']      # the problem first
+
+
+def test_the_boxes_and_bands_of_three_problems_on_one_cycle():
+    '''Three problems on one cycle, in the structure order: a box per solve at every depth,
+    an unanswered one around problems nothing orders, and the bands of two groups wherever
+    their rows fall.'''
+    groups = {'d1': (N('r'), N('b')), 'd2': (N('q'), N('a'))}
+
+    def drawn(nesting):
+        s = matrix_struct(three_problems(*nesting), groups=groups)
+        return ([r['name'] for r in s['rows']],
+                [(b['lo'], b['hi'], b['depth'], b['type']) for b in s['boxes']],
+                [(b['lo'], b['hi'], b['label']) for b in s['bands']])
+
+    bound = ['.p', '.q', '.r', '.a', '.b', '.obj']
+    alternating = [(1, 1, 'd2'), (2, 2, 'd1'), (3, 3, 'd2'), (4, 4, 'd1')]
+    assert drawn(NOTHING_NESTED) == (bound, [(0, 5, 0, 'unanswered')], alternating)
+    assert drawn(UNORDERED_IN_P) == (bound, [(0, 5, 0, 'optimise'), (1, 5, 1, 'unanswered')],
+                                     alternating)
+    assert drawn(NESTED) == (['.p', '.q', '.a', '.r', '.b', '.obj'],
+                             [(0, 5, 0, 'optimise'), (1, 5, 1, 'fixed-point'),
+                              (3, 5, 2, 'optimise')],
+                             [(1, 2, 'd2'), (3, 4, 'd1')])
 
 
 def test_an_order_is_a_permutation(sellar):

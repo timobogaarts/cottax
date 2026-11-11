@@ -17,7 +17,7 @@ import purposes
 from cottax.pytree.path import NodePath, VarPath
 from cottax.core.realisation import ImplementedFunction
 from cottax.relational import Eq, Relation, RelationalCondition
-from cottax.relational.consumers.visualization import FIXED_POINT, KINDS, ROOT_FIND
+from cottax.relational.consumers.visualization import FIXED_POINT, KINDS, OPTIMISE, ROOT_FIND
 from cottax.consumers.visualization.latex import LatexFormatter, tex
 from cottax.consumers.visualization.naming import PlainFormat, shown
 from cottax.consumers.visualization.interface_types import Text
@@ -27,7 +27,7 @@ from cottax.consumers.visualization.style import (DARK, PYXDSM, STYLES, TERRACOT
 from cottax.consumers.visualization.visualization import to_dot
 from cottax.consumers.visualization.naming import MARKUP
 from cottax.consumers.visualization.xdsm import render_xdsm_svg, xdsm_css, xdsm_struct
-from graphs import graph_of
+from graphs import NESTED, UNORDERED_IN_P, graph_of, three_problems
 
 HAT = purposes.Copy()
 
@@ -228,3 +228,18 @@ def test_every_picture_rings_a_solve_alike(sellar, closed):
         dot = re.search(rf'subgraph cluster_1 {{\s*style="[^"]*"; fillcolor="[^"]*"; '
                         rf'color="{hex_}"', to_dot(graph, blocks=True)).group(1)
         assert xdsm == n2 == dot == contour
+    # and below the outermost ring, each level's alike: a nested problem's hue, and
+    # `unanswered` around problems nothing orders, which the N2 draws cut open, in halves
+    optimise, fixed, grey = OPTIMISE.colour[1], FIXED_POINT.colour[1], TERRACOTTA.unanswered
+    for nesting, contours, n2_strokes in (
+            (NESTED, (optimise, fixed, optimise), [optimise, fixed, optimise]),
+            (UNORDERED_IN_P, (optimise, grey), [optimise, grey, grey])):
+        graph = three_problems(*nesting)
+        xdsm, n2 = str(render_xdsm_svg(graph, blocks=True)), str(render_matrix_svg(graph))
+        dot = to_dot(graph, blocks=True)
+        assert re.findall(rf'class="solve"[^>]* stroke="{hex_}"', n2) == n2_strokes
+        for depth, contour in enumerate(contours):
+            assert re.search(rf'class="group group-l{depth}[ "][^>]* stroke="{hex_}"',
+                             xdsm).group(1) == contour
+            assert re.search(rf'subgraph cluster_{depth + 1} {{\s*style="[^"]*"; '
+                             rf'fillcolor="[^"]*"; color="{hex_}"', dot).group(1) == contour

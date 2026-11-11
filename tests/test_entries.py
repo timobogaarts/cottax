@@ -18,7 +18,7 @@ from cottax.core.realisation import ImplementedFunction
 from cottax.relational import Eq, Relation, RelationalCondition
 from cottax.consumers.visualization.sequencing import ordered_graph, sequence
 from cottax.consumers.visualization.xdsm import xdsm_struct
-from graphs import graph_of
+from graphs import NESTED, NOTHING_NESTED, UNORDERED_IN_P, graph_of, three_problems
 from cottax.core.maths.nesting import NestingGraph
 
 
@@ -27,6 +27,15 @@ def N(k): return NodePath((GetAttrKey(k),))
 def call(reads, owns):
     return ImplementedFunction(Function(tuple(V(r) for r in reads), tuple(V(o) for o in owns)),
                        lambda *a: 0.0)
+
+
+def drawn(g):
+    '''Each block `walk` gives: its kind, the problem answered there, its depth, its nodes.'''
+    return [(type(b.entry).__name__, b.problem, b.depth, b.nodes) for b in walk(g)]
+
+
+EVERY = tuple(N(k) for k in ('p', 'q', 'r', 'a', 'b', 'obj'))
+'''`three_problems`' nodes, in binding order.'''
 
 
 @pytest.fixture
@@ -82,10 +91,10 @@ def test_an_entry_is_the_components_type(two_problems, cycle_nobody_solves):
     assert isinstance(solve.interior, NestingGraph)
     assert [type(e).__name__ for e in entries(solve.interior)] == ['Solve', 'Run']
     assert entries(solve.interior)[0].problem == N('h')
-    # `walk`: every block a drawing rings, outermost first, with the problems it sits
-    # inside -- not `h`'s body, which holds no problem and is drawn without a ring
-    assert [(b.within, type(b.entry).__name__) for b in walk(nested)] \
-        == [((), 'Solve'), ((N('opt'),), 'Solve'), ((N('opt'),), 'Run')]
+    # `walk`: every block a drawing rings, outermost first, with the depth it sits at --
+    # not `h`'s body, which holds no problem and is drawn without a ring
+    assert [(b.depth, type(b.entry).__name__) for b in walk(nested)] \
+        == [(0, 'Solve'), (1, 'Solve'), (1, 'Run')]
 
 
 def test_a_blocking_is_runs_and_solves_all_the_way_down(two_problems):
@@ -95,6 +104,48 @@ def test_a_blocking_is_runs_and_solves_all_the_way_down(two_problems):
     b = ExecutableGraph(nested)
     assert b.graph is nested
     assert all(isinstance(blk.entry, (Run, Solve)) for blk in walk(b.graph))
+    # three deep: a solve per level, each holding its interior; the innermost's body runs
+    deep = ExecutableGraph(three_problems(*NESTED)).graph
+    assert drawn(deep) == [('Solve', N('p'), 0, EVERY),
+                           ('Solve', N('q'), 1, EVERY[1:]),
+                           ('Run', None, 2, (N('a'),)),
+                           ('Solve', N('r'), 2, (N('r'), N('b'), N('obj')))]
+    p, q, run, r = walk(deep)
+    assert p.held == p.entry.interior and q.held == q.entry.interior
+    assert run.held is None and r.held is None
+
+
+def test_problems_with_nothing_nested_are_one_leaf():
+    '''Three problems on one cycle, none nested: one entry naming all three, and one block
+    with nothing drawn inside it.'''
+    g = three_problems(*NOTHING_NESTED)
+    (entry,) = entries(g)
+    assert isinstance(entry, Unresolved) and entry.problems == (N('p'), N('q'), N('r'))
+    assert drawn(g) == [('Unresolved', None, 0, EVERY)]
+    assert walk(g)[0].held is None
+
+
+def test_problems_unordered_inside_a_solve_are_a_leaf_one_level_in():
+    '''`q` and `r` both in `p`: `p` alone is outermost, so its block is a solve, and its
+    interior holds two problems nothing orders, a leaf at depth 1.'''
+    g = three_problems(*UNORDERED_IN_P)
+    assert drawn(g) == [('Solve', N('p'), 0, EVERY), ('Unresolved', None, 1, EVERY[1:])]
+    p, inner = walk(g)
+    assert p.held == p.entry.interior and inner.held is None
+    assert inner.entry.problems == (N('q'), N('r'))
+
+
+def test_an_unresolved_diagonal_is_its_problems_then_its_body(two_problems):
+    '''No problem is answered there, so the diagonal puts its problems first, in binding
+    order, then its body: as bound, or in `components_order` where as bound it would draw
+    feedback.'''
+    assert sequence(two_problems) == (N('opt'), N('h'), N('d'), N('obj'))
+    g = three_problems(*NOTHING_NESTED)
+    assert sequence(g) == EVERY
+    obj_first = graph_of(OrderedMap((n, g[n]) for n in (*EVERY[:3], N('obj'), N('b'), N('a'))))
+    assert sequence(obj_first) == EVERY        # `obj` reads `b` and `a`, `b` reads `a`
+    # one level in, the same: `p` leads, then the level nothing orders
+    assert sequence(three_problems(*UNORDERED_IN_P)) == EVERY
 
 
 def test_a_proof_spells_where_a_rewrite_stands(two_problems):

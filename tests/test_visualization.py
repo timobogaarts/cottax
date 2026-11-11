@@ -36,7 +36,7 @@ from cottax.consumers.visualization.visualization import (
     networkx_graph,
     to_dot,
 )
-from graphs import graph_of
+from graphs import NESTED, NOTHING_NESTED, UNORDERED_IN_P, graph_of, three_problems
 
 
 def V(*keys) -> VarPath:
@@ -316,3 +316,39 @@ def test_every_picture_draws_a_graph_a_plan_and_any_proof_alike(sellar):
         assert render_xdsm_svg(proof) == render_xdsm_svg(graph, blocks=True)
     with pytest.raises(TypeError, match='got dict'):
         to_dot({})
+
+
+def clusters(dot: str) -> list:
+    '''A node-link drawing's clusters as a tree, in the order written: per cluster, whether it
+    is dashed, the labels of the nodes placed in it, and the clusters inside it.'''
+    root = {'dashed': None, 'nodes': [], 'inside': []}
+    open_ = [root]
+    for line in (line.strip() for line in dot.splitlines()):
+        if line.startswith('subgraph cluster_'):
+            cluster = {'dashed': None, 'nodes': [], 'inside': []}
+            open_[-1]['inside'].append(cluster)
+            open_.append(cluster)
+        elif line.startswith('style=') and open_[-1]['dashed'] is None:
+            open_[-1]['dashed'] = 'dashed' in line.split(';')[0]
+        elif found := re.match(r'n\d+ \[label="([^"]*)"', line):
+            open_[-1]['nodes'].append(found.group(1))
+        elif line == '}' and len(open_) > 1:
+            open_.pop()
+
+    def tree(c: dict) -> tuple:
+        return c['dashed'], c['nodes'], [tree(inner) for inner in c['inside']]
+    return [tree(c) for c in root['inside']]
+
+
+def test_the_clusters_of_three_problems_on_one_cycle():
+    '''Three problems on one cycle as nested clusters: one dashed cluster when none is nested,
+    a dashed one inside `p`'s for two it does not order, a cluster per level when every one is
+    nested -- the innermost's run placed in the cluster around it.'''
+    def drawn(nesting):
+        return clusters(to_dot(three_problems(*nesting), blocks=True))
+
+    every = ['.p', '.q', '.r', '.a', '.b', '.obj']
+    assert drawn(NOTHING_NESTED) == [(True, every, [])]
+    assert drawn(UNORDERED_IN_P) == [(False, ['.p'], [(True, every[1:], [])])]
+    assert drawn(NESTED) == [(False, ['.p'], [(False, ['.q', '.a'],
+                                               [(False, ['.r', '.b', '.obj'], [])])])]

@@ -34,7 +34,8 @@ from cottax.consumers.visualization.interface_types import Accent, Around
 import cottax.assemblies.jax as cx
 from cottax.consumers.visualization.refusals import SpelledAlike
 from cottax.consumers.visualization.interface import Formatter
-from graphs import graph_of
+from cottax.consumers.visualization.sequencing import ordered_graph, walk
+from graphs import NESTED, NOTHING_NESTED, UNORDERED_IN_P, graph_of, three_problems
 
 HAT, PROBLEM, START = purposes.Copy(), purposes.Solve(), purposes.Start()
 
@@ -394,23 +395,55 @@ def test_a_nested_solve_is_a_ring_inside_a_ring(nestable):
     assert 'solved together' in svg and 'solved one level in' in svg
 
 
-def test_the_outer_problem_leads_so_every_interior_is_contiguous(nestable):
+def test_the_outer_problem_leads_so_every_interior_is_contiguous(nestable, sellar):
     '''A ring is a rect over `[lo..hi]` on the diagonal, so an interior has to be a
     contiguous run. Pinning the problem answered *outside* to the head is what leaves the
-    interior occupying the rest of it -- at every depth.'''
+    interior occupying the rest of it -- at every depth. A block no problem answers leads
+    with every problem it holds.'''
     nested = ExecutableGraph((Plan(nestable) + Nest(N('h'), N('opt'))).graph)
-    struct = xdsm_struct(nestable, blocks=nested)
+    assert xdsm_struct(nestable, blocks=nested)['steps'][0] == '.opt'   # the outer problem leads
 
-    at = {s: i for i, s in enumerate(struct['steps'])}
-    assert struct['steps'][0] == '.opt'                 # the outer problem leads
-    for b in struct['blocks']:
-        slots = sorted(at[s] for s in b['steps'])
-        assert slots == list(range(slots[0], slots[-1] + 1))
+    for graph, blocks in ((nestable, nested), (nestable, True), (sellar, True),
+                          *((three_problems(*nesting), True)
+                            for nesting in (NOTHING_NESTED, UNORDERED_IN_P, NESTED))):
+        struct = xdsm_struct(graph, blocks=blocks)
+        at = {s: i for i, s in enumerate(struct['steps'])}
+        ringed = walk(ordered_graph(blocks if isinstance(blocks, ExecutableGraph) else graph))
+        assert len(ringed) == len(struct['blocks'])
+        for b, block in zip(struct['blocks'], ringed):
+            slots = sorted(at[s] for s in b['steps'])
+            assert slots == list(range(slots[0], slots[-1] + 1))
+            in_order = [s for s in struct['steps'] if s in b['steps']]
+            if block.problem is not None:
+                assert in_order[0] == block.problem.spelling
+            else:
+                problem = [s in struct['problem_types'] for s in in_order]
+                assert problem == sorted(problem, reverse=True)
 
 
 def test_nesting_the_other_way_leads_with_the_other_problem(nestable):
     nested = ExecutableGraph((Plan(nestable) + Nest(N('opt'), N('h'))).graph)
     assert xdsm_struct(nestable, blocks=nested)['steps'][0] == '.h'
+
+
+def test_the_rings_of_three_problems_on_one_cycle():
+    '''Three problems on one cycle: none nested is one unanswered ring; `q` and `r` in `p`
+    is `p`'s ring around an unanswered one; every one nested is a ring per level, the
+    diagonal in run order.'''
+    def drawn(nesting):
+        struct = xdsm_struct(three_problems(*nesting), blocks=True)
+        return struct['steps'], [(b['steps'], b['ring'], b['depth'], b['type'])
+                                 for b in struct['blocks']]
+
+    bound = ['.p', '.q', '.r', '.a', '.b', '.obj']
+    assert drawn(NOTHING_NESTED) == (bound, [(bound, 'solve', 0, 'unanswered')])
+    assert drawn(UNORDERED_IN_P) == (bound, [(bound, 'solve', 0, 'optimise'),
+                                             (bound[1:], 'solve', 1, 'unanswered')])
+    run = ['.p', '.q', '.a', '.r', '.b', '.obj']
+    assert drawn(NESTED) == (run, [(run, 'solve', 0, 'optimise'),
+                                   (run[1:], 'solve', 1, 'fixed-point'),
+                                   (['.a'], 'run', 2, None),
+                                   (['.r', '.b', '.obj'], 'solve', 2, 'optimise')])
 
 
 @pytest.fixture
