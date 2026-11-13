@@ -20,7 +20,7 @@ from ..graph import (
 from ..kinds import is_problem
 from ..nesting import (
     NestingGraph, NestingLoop, NotAProblem, SelfNested, Unbound, check_nesting_ends_are_problems,
-    check_nesting_ends_bound, check_nesting_ends_on_one_cycle, check_no_nesting_loops,
+    check_nesting_ends_bound, check_no_nesting_loops,
 )
 from ..places import Label, Place, overlaps
 from .algebra import GraphOp, _owed
@@ -30,6 +30,12 @@ from .algebra import GraphOp, _owed
 
 def unbreakable(before, after, delta) -> Iterator[Violation]:
     '''A rule the op cannot break, by argument: nothing is asked.'''
+    return iter(())
+
+
+def by_its_delta(before, after, delta) -> Iterator[Violation]:
+    '''A rule the op's `checks_delta` already answered, of the delta alone: the graph
+    before held it, and the delta is all that changed. Nothing more is asked.'''
     return iter(())
 
 
@@ -186,10 +192,9 @@ class Rebind[N: Label, V: Place](Primitive[N, V]):
     covers = {
         check_one_producer_per_place:    check_rebound_owns_disjoint,
         check_reads_are_exact:           check_rebound_reads_exact,
-        check_nesting_ends_bound:        in_full,
-        check_no_nesting_loops:          in_full,
-        check_nesting_ends_are_problems: in_full,
-        check_nesting_ends_on_one_cycle: in_full}
+        check_nesting_ends_bound:        unbreakable,   # `edited` drops a removed node's pairs
+        check_no_nesting_loops:          unbreakable,   # the nesting only loses pairs
+        check_nesting_ends_are_problems: in_full}       # a node defined in place may stop being one
 
     @abstractmethod
     def rebinding(self, graph: NestingGraph[N, V]) -> Rebinding[N, V]:
@@ -371,8 +376,8 @@ def check_nesting[N: Label](g: NestingGraph[N, Place], pair: tuple[N, N]) -> Ite
     What one new pair needs of the nesting alone: both ends bound; the inner not
     already answered inside something; both problems; a forest still (not a problem
     inside itself, no loop through what already encloses the outer). That the pair --
-    and every pair now under `inner` -- shares a cycle at its level is
-    `check_nesting_ends_on_one_cycle` of the result, which `rebound` asks next.
+    and every pair now under `inner` -- shares a cycle at its level is not asked of a
+    nesting: it is `ExecutableGraph`'s rule (`check_nestings_share_a_cycle`).
     """
     inner, outer = pair
     if inner not in g.definitions or outer not in g.definitions:
@@ -405,16 +410,15 @@ class Nest[N: Label](Primitive[N, Place]):
     inner : N
     outer : N
 
-    # The pair's own facts from the delta; the bindings do not change; every nesting
-    # rule is asked of the result.
+    # The bindings do not change, and the one new pair is all that does: `check_nesting`
+    # asks every nesting rule of it.
     checks_delta = (check_nesting,)
     covers = {
         check_one_producer_per_place:    unbreakable,   # the bindings are untouched
         check_reads_are_exact:           unbreakable,
-        check_nesting_ends_bound:        in_full,
-        check_no_nesting_loops:          in_full,
-        check_nesting_ends_are_problems: in_full,
-        check_nesting_ends_on_one_cycle: in_full}
+        check_nesting_ends_bound:        by_its_delta,
+        check_no_nesting_loops:          by_its_delta,
+        check_nesting_ends_are_problems: by_its_delta}
 
     def edited(self, graph: NestingGraph[N, Place]) -> Edited[N, Place]:
         return Edited((self.inner, self.outer), None, graph.within | {self.inner: self.outer})
@@ -430,16 +434,15 @@ class Unnest[N: Label](Primitive[N, Place]):
 
     inner : N
 
-    # The delta check is that there was a pair. Dropping one moves the level of every
-    # pair under `inner`, so the nesting rules are asked of the result.
+    # The delta check is that there was a pair. Dropping one breaks no nesting rule: each
+    # is of the pairs that stand, and none is added.
     checks_delta = (check_unnesting,)
     covers = {
         check_one_producer_per_place:    unbreakable,   # the bindings are untouched
         check_reads_are_exact:           unbreakable,
-        check_nesting_ends_bound:        in_full,
-        check_no_nesting_loops:          in_full,
-        check_nesting_ends_are_problems: in_full,
-        check_nesting_ends_on_one_cycle: in_full}
+        check_nesting_ends_bound:        unbreakable,
+        check_no_nesting_loops:          unbreakable,
+        check_nesting_ends_are_problems: unbreakable}
 
     def edited(self, graph: NestingGraph[N, Place]) -> Edited[N, Place]:
         return Edited(self.inner, None, OrderedMap((i, o) for i, o in graph.within.items() if i != self.inner))

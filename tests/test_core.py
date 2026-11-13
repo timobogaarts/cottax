@@ -263,8 +263,10 @@ def test_a_fold_is_asked_of_its_result_and_never_of_a_step_toward_it():
     direct = G({P: defs[P] + defs[R], h: defs[h], Q: defs[Q], k: defs[k], f: defs[f]}, {Q: P})
     assert folded == direct
     assert tuple(folded.definitions) == (P, h, Q, k, f)
+    alone = Delete((R,)).apply(g)                               # the step alone is carried ...
+    assert dict(alone.within) == {Q: P}
     with pytest.raises(ValueError, match='not on one cycle'):
-        Delete((R,)).apply(g)                                   # the step alone is refused
+        ExecutableGraph(alone)                                  # ... and refused as executable
 
 
 def test_an_ownership_violation_names_each_owner():
@@ -281,7 +283,7 @@ def test_an_ownership_violation_names_each_owner():
 
 
 def test_a_nesting_with_a_bad_end_is_listed_not_raised():
-    """`check_nesting_ends_on_one_cycle` skips a pair another rule refuses."""
+    """A pair with a bad end is the one rule's that names it."""
     a, t = Word('a'), Word('t')
     graph = AbstractGraph(OrderedMap({a: states([], ['x']), t: toy([], ['y'])}))
     assert [type(v) for v in violations(NestingGraph, graph, OrderedMap({Word('zz'): a}))] == [Unbound]
@@ -379,7 +381,7 @@ def test_every_case_a_rule_can_name_has_wording():
     seen(check_nesting(G(cyc, {a: b}), (a, b)))                               # already
     seen(check_nesting(G(cyc), (a, a)))                                       # inside itself
     seen(check_nesting(G(cyc, {b: a}), (a, b)))                               # loop
-    seen(violations(NestingGraph, AbstractGraph(OrderedMap({a: states([], ['x']), b: states([], ['y'])})), OrderedMap({a: b})))          # unreachable
+    seen(violations(ExecutableGraph, G({a: states([], ['x']), b: states([], ['y'])}, {a: b})))   # unreachable
     seen(check_blocks_own_something(G({a: states(['x'], []), b: states(['y'], [])}), ((a, b),)))  # a box owning nothing
     seen(check_blocks_partition(G({a: toy([], ['x']), b: toy([], ['y'])}), ((a,), (a, b))))  # a short block, a node twice
     S = G
