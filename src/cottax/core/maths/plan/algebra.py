@@ -1,12 +1,11 @@
 '''
 An edit as a record, and the fold of a sequence of them: `GraphOp` (graph -> graph),
 `ComposedOp` (an op that is other ops), `Plan` (a base graph plus the ops applied to
-it). Over any `NestingGraph`; the primitives with their proofs are `primitive.py`.
+it). Over any `NestingGraph`; the primitives are `primitive.py`.
 '''
 
 from abc import abstractmethod
 from collections.abc import Generator, Iterator, Sequence
-from contextvars import ContextVar
 from functools import cached_property
 
 from typing import Callable
@@ -29,27 +28,6 @@ def refusals[N: Label, V: Place](op: 'GraphOp[N, V]',
         yield from check(op, graph) or ()
 
 
-_owed: ContextVar[dict | None] = ContextVar('owed', default=None)
-'''Inside a composition: each rule its steps would ask in full, owed by the composition's
-result and asked of it once (`proved_once`); `None` outside one.'''
-
-
-def proved_once[G: NestingGraph](build: Callable[[], G]) -> G:
-    '''`build()`, the rules its steps would ask in full asked once of the graph it returns, if
-    this is the outermost composition; inside one, the outermost asks them. A step's own
-    preconditions and proofs are asked as ever.'''
-    if _owed.get() is not None:
-        return build()
-    token = _owed.set({})
-    try:
-        graph, owed = build(), _owed.get()
-    finally:
-        _owed.reset(token)
-    for rule, nesting in owed.items():
-        first(rule(graph if nesting else graph.graph) or ())
-    return graph
-
-
 class GraphOp[N: Label, V: Place](Frozen):
     '''
     Graph operation: changing the computational graph.
@@ -59,10 +37,10 @@ class GraphOp[N: Label, V: Place](Frozen):
     1. op alone: is this a valid op?  [checks of frozen]
     2. op and graph: can this op apply to this graph? [checks_graph]
     3. op, graph, and delta: does this delta make sense to apply [ checks_delta]
-    4. new graph: does this graph need less proving [covers]
+    4. new graph: is it a graph? [its own checks, in full]
 
     3 and 4 are a `Primitive`'s (`primitive.py`), the ops that build a graph. Any other op
-    composes them and has only 1 and 2: it proves nothing of its own.
+    composes them and has only 1 and 2: every graph it passes through is a checked one.
     '''
 
     checks_graph : PerLevel[tuple[Callable, ...]] = ()
@@ -91,9 +69,8 @@ class GraphOp[N: Label, V: Place](Frozen):
 
 class ComposedOp[N: Label, V: Place](GraphOp[N, V]):
     '''
-    An op that *is* other ops, in order, all decided off the graph it meets. It proves
-    nothing of its own: every graph it passes on was built by the op that built it, with its
-    proofs; what a step would ask in full is asked once, of the result (`proved_once`).
+    An op that *is* other ops, in order, all decided off the graph it meets. It builds
+    nothing of its own: every graph it passes on was built, and checked, by a primitive.
     '''
 
     @abstractmethod
@@ -104,12 +81,10 @@ class ComposedOp[N: Label, V: Place](GraphOp[N, V]):
     def _apply[G: NestingGraph[N, V]](self, graph: G) -> G:
         '''Each op applied to the graph *that* op meets, so its preconditions are
         asked of the right one.'''
-        def build() -> G:
-            g = graph
-            for op in self.composed(g):
-                g = op.apply(g)
-            return g
-        return proved_once(build)
+        g = graph
+        for op in self.composed(g):
+            g = op.apply(g)
+        return g
 
 class Stage[N: Label, V: Place](Frozen):
     '''One stage of a `StagedOp`: the ops decided, and the graph they leave.'''
@@ -121,7 +96,7 @@ class Stage[N: Label, V: Place](Frozen):
 class StagedOp[N: Label, V: Place](GraphOp[N, V]):
     '''
     A composition decided stage by stage: each stage's ops are read off the graph the
-    one before left. No proofs
+    one before left.
     '''
 
     @abstractmethod
@@ -132,20 +107,17 @@ class StagedOp[N: Label, V: Place](GraphOp[N, V]):
     def staged(self, graph: NestingGraph[N, V]) -> tuple[Stage[N, V], ...]:
         '''Every stage, each op applied to the graph *that* op meets: the derivation,
         kept.'''
-        out, decide = [], self.stages(graph)
-        def build() -> NestingGraph[N, V]:
-            g = graph
-            try:
-                ops = next(decide)
-                while True:
-                    ops = tuple(ops)
-                    for op in ops:
-                        g = op.apply(g)
-                    out.append(Stage(ops, g))
-                    ops = decide.send(g)
-            except StopIteration:
-                return g
-        proved_once(build)
+        out, decide, g = [], self.stages(graph), graph
+        try:
+            ops = next(decide)
+            while True:
+                ops = tuple(ops)
+                for op in ops:
+                    g = op.apply(g)
+                out.append(Stage(ops, g))
+                ops = decide.send(g)
+        except StopIteration:
+            pass
         return tuple(out)
 
     def _apply[G: NestingGraph[N, V]](self, graph: G) -> G:

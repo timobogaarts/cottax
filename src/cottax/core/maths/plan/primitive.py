@@ -1,47 +1,22 @@
 '''
-The primitive graph operations, each proved through `rebound`: `Rebind` on the bindings
+The primitive graph operations, each building its graph through the checked constructors, so
+every rule is asked of every result: `Rebind` on the bindings
 (its finals `Insert`, `Delete`, `Redefine`, `Combine`), `Nest` and `Unnest` on the nesting.
 '''
 
 import operator
 from abc import abstractmethod
 from collections.abc import Callable, Iterator, Mapping
-from contextlib import contextmanager
-from contextvars import ContextVar
+from dataclasses import replace
 from functools import reduce
 from typing import Any
 
 from ..definition import NodeDefinition
-from ...frozen import AbstractClassVar, Frozen, OrderedMap, PerLevel, Violation, first
-from ..graph import (
-    AbstractGraph, check_one_producer_per_place, check_reads_are_exact, owned_against,
-    owned_overlaps, owners_of, readers_of, reads_exact_against,
-)
+from ...frozen import Frozen, OrderedMap, PerLevel, Violation, first
 from ..kinds import is_problem
-from ..nesting import (
-    NestingGraph, NestingLoop, NotAProblem, SelfNested, Unbound, check_nesting_ends_are_problems,
-    check_nesting_ends_bound, check_no_nesting_loops,
-)
-from ..places import Label, Place, overlaps
-from .algebra import GraphOp, _owed
-
-
-# ---------------------------------------------------------------- what stands in for a rule
-
-def unbreakable(before, after, delta) -> Iterator[Violation]:
-    '''A rule the op cannot break, by argument: nothing is asked.'''
-    return iter(())
-
-
-def by_its_delta(before, after, delta) -> Iterator[Violation]:
-    '''A rule the op's `checks_delta` already answered, of the delta alone: the graph
-    before held it, and the delta is all that changed. Nothing more is asked.'''
-    return iter(())
-
-
-def in_full(before, after, delta) -> Iterator[Violation]:
-    '''No proof: the rule is asked of the result. Never called -- `rebound` knows it.'''
-    raise AssertionError('in_full is a marker, not a proof')
+from ..nesting import NestingGraph, NestingLoop, NotAProblem, SelfNested, Unbound
+from ..places import Label, Place
+from .algebra import GraphOp
 
 
 # ---------------------------------------------------------------- the level
@@ -57,17 +32,17 @@ class Edited[N: Label, V: Place](Frozen):
 
 class Primitive[N: Label, V: Place](GraphOp[N, V]):
     '''
-    An op that builds a graph. Two additional delta-checks:
-    
-    - Stage 3, `checks_delta`: what it needs of its delta, `(graph, delta) -> Iterator[Violation]`, asked before building. 
-    - Stage 4, `covers`: every rule of NestingGraph and how it is covered. 
+    An op that builds a graph. One additional check:
+
+    - Stage 3, `checks_delta`: what it needs of its delta, `(graph, delta) -> Iterator[Violation]`, asked before building.
+
+    The graph is then built through the checked constructors: every rule of the result is
+    asked in full, after every primitive.
     '''
 
     checks_delta : PerLevel[tuple[Callable, ...]] = ()
     '''Each level's own, accumulated root first as `checks` are: a level adds to its
     ancestors' and never replaces them.'''
-    covers       : AbstractClassVar[Mapping[Callable, Callable]]
-    '''Bound once, by the primitive: a level below cannot rebind it (`Frozen`).'''
 
     @abstractmethod
     def edited(self, graph: NestingGraph[N, V]) -> Edited[N, V]:
@@ -75,50 +50,18 @@ class Primitive[N: Label, V: Place](GraphOp[N, V]):
         holds.'''
 
     def _apply[G: NestingGraph[N, V]](self, graph: G) -> G:
+        '''The delta checks asked of `graph` and the delta; then `graph` with the definitions
+        or the nesting changed, every rule of it asked. Bindings left as they are, are not
+        built again.'''
         e = self.edited(graph)
-        return rebound(self, graph, e.delta, definitions=e.definitions, within=e.within)
-
-
-# ---------------------------------------------------------------- the proof
-
-_fully_checked = ContextVar('fully_checked', default=False)
-
-
-@contextmanager
-def fully_checked():
-    '''Every proved rule asked in full as well: a proof passing what its rule refuses is
-    a bug in the op, not in the graph. The test suite runs under it.'''
-    token = _fully_checked.set(True)
-    try:
-        yield
-    finally:
-        _fully_checked.reset(token)
-
-
-def rebound[G: NestingGraph](op: Primitive, graph: G, delta, *, definitions=None, within=None) -> G:
-    '''
-    `op`'s delta checks asked of `graph` and `delta`; then `graph` with `definitions` or
-    `within` changed, and every rule of the result asked as `op.covers` says: through its
-    proof, not at all where `unbreakable`, in full where `in_full`. A rule a final adds,
-    which no op can name, is asked in full.
-    '''
-    for delta_check in type(op).per_level('checks_delta'):
-        first(delta_check(graph, delta))
-    inner = graph.graph if definitions is None else graph.graph._carried(definitions=definitions)
-    child = graph._carried(graph=inner, **({} if within is None else {'within': within}))
-    for before, after in ((graph.graph, inner), (graph, child)):
-        for rule in type(after).per_level('checks'):
-            if (proof := op.covers.get(rule, in_full)) is in_full:
-                if (owed := _owed.get()) is not None and not _fully_checked.get():
-                    owed.setdefault(rule, after is child)       # asked of the composition's result
-                else:
-                    first(rule(after) or ())
-                continue
-            first(proof(before, after, delta))
-            if _fully_checked.get() and (missed := next(iter(rule(after) or ()), None)):
-                raise AssertionError(f'{type(op).__name__}: {proof.__name__} passed what '
-                                     f'{rule.__name__} refuses -- {missed.message}')
-    return child
+        for delta_check in type(self).per_level('checks_delta'):
+            first(delta_check(graph, e.delta))
+        changes = {}
+        if e.definitions is not None:
+            changes['graph'] = replace(graph.graph, definitions=e.definitions)
+        if e.within is not None:
+            changes['within'] = e.within
+        return replace(graph, **changes)
 
 
 # ================================================================ the primitives
@@ -133,68 +76,12 @@ class Rebinding[N: Label, V: Place](Frozen):
     define : OrderedMap[N, NodeDefinition[V]]
 
 
-def _owns_moved[N: Label, V: Place](
-    g      : AbstractGraph[N, V],
-    define : Mapping[N, NodeDefinition[V]],
-) -> bool:
-    '''Whether a node defined in place owns other than it did.'''
-    return any(n in g.definitions and d.owns != g.definitions[n].owns for n, d in define.items())
-
-
-def check_rebound_owns_disjoint[N: Label, V: Place](
-    before : AbstractGraph[N, V],
-    after  : AbstractGraph[N, V],
-    r      : Rebinding[N, V],
-) -> Iterator[Violation]:
-    '''`check_one_producer_per_place` of a rebinding. A removal frees places, and a node
-    redefined owning what it owned moves none: nothing to ask. New nodes: their owns
-    among themselves, then against the standing owners. Once something is removed while
-    something is defined, or an own moved in place, the rule of the result.'''
-    if not r.define:
-        return
-    if r.remove or _owns_moved(before, r.define):
-        yield from check_one_producer_per_place(after)
-        return
-    new_owned = [(n, v) for n, d in r.define.items() if n not in before.definitions for v in d.owns]
-    yield from owned_overlaps(new_owned)
-    yield from owned_against(new_owned, before.owners, before.owned_below)
-
-
-def check_rebound_reads_exact[N: Label, V: Place](
-    before : AbstractGraph[N, V],
-    after  : AbstractGraph[N, V],
-    r      : Rebinding[N, V],
-) -> Iterator[Violation]:
-    '''`check_reads_are_exact` of a rebinding. A removal only turns reads into boundary
-    inputs: nothing to ask. Otherwise the defined nodes' reads against every owner after,
-    and the new owns against the reads that already stand. Once something is removed
-    while something is defined, or an own moved in place, the rule of the result.'''
-    if not r.define:
-        return
-    if r.remove or _owns_moved(before, r.define):
-        yield from check_reads_are_exact(after)
-        return
-    new_owns = owners_of({n: d for n, d in r.define.items() if n not in before.definitions})
-    reads    = readers_of(r.define)
-    yield from reads_exact_against(reads, before.owners, before.owned_below)
-    yield from reads_exact_against(reads, new_owns)
-    stood = {r: before.readers[r] for _, r in overlaps(new_owns, before.readers, before.read_below)}
-    yield from reads_exact_against(stood, new_owns)          # the reads standing, against the new owns
-
-
 class Rebind[N: Label, V: Place](Primitive[N, V]):
     '''
     The binding primitive: names removed and names defined, in one step, so only the
     result need be valid. A derived op says what (`rebinding`) and its intent
-    (`checks_delta`, of the `Rebinding`); the proof is this level's, and not overridden.
+    (`checks_delta`, of the `Rebinding`).
     '''
-
-    covers = {
-        check_one_producer_per_place:    check_rebound_owns_disjoint,
-        check_reads_are_exact:           check_rebound_reads_exact,
-        check_nesting_ends_bound:        unbreakable,   # `edited` drops a removed node's pairs
-        check_no_nesting_loops:          unbreakable,   # the nesting only loses pairs
-        check_nesting_ends_are_problems: in_full}       # a node defined in place may stop being one
 
     @abstractmethod
     def rebinding(self, graph: NestingGraph[N, V]) -> Rebinding[N, V]:
@@ -333,7 +220,7 @@ class Combine[N: Label, V: Place, D: NodeDefinition](Rebind[N, V]):
     Several nodes folded into one, by the `+` they define: the folded nodes removed and
     the fold defined at `at`, in one rebinding, so only the result need be valid. Whether
     the result keeps one producer per place and exact reads is the `+`'s business, which a
-    fold cannot see: `Rebind`'s proof asks those rules of the result.
+    fold cannot see: the rules of the result say.
     '''
 
     at : N
@@ -410,15 +297,9 @@ class Nest[N: Label](Primitive[N, Place]):
     inner : N
     outer : N
 
-    # The bindings do not change, and the one new pair is all that does: `check_nesting`
-    # asks every nesting rule of it.
+    # `check_nesting` refuses the one new pair by what is wrong with it (already nested, a
+    # loop through what encloses the outer), before the rules of the result are asked.
     checks_delta = (check_nesting,)
-    covers = {
-        check_one_producer_per_place:    unbreakable,   # the bindings are untouched
-        check_reads_are_exact:           unbreakable,
-        check_nesting_ends_bound:        by_its_delta,
-        check_no_nesting_loops:          by_its_delta,
-        check_nesting_ends_are_problems: by_its_delta}
 
     def edited(self, graph: NestingGraph[N, Place]) -> Edited[N, Place]:
         return Edited((self.inner, self.outer), None, graph.within | {self.inner: self.outer})
@@ -434,15 +315,8 @@ class Unnest[N: Label](Primitive[N, Place]):
 
     inner : N
 
-    # The delta check is that there was a pair. Dropping one breaks no nesting rule: each
-    # is of the pairs that stand, and none is added.
+    # The delta check is that there was a pair.
     checks_delta = (check_unnesting,)
-    covers = {
-        check_one_producer_per_place:    unbreakable,   # the bindings are untouched
-        check_reads_are_exact:           unbreakable,
-        check_nesting_ends_bound:        unbreakable,
-        check_no_nesting_loops:          unbreakable,
-        check_nesting_ends_are_problems: unbreakable}
 
     def edited(self, graph: NestingGraph[N, Place]) -> Edited[N, Place]:
         return Edited(self.inner, None, OrderedMap((i, o) for i, o in graph.within.items() if i != self.inner))

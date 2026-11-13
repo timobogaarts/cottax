@@ -26,7 +26,7 @@ from cottax.core import (
     answer_for_labels, answer_for_places, GraphWithValues,
 )
 from cottax.core.maths.plan.primitive import (
-    Rebinding, check_delete_keeps_nesting_whole, check_nesting, check_unnesting, in_full,
+    Rebinding, check_delete_keeps_nesting_whole, check_nesting, check_unnesting,
 )
 from cottax.core.refusal_kinds import DoesNotRead
 from cottax.core.maths.executable import ExecutableGraph
@@ -140,12 +140,11 @@ def G(definitions, within=None):
 
 
 def proof(graph, op, define):
-    '''What an op's delta checks and proofs say of `graph` with `define` bound, as data.'''
-    r     = Rebinding(frozenset(), define)
-    after = graph.graph._carried(definitions=graph.definitions | define)
+    '''What an op's delta checks say of `graph` with `define` bound, and the rules of the
+    bindings that result, as data.'''
+    r = Rebinding(frozenset(), define)
     return [v for check in op.per_level('checks_delta') for v in check(graph, r)] + \
-           [v for proof in dict.fromkeys(op.covers.values()) if proof is not in_full
-              for v in proof(graph.graph, after, r)]
+           list(violations(AbstractGraph, OrderedMap(graph.definitions | define)))
 
 
 def on_insert(new, standing=None):
