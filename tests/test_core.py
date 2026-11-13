@@ -21,12 +21,12 @@ from cottax.core.maths.graph import (
 from cottax.core import (
     AbstractGraph, NestingGraph, Combine, ConditionalNode, Cut, Determine, FunctionalNode,
     Rename, Undetermine, refusals,
-    Violation, NodeDefinition, Insert, Redefine, Delete,
+    Violation, NodeDefinition, Insert, Delete,
     violations, comparables_in, first, prefixes,
     answer_for_labels, answer_for_places, GraphWithValues,
 )
 from cottax.core.maths.plan.primitive import (
-    Rebinding, check_delete_keeps_nesting_whole, check_nesting, check_unnesting, in_full,
+    Nest, Unnest, check_delete_keeps_nesting_whole, check_nesting, check_unnesting,
 )
 from cottax.core.refusal_kinds import DoesNotRead
 from cottax.core.maths.executable import ExecutableGraph
@@ -140,12 +140,10 @@ def G(definitions, within=None):
 
 
 def proof(graph, op, define):
-    '''What an op's delta checks and proofs say of `graph` with `define` bound, as data.'''
-    r     = Rebinding(frozenset(), define)
-    after = graph.graph._carried(definitions=graph.definitions | define)
-    return [v for check in op.per_level('checks_delta') for v in check(graph, r)] + \
-           [v for proof in dict.fromkeys(op.covers.values()) if proof is not in_full
-              for v in proof(graph.graph, after, r)]
+    '''Why `op` of `define` does not apply to `graph`, and the rules of the bindings that
+    would result, as data.'''
+    return list(refusals(op(OrderedMap(define)), graph)) + \
+           list(violations(AbstractGraph, OrderedMap(graph.definitions | define)))
 
 
 def on_insert(new, standing=None):
@@ -263,8 +261,10 @@ def test_a_fold_is_asked_of_its_result_and_never_of_a_step_toward_it():
     direct = G({P: defs[P] + defs[R], h: defs[h], Q: defs[Q], k: defs[k], f: defs[f]}, {Q: P})
     assert folded == direct
     assert tuple(folded.definitions) == (P, h, Q, k, f)
+    alone = Delete((R,)).apply(g)                               # the step alone is carried ...
+    assert dict(alone.within) == {Q: P}
     with pytest.raises(ValueError, match='not on one cycle'):
-        Delete((R,)).apply(g)                                   # the step alone is refused
+        ExecutableGraph(alone)                                  # ... and refused as executable
 
 
 def test_an_ownership_violation_names_each_owner():
@@ -281,7 +281,7 @@ def test_an_ownership_violation_names_each_owner():
 
 
 def test_a_nesting_with_a_bad_end_is_listed_not_raised():
-    """`check_nesting_ends_on_one_cycle` skips a pair another rule refuses."""
+    """A pair with a bad end is the one rule's that names it."""
     a, t = Word('a'), Word('t')
     graph = AbstractGraph(OrderedMap({a: states([], ['x']), t: toy([], ['y'])}))
     assert [type(v) for v in violations(NestingGraph, graph, OrderedMap({Word('zz'): a}))] == [Unbound]
@@ -331,8 +331,8 @@ def test_every_case_a_rule_can_name_has_wording():
 
     a, b, t = Word('a'), Word('b'), Word('t')
     seen(proof(G({a: toy([], ['x'])}), Insert, {a: toy([], ['y'])}))       # name taken
-    seen(proof(G({a: toy([], ['x'])}), Redefine, {b: toy([], ['y'])}))    # not bound
-    seen(check_unnesting(G({a: states([], ['x'])}), a))                       # not nested
+    seen(refusals(Delete((b,)), G({a: toy([], ['x'])})))                  # not bound
+    seen(check_unnesting(Unnest(a), G({a: states([], ['x'])})))                     # not nested
     seen(proof(G({}), Insert, {a: toy([], ['s']), b: toy([], ['s'])}))
     seen(proof(G({}), Insert, {a: toy([], ['s']), b: toy([], ['s.u'])}))
     seen(proof(G({a: toy([], ['s'])}), Insert,   {b: toy([], ['s.u'])}))
@@ -373,13 +373,13 @@ def test_every_case_a_rule_can_name_has_wording():
     cyc = {a: states(['y'], ['x']), b: states(['x'], ['y']), t: toy(['x'], ['w'])}
     with pytest.raises(KeyError, match='not a node of this graph'):     # `check_nesting_ends_bound`, at construction
         G({a: states([], ['x'])}, {a: b})
-    seen(check_delete_keeps_nesting_whole(G(cyc, {a: b}), Rebinding(frozenset({a}), {})))  # one end lost
-    seen(check_nesting(G({a: states([], ['x'])}), (a, b)))                    # unbound
-    seen(check_nesting(G(cyc), (a, t)))                                       # t not a problem
-    seen(check_nesting(G(cyc, {a: b}), (a, b)))                               # already
-    seen(check_nesting(G(cyc), (a, a)))                                       # inside itself
-    seen(check_nesting(G(cyc, {b: a}), (a, b)))                               # loop
-    seen(violations(NestingGraph, AbstractGraph(OrderedMap({a: states([], ['x']), b: states([], ['y'])})), OrderedMap({a: b})))          # unreachable
+    seen(check_delete_keeps_nesting_whole(Delete((a,)), G(cyc, {a: b})))  # one end lost
+    seen(violations(NestingGraph, G({a: states([], ['x'])}).graph, OrderedMap({a: b})))   # unbound
+    seen(violations(NestingGraph, G(cyc).graph, OrderedMap({a: t})))            # t not a problem
+    seen(check_nesting(Nest(a, b), G(cyc, {a: b})))                             # already
+    seen(violations(NestingGraph, G(cyc).graph, OrderedMap({a: a})))            # inside itself
+    seen(check_nesting(Nest(a, b), G(cyc, {b: a})))                             # loop
+    seen(violations(ExecutableGraph, G({a: states([], ['x']), b: states([], ['y'])}, {a: b})))   # unreachable
     seen(check_blocks_own_something(G({a: states(['x'], []), b: states(['y'], [])}), ((a, b),)))  # a box owning nothing
     seen(check_blocks_partition(G({a: toy([], ['x']), b: toy([], ['y'])}), ((a,), (a, b))))  # a short block, a node twice
     S = G

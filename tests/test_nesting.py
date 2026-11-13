@@ -9,7 +9,7 @@ the ways a rewrite could quietly void it refusals rather than surprises.
 import pytest
 from jax.tree_util import GetAttrKey as G
 
-from cottax.core.maths.executable import ExecutableGraph
+from cottax.core.maths.executable import ExecutableGraph, check_nestings_share_a_cycle
 from cottax.relational import Min, Objective
 from cottax.core.driven import Assign, DriverContract
 from cottax.core import Function
@@ -19,7 +19,7 @@ from cottax.relational import Eq, Relation, RelationalCondition
 from cottax.core.maths.plan import Cut, Determine, Undetermine
 from cottax.core import Combine
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core.frozen import OrderedMap
+from cottax.core.frozen import OrderedMap, unchecked
 import purposes
 from graphs import graph_of
 from cottax.core.maths.nesting import NestingGraph
@@ -98,7 +98,7 @@ def test_undetermining_one_end_is_refused_rather_than_dropped(nested):
 def test_the_nesting_is_a_forest_on_the_value_not_only_on_the_op(mdf):
     '''A loop is refused wherever it arrives: built from nothing, or closed by a `Nest`
     -- at length one (`x` inside itself) and at any length. The rule is the graph's
-    (`check_no_nesting_loops`, `check_nesting`), so an op never has to say it.'''
+    (`check_no_nesting_loops`); `check_nesting` only names the pair that closes one.'''
     with pytest.raises(ValueError, match='closes a loop'):
         graph_of(mdf.definitions, OrderedMap({n('mda'): n('opt'), n('opt'): n('mda')}))
     with pytest.raises(ValueError, match='inside itself'):
@@ -118,8 +118,9 @@ def test_a_nested_pair_shares_a_cycle_at_its_own_level():
     '''`x` inside `mda` inside `opt`, with `x`'s only way back to `mda` through what
     `opt` owns: in the whole graph the pair shares a cycle, in `opt`'s interior -- one
     iterate of `mda`, `z` held -- it does not, so nothing `mda` iterates re-runs `x`
-    with feedback. Refused where the nesting lives, and `levels` is total because of
-    it: every interior it builds is well-formed.'''
+    with feedback. Nothing reading a nesting needs the cycle, so the graph carries the
+    pair; the proof that it is executable refuses it, so every interior `steps` builds
+    is well-formed.'''
     g = graph_of(OrderedMap({
         n('opt'): optimise(v('f'), (v('z'),)),
         n('mda'): fixed_point(v('hy'), v('y')),
@@ -131,11 +132,11 @@ def test_a_nested_pair_shares_a_cycle_at_its_own_level():
     }))
     assert n('x') in g.graph.descendants([n('mda')]) and n('mda') in g.graph.descendants([n('x')])   # one cycle, in the graph
     outer = Plan(g) + Nest(n('mda'), n('opt'))
+    stale = (outer + Nest(n('x'), n('mda'))).graph
     with pytest.raises(ValueError, match='not on one cycle'):
-        outer + Nest(n('x'), n('mda'))
+        ExecutableGraph(stale)
     # Built from nothing, the same: the base case walks the same tree.
-    with pytest.raises(ValueError, match='not on one cycle'):
-        graph_of(g.definitions, OrderedMap({n('mda'): n('opt'), n('x'): n('mda')}))
+    assert graph_of(g.definitions, OrderedMap({n('mda'): n('opt'), n('x'): n('mda')})) == stale
     # Nested in `opt` directly, `x` is at opt's level, where the cycle is: fine, and the
     # tree has two levels under opt's block.
     both = (outer + Nest(n('x'), n('opt'))).graph
@@ -148,17 +149,20 @@ def test_a_pair_whose_inner_is_outside_its_outers_component_is_refused(mdf):
     `opt`. The level-by-level form of the rule descended into `opt`'s interior keeping
     only the pairs with both ends inside, so this pair was dropped on the way down and
     the nesting accepted -- while `Nest(p, mda)` before `Nest(mda, opt)` was refused.
-    Stated per pair it is refused either way round.'''
+    Stated per pair, and asked of the whole graph by the proof that it is executable, it
+    is refused either way round. The other rules of that proof do not imply it: they read
+    `within`, and the pair hides `p` from them.'''
     g = graph_of(OrderedMap({**dict(mdf.definitions.items()),
                         n('p'): root_find((v('s'),), (v('r'),)),
                         n('e'): call(['r'], ['s'])}))
     assert n('p') not in g.graph.descendants([n('mda')]) and n('mda') not in g.graph.descendants([n('p')])
-    with pytest.raises(ValueError, match='not on one cycle'):
-        Plan(g) + Nest(n('mda'), n('opt')) + Nest(n('p'), n('mda'))
-    with pytest.raises(ValueError, match='not on one cycle'):
-        Plan(g) + Nest(n('p'), n('mda')) + Nest(n('mda'), n('opt'))
-    with pytest.raises(ValueError, match='not on one cycle'):
-        graph_of(g.definitions, OrderedMap({n('mda'): n('opt'), n('p'): n('mda')}))
+    for stale in ((Plan(g) + Nest(n('mda'), n('opt')) + Nest(n('p'), n('mda'))).graph,
+                  (Plan(g) + Nest(n('p'), n('mda')) + Nest(n('mda'), n('opt'))).graph,
+                  graph_of(g.definitions, OrderedMap({n('mda'): n('opt'), n('p'): n('mda')}))):
+        with pytest.raises(ValueError, match='not on one cycle'):
+            ExecutableGraph(stale)
+        with unchecked(check_nestings_share_a_cycle):
+            ExecutableGraph(stale)                  # every other rule passes it
 
 
 def test_nesting_changes_equality_and_the_hash(mdf, nested):
@@ -190,18 +194,20 @@ def test_two_statements_with_nothing_said_have_no_blocking_but_still_draw(mdf):
     assert [(b['ring'], b['depth']) for b in xdsm_struct(mdf, blocks=True)['blocks']] == [('solve', 0)]
 
 
-def test_severing_a_nested_pair_is_refused(nested):
-    '''A `Cut` that pulls the two ends onto different components is refused like a
-    `Delete` of an end: the pair's cycle is an invariant of `within`, not a query, so
-    there is no state in which the graph holds a nesting that means nothing. `Unnest`
-    first, then cut.'''
+def test_severing_a_nested_pair_is_carried_and_refused_as_executable(nested):
+    '''A `Cut` that pulls the two ends onto different components leaves the pair standing:
+    the pair's cycle is not an invariant of `within` but a rule of `ExecutableGraph`, so
+    the plan may cut and `Unnest` in either order, and a graph holding a nesting that
+    means nothing is refused only where it would be run.'''
+    severed = Plan(nested) + Cut(v('f'), [n('opt')], HAT)
+    assert dict(severed.graph.within) == {n('mda'): n('opt')}
     with pytest.raises(ValueError, match='not on one cycle'):
-        Plan(nested) + Cut(v('f'), [n('opt')], HAT)
+        ExecutableGraph(severed.graph)
     unnested = Plan(nested) + Unnest(n('mda')) + Cut(v('f'), [n('opt')], HAT)
     assert dict(unnested.graph.within) == {}
-    # And from nothing: the base case is the same rule.
-    with pytest.raises(ValueError, match='not on one cycle'):
-        graph_of(unnested.graph.definitions, OrderedMap({n('mda'): n('opt')}))
+    assert (severed + Unnest(n('mda'))).graph == unnested.graph
+    # And from nothing: the base case is the same graph.
+    assert graph_of(unnested.graph.definitions, OrderedMap({n('mda'): n('opt')})) == severed.graph
     with pytest.raises(ValueError, match='determines nothing'):
         graph_of(nested.definitions, OrderedMap({n('d'): n('opt')}))
 
@@ -218,8 +224,8 @@ def test_deleting_one_end_is_refused(nested):
 def test_restricting_to_what_contributes_keeps_both_ends_or_neither(nested):
     # Both ends are on one cycle, so each is an ancestor of the other: a restriction to
     # what a variable needs keeps both or drops both, and the state
-    # `check_delete_keeps_nesting_whole` would refuse is unreachable this way. (It was
-    # reachable after a `Cut` split the pair; that `Cut` is now the refusal.)
+    # `check_delete_keeps_nesting_whole` would refuse is unreachable this way. (It is
+    # reachable after a `Cut` splits the pair, a graph only `ExecutableGraph` refuses.)
     contributing = lambda g, var: g.subgraph(g.graph.ancestors((g.graph.owners[var],)))
     assert dict(contributing(nested, v('f')).within) == {n('mda'): n('opt')}
     beside = (Plan(nested) + Insert(OrderedMap({n('src'): call([], ['w'])}))).graph
@@ -234,10 +240,12 @@ def test_a_subgraph_is_the_induced_one_and_a_delete_may_not_strand(nested):
     assert dict(nested.subgraph(nested.nodes).within) == {n('mda'): n('opt')}
     assert dict(nested.interior(n('opt')).within) == {}
     # Both ends kept and the cycle between them not: the pair survives the restriction
-    # and stands on nothing, the one invariant a restriction can break. Refused, not
-    # dropped -- the graph does not decide a stated nesting no longer applies.
+    # and stands on nothing. Carried, not dropped -- the graph does not decide a stated
+    # nesting no longer applies -- and refused by the proof that it is executable.
+    severed = nested.subgraph([n('mda'), n('opt')])
+    assert dict(severed.within) == {n('mda'): n('opt')}
     with pytest.raises(ValueError, match='not on one cycle'):
-        nested.subgraph([n('mda'), n('opt')])
+        ExecutableGraph(severed)
 
 
 def test_combining_both_ends_folds_the_nesting_away(nested):
@@ -332,11 +340,10 @@ def test_interior_is_the_block_without_the_problem_and_is_valid(mdf, nested):
     assert set(nested.cycle_of(n('mda'))) == {n('mda'), n('d')}
 
 
-def test_interior_refuses_to_sever_a_siblings_nesting():
-    '''The one case the graph's own invariant does not vouch for: an outermost problem
-    that encloses nothing, beside a sibling that does, with the sibling pair's cycle
-    running through it. Taking it out would leave a pair on no cycle -- refused, not
-    carried.'''
+def test_interior_of_a_sibling_carries_the_nesting_it_severs():
+    '''An outermost problem that encloses nothing, beside a sibling that does, with the
+    sibling pair's cycle running through it. Taking it out leaves a pair on no cycle --
+    carried, and refused by the proof that it is executable.'''
     g = graph_of(OrderedMap({
         n('o')  : fixed_point(v('hi'), v('i')),
         n('i')  : fixed_point(v('hp'), v('p')),
@@ -347,9 +354,11 @@ def test_interior_refuses_to_sever_a_siblings_nesting():
     }))
     g = (Plan(g) + Nest(n('i'), n('o'))).graph
     assert set(g.outermost_problems) == {n('o'), n('p')}
-    g.interior(n('o'))                              # the outer: vouched for
+    assert dict(g.interior(n('o')).within) == {}    # the outer: its pair goes with it
+    severed = g.interior(n('p'))                    # the sibling: severs (i, o)
+    assert dict(severed.within) == {n('i'): n('o')}
     with pytest.raises(ValueError, match='not on one cycle'):
-        g.interior(n('p'))                          # the sibling: severs (i, o)
+        ExecutableGraph(severed)
 
 
 def test_contract_drops_a_pair_with_an_end_in_a_block_and_keeps_the_rest(nested):
