@@ -430,7 +430,7 @@ def _clusters(graph: NestingGraph, g: nx.DiGraph, vertex, placed: set,
               kinds: dict[str, Kind], sty: Style) -> list[str]:
     '''
     Every solve of `graph` as a `cluster`, nested as the solves nest: filled in its band,
-    edged in its ring colour (`ring_stroke`), dashed where no driver answers it. Its
+    edged in its ring colour (`ring_stroke`), dashed where no single problem solves it. Its
     members are declared in it and added to `placed`.
     '''
     out : list[str] = []

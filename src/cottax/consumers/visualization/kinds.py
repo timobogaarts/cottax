@@ -72,7 +72,7 @@ def ring_stroke(btype: str | None, kinds: Mapping[str, Kind], style: Style) -> s
     '''
     The contour of a solve ring of type `btype`, `kinds` the categories drawn by name:
     the hue of the driver answering it, `stated`'s grey for a problem with no category,
-    `unanswered` where no driver answers it or its problem's place is still open.
+    `unanswered` where no single problem solves it or its problem's place is still open.
     '''
     if not answered(btype) or btype == 'unsettled':
         return style.unanswered

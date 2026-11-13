@@ -39,6 +39,8 @@ from graphs import (NESTED, NESTED_BESIDE_P, NOTHING_NESTED, UNORDERED_IN_P, gra
                     three_problems)
 
 HAT, PROBLEM, START = purposes.Copy(), purposes.Solve(), purposes.Start()
+UNSOLVED = 'no/too many drivers'
+'''The key's entry for a grey ring cut open.'''
 
 
 def optimise(objective, unknowns, inequalities=()) -> RelationalCondition:
@@ -138,7 +140,7 @@ def test_only_a_coupled_block_is_ringed_as_one(sellar):
 
 def test_the_figure_and_the_page_key_alike_and_once(sellar, nestable):
     '''One key, each entry once: under `PYXDSM` run rings at two depths are one entry,
-    and a ring no driver answers is keyed in either picture.'''
+    and a ring no single problem solves is keyed in either picture.'''
     from cottax.consumers.visualization.page import Pictures
     from cottax.consumers.visualization.xdsm import key_entries
     from cottax.consumers.visualization.xdsm_html import xdsm_view
@@ -152,7 +154,7 @@ def test_the_figure_and_the_page_key_alike_and_once(sellar, nestable):
             texts = [e['text'] for e in key_entries(struct, style)]
             assert len(texts) == len(set(texts))
             assert ('run in order' in texts) == (style is PYXDSM)
-            assert ('no driver' in texts) == (graph is sellar)
+            assert (UNSOLVED in texts) == (graph is sellar)
             page = xdsm_view(graph, Pictures(), blocks=blocks, style=style)['legend']
             assert [e['text'] for e in page] == texts
             svg = render_xdsm_svg(graph, blocks=blocks, style=style)
@@ -476,17 +478,17 @@ def test_a_nesting_inside_a_grey_ring_is_ringed_inside_it():
 
 
 def test_a_ring_whose_nesting_is_open_is_keyed_once():
-    '''`r` in `q` beside `p`: the key has the grey ring no driver answers, cut open, and
+    '''`r` in `q` beside `p`: the key has the grey ring no single problem solves, cut open, and
     `q`'s ring, grey and closed, as a nesting still open; with `q` nested in `p`, neither.'''
     from cottax.consumers.visualization.xdsm import key_entries
     for nesting, keyed in ((NESTED_BESIDE_P, True), (NESTED, False)):
         graph = three_problems(*nesting)
         entries = {e['text']: e for e in key_entries(xdsm_struct(graph, blocks=True), TERRACOTTA)}
-        assert ('nesting still open' in entries) == ('no driver' in entries) == keyed
+        assert ('nesting still open' in entries) == (UNSOLVED in entries) == keyed
         if keyed:
-            assert [entries[t]['shape'] for t in ('no driver', 'nesting still open')] \
+            assert [entries[t]['shape'] for t in (UNSOLVED, 'nesting still open')] \
                 == ['open', 'band']
-            assert {entries[t]['stroke'] for t in ('no driver', 'nesting still open')} \
+            assert {entries[t]['stroke'] for t in (UNSOLVED, 'nesting still open')} \
                 == {TERRACOTTA.unanswered}
         assert render_xdsm_svg(graph, blocks=True).count('>nesting still open</text>') == keyed
 

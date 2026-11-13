@@ -212,7 +212,7 @@ def test_a_relation_between_two_unknowns_is_slotted_as_written(closed):
 
 def test_every_picture_rings_a_solve_alike(sellar, closed):
     '''A ring's contour, in the XDSM, the N2 and the node-link: its driver's hue, grey
-    for a problem with no category, `unanswered` where no driver answers it.'''
+    for a problem with no category, `unanswered` where no single problem solves it.'''
     from cottax.consumers.visualization.matrix import render_matrix_svg
     fp = closed[N('fp')]
     two = RelationalCondition(fp.relations, (Objective(V('y1'), Min), Objective(V('z'), Min)),

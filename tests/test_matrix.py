@@ -194,7 +194,7 @@ def test_a_nesting_inside_a_grey_box_is_boxed_inside_it():
 
 def test_the_key_keys_the_boxes_as_the_xdsm_keys_its_rings():
     '''`r` in `q` beside `p`: the N2's key has the XDSM's entries for its boxes -- a depth
-    each, the grey box no driver answers, the box whose nesting is still open -- each drawn
+    each, the grey box no single problem solves, the box whose nesting is still open -- each drawn
     once; a figure keying several N2s keys none.'''
     from cottax.consumers.visualization.matrix import key
     from cottax.consumers.visualization.xdsm import key_entries, xdsm_struct
@@ -202,7 +202,7 @@ def test_the_key_keys_the_boxes_as_the_xdsm_keys_its_rings():
     boxed = lambda entries: [e['text'] for e in entries if e['shape'] in ('band', 'open')]
     assert boxed(key(matrix_struct(graph), TERRACOTTA)) \
         == boxed(key_entries(xdsm_struct(graph, blocks=True), TERRACOTTA)) \
-        == ['solved together', 'solved one level in', 'solved two levels in', 'no driver',
+        == ['solved together', 'solved one level in', 'solved two levels in', 'no/too many drivers',
             'nesting still open']
     svg = str(render_matrix_svg(graph))
     assert [t for t in boxed(key(matrix_struct(graph), TERRACOTTA))

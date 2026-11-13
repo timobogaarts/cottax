@@ -113,8 +113,8 @@ class Style(Frozen):
     hexagon of a problem of that category, and the contour of the ring it answers. A
     renderer holding a category's name takes the colour from its struct. `stated` is a
     condition that determines nothing and whose type is unknown; one whose type is known
-    is drawn hollow in that type's stroke. `unanswered` is the contour of a ring no driver
-    answers (a bare cycle, or several problems with nothing nested).
+    is drawn hollow in that type's stroke. `unanswered` is the contour of a ring no single
+    problem solves (a cycle with no problem on it, or several outermost problems).
 
     `bands` fills a solve ring, one entry per nesting depth (cycling); empty draws the ring
     as a contour alone. `band_stroke` is the contour of a band's key sample, `dashed`

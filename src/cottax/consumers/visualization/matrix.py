@@ -261,7 +261,7 @@ def draw_key(entries: Sequence[dict], *, x0: float, y0: float, right: float, siz
     A key's entries (`key`) set in lines from `(x0, y0)` up to `right`: a group a square
     `side` across (corners `rx`), a category its hexagon (`hexagon_at(cx, cy)`, outlined
     `stroke`, hovered for its `title` if `titled`), a box (`band`) a square outlined
-    `stroke`, cut open by `cut` where no driver answers it (`open`), each named in `ink` at
+    `stroke`, cut open by `cut` where no single problem solves it (`open`), each named in `ink` at
     `size`, `air` after the mark and `after` after the name, a line `line` below the last.
     Returns the SVG and the y `end` below the last line.
     '''
@@ -391,7 +391,7 @@ def _svg(struct: dict, sty: Style, *, names: bool, colour: bool, cell: float,
         if answered(b['type']) or not sty.cuts:
             parts.append(f'<rect class="solve" x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" '
                          f'height="{w:.1f}" fill="none" stroke="{stroke}" stroke-width="{sw}"/>')
-        else:                          # no driver: cut open, as a ring or a hexagon is
+        else:                          # no single problem solves it: cut open, as a ring is
             parts += [f'<path class="solve" d="{d}" fill="none" stroke="{stroke}" '
                       f'stroke-width="{sw}"/>' for d in cut_rect(x, y, w, w, 0.0, sty.cut_em * cell / 3)]
     parts += hexagons

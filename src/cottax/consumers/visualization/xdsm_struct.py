@@ -68,7 +68,7 @@ def ring_entries(rings: Iterable[dict], sty: Style) -> list[dict]:
     '''
     The key's entries for rings, each a record with `ring` (`'solve'` or `'run'`), `depth`
     and `type`: each depth of solve ring, a block run in order where the style draws one, a
-    ring no driver answers (cut open) and a ring whose nesting is still open (grey, closed:
+    ring no single problem solves (cut open) and a ring whose nesting is still open (grey, closed:
     `Block.unsettled`), each once, with the `class` an XDSM draws it in. The N2 keys its
     boxes with the same entries.
     '''
@@ -83,7 +83,7 @@ def ring_entries(rings: Iterable[dict], sty: Style) -> list[dict]:
                     'text': ring_text('run', 0), 'class': ring_class('run', 0)})
     if any(b['ring'] == 'solve' and not answered(b['type']) for b in rings):
         out.append({'shape': 'open', 'fill': sty.band(0) or sty.surface,
-                    'stroke': sty.unanswered, 'text': 'no driver',
+                    'stroke': sty.unanswered, 'text': 'no/too many drivers',
                     'class': ring_class('solve', 0)})
     if any(b['type'] == 'unsettled' for b in rings):
         out.append({'shape': 'band', 'fill': sty.band(0) or sty.surface,
