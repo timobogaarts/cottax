@@ -21,12 +21,12 @@ from cottax.core.maths.graph import (
 from cottax.core import (
     AbstractGraph, NestingGraph, Combine, ConditionalNode, Cut, Determine, FunctionalNode,
     Rename, Undetermine, refusals,
-    Violation, NodeDefinition, Insert, Redefine, Delete,
+    Violation, NodeDefinition, Insert, Delete,
     violations, comparables_in, first, prefixes,
     answer_for_labels, answer_for_places, GraphWithValues,
 )
 from cottax.core.maths.plan.primitive import (
-    Rebinding, check_delete_keeps_nesting_whole, check_nesting, check_unnesting,
+    Nest, Unnest, check_delete_keeps_nesting_whole, check_nesting, check_unnesting,
 )
 from cottax.core.refusal_kinds import DoesNotRead
 from cottax.core.maths.executable import ExecutableGraph
@@ -140,10 +140,9 @@ def G(definitions, within=None):
 
 
 def proof(graph, op, define):
-    '''What an op's delta checks say of `graph` with `define` bound, and the rules of the
-    bindings that result, as data.'''
-    r = Rebinding(frozenset(), define)
-    return [v for check in op.per_level('checks_delta') for v in check(graph, r)] + \
+    '''Why `op` of `define` does not apply to `graph`, and the rules of the bindings that
+    would result, as data.'''
+    return list(refusals(op(OrderedMap(define)), graph)) + \
            list(violations(AbstractGraph, OrderedMap(graph.definitions | define)))
 
 
@@ -332,8 +331,8 @@ def test_every_case_a_rule_can_name_has_wording():
 
     a, b, t = Word('a'), Word('b'), Word('t')
     seen(proof(G({a: toy([], ['x'])}), Insert, {a: toy([], ['y'])}))       # name taken
-    seen(proof(G({a: toy([], ['x'])}), Redefine, {b: toy([], ['y'])}))    # not bound
-    seen(check_unnesting(G({a: states([], ['x'])}), a))                       # not nested
+    seen(refusals(Delete((b,)), G({a: toy([], ['x'])})))                  # not bound
+    seen(check_unnesting(Unnest(a), G({a: states([], ['x'])})))                     # not nested
     seen(proof(G({}), Insert, {a: toy([], ['s']), b: toy([], ['s'])}))
     seen(proof(G({}), Insert, {a: toy([], ['s']), b: toy([], ['s.u'])}))
     seen(proof(G({a: toy([], ['s'])}), Insert,   {b: toy([], ['s.u'])}))
@@ -374,12 +373,12 @@ def test_every_case_a_rule_can_name_has_wording():
     cyc = {a: states(['y'], ['x']), b: states(['x'], ['y']), t: toy(['x'], ['w'])}
     with pytest.raises(KeyError, match='not a node of this graph'):     # `check_nesting_ends_bound`, at construction
         G({a: states([], ['x'])}, {a: b})
-    seen(check_delete_keeps_nesting_whole(G(cyc, {a: b}), Rebinding(frozenset({a}), {})))  # one end lost
-    seen(check_nesting(G({a: states([], ['x'])}), (a, b)))                    # unbound
-    seen(check_nesting(G(cyc), (a, t)))                                       # t not a problem
-    seen(check_nesting(G(cyc, {a: b}), (a, b)))                               # already
-    seen(check_nesting(G(cyc), (a, a)))                                       # inside itself
-    seen(check_nesting(G(cyc, {b: a}), (a, b)))                               # loop
+    seen(check_delete_keeps_nesting_whole(Delete((a,)), G(cyc, {a: b})))  # one end lost
+    seen(check_nesting(Nest(a, b), G({a: states([], ['x'])})))                  # unbound
+    seen(check_nesting(Nest(a, t), G(cyc)))                                     # t not a problem
+    seen(check_nesting(Nest(a, b), G(cyc, {a: b})))                             # already
+    seen(check_nesting(Nest(a, a), G(cyc)))                                     # inside itself
+    seen(check_nesting(Nest(a, b), G(cyc, {b: a})))                             # loop
     seen(violations(ExecutableGraph, G({a: states([], ['x']), b: states([], ['y'])}, {a: b})))   # unreachable
     seen(check_blocks_own_something(G({a: states(['x'], []), b: states(['y'], [])}), ((a, b),)))  # a box owning nothing
     seen(check_blocks_partition(G({a: toy([], ['x']), b: toy([], ['y'])}), ((a,), (a, b))))  # a short block, a node twice

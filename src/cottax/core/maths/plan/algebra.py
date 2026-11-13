@@ -32,15 +32,13 @@ class GraphOp[N: Label, V: Place](Frozen):
     '''
     Graph operation: changing the computational graph.
 
-    Four stages:
+    Two stages:
 
     1. op alone: is this a valid op?  [checks of frozen]
     2. op and graph: can this op apply to this graph? [checks_graph]
-    3. op, graph, and delta: does this delta make sense to apply [ checks_delta]
-    4. new graph: is it a graph? [its own checks, in full]
 
-    3 and 4 are a `Primitive`'s (`primitive.py`), the ops that build a graph. Any other op
-    composes them and has only 1 and 2: every graph it passes through is a checked one.
+    A `Primitive` (`primitive.py`) then builds a graph, by that graph's own checked
+    constructor; any other op composes primitives.
     '''
 
     checks_graph : PerLevel[tuple[Callable, ...]] = ()
