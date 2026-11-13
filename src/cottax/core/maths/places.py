@@ -15,6 +15,9 @@ Where a node is bound: a key, and nothing more.
 class Place(Protocol):
     """
     Place composed over segments of a path (i.e. paths in a nested tree)
+
+    A place may keep its own `prefixes` (its strict prefixes, root first): `prefixes` asks
+    for them, and builds them from `segments` where a place keeps none.
     """
 
     def __init__(self, segments: Iterable[Any]) -> None:
@@ -44,11 +47,13 @@ def is_prefix[P: Place](a: P, b: P) -> bool:
     """`a ⊑ b`, equality included."""
     return b.segments[:len(a.segments)] == a.segments
 
-def prefixes[P: Place](place: P) -> 'Iterator[P]':
-    """`{q : q ⊏ place}`, root first. Set of all prefixes. For e.g. `.x.y.z` yields the root, `.x`, `.x.y`."""
+def prefixes[P: Place](place: P) -> 'Iterable[P]':
+    """`{q : q ⊏ place}`, root first. Set of all prefixes. For e.g. `.x.y.z` gives the root, `.x`, `.x.y`.
+    The place's own where it keeps them: every rule asks them of every place of every graph."""
+    if (kept := getattr(place, 'prefixes', None)) is not None:
+        return kept
     cls, segments = type(place), place.segments
-    for i in range(len(segments)):
-        yield cls(segments[:i])
+    return tuple(cls(segments[:i]) for i in range(len(segments)))
 
 def comparable[P: Place](a: P, b: P) -> bool:
     """`a ⊑ b or b ⊑ a`."""
