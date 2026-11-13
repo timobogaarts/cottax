@@ -1,7 +1,6 @@
 '''
-An edit as a record, and the fold of a sequence of them: `GraphOp` (graph -> graph),
-`ComposedOp` (an op that is other ops), `Plan` (a base graph plus the ops applied to
-it). Over any `NestingGraph`; the primitives are `primitive.py`.
+Graph edits as records: `GraphOp` (graph -> graph), `ComposedOp` and `StagedOp` (ops made
+of ops), `Plan` (a base graph plus the ops applied to it). The primitives are `primitive.py`.
 '''
 
 from abc import abstractmethod
@@ -17,68 +16,50 @@ from ..places import Label, Place
 
 def refusals[N: Label, V: Place](op: 'GraphOp[N, V]',
                                  graph: NestingGraph[N, V]) -> 'Iterator[Violation]':
-    '''
-    Why `op` does not apply to `graph`, as data -- every `checks_graph` case.
-
-    Most derived level first: an op's own precondition is asked before the one it
-    inherits, since an inherited check reads what the derived op computes (`Rewire`'s
-    reads `Cut`'s renaming).
-    '''
+    '''Why `op` does not apply to `graph`, as data. Most derived level first: an inherited
+    check may read what the derived op computes (`Rewire`'s reads `Cut`'s renaming).'''
     for check in type(op).per_level('checks_graph', derived_first=True):
         yield from check(op, graph) or ()
 
 
 class GraphOp[N: Label, V: Place](Frozen):
     '''
-    Graph operation: changing the computational graph.
+    A change to the graph, as a record. Checked twice:
 
-    Two stages:
-
-    1. op alone: is this a valid op?  [checks of frozen]
-    2. op and graph: can this op apply to this graph? [checks_graph]
-
-    A `Primitive` (`primitive.py`) then builds a graph, by that graph's own checked
-    constructor; any other op composes primitives.
+    1. the op alone: is it a valid op? [`checks`]
+    2. the op and a graph: does it apply to this graph? [`checks_graph`]
     '''
 
     checks_graph : PerLevel[tuple[Callable, ...]] = ()
-    '''What the op needs of the graph before it can compute anything: `(op, graph) ->
-    Iterator[Violation]`, collected by `refusals` and raised by `apply`.'''
+    '''`(op, graph) -> Iterator[Violation]`: collected by `refusals`, raised by `apply`.'''
 
     def apply[G: NestingGraph[N, V]](self, graph: G) -> G:
-        '''The rewrite: refuses, or returns the graph with this op applied.'''
+        '''Refuse, or return the graph with this op applied.'''
         first(refusals(self, graph))
         return self._apply(graph)
 
     @abstractmethod
     def _apply[G: NestingGraph[N, V]](self, graph: G) -> G:
-        '''The edit itself, which may assume every `checks_graph` case holds.'''
+        '''The edit itself; may assume `checks_graph` passed.'''
 
     def __call__[G: NestingGraph[N, V]](self, graph: G) -> G:
         return self.apply(graph)
 
     def __radd__(self, base: NestingGraph[N, V]) -> 'Plan[N, V]':
-        '''`graph + op`, so a plan need not be spelled to start one. Here rather than
-        on the graph, because the layering runs graph -> plan and not back.'''
+        '''`graph + op` starts a plan. Here and not on the graph, which knows no plans.'''
         if not isinstance(base, NestingGraph):
             return NotImplemented
         return Plan(base) + self
 
 
 class ComposedOp[N: Label, V: Place](GraphOp[N, V]):
-    '''
-    An op that *is* other ops, in order, all decided off the graph it meets. It builds
-    nothing of its own: every graph it passes on was built, and checked, by a primitive.
-    '''
+    '''An op made of other ops, applied in order. It builds no graph itself.'''
 
     @abstractmethod
     def composed(self, graph: NestingGraph[N, V]) -> Sequence[GraphOp[N, V]]:
-        '''The ops this one is. Takes a graph, so an expansion may depend on what it
-        meets.'''
+        '''The ops this one is, which may depend on `graph`.'''
 
     def _apply[G: NestingGraph[N, V]](self, graph: G) -> G:
-        '''Each op applied to the graph *that* op meets, so its preconditions are
-        asked of the right one.'''
         g = graph
         for op in self.composed(g):
             g = op.apply(g)
@@ -92,10 +73,8 @@ class Stage[N: Label, V: Place](Frozen):
 
 
 class StagedOp[N: Label, V: Place](GraphOp[N, V]):
-    '''
-    A composition decided stage by stage: each stage's ops are read off the graph the
-    one before left.
-    '''
+    '''A composition decided in stages: each stage's ops depend on the graph the stage
+    before left.'''
 
     @abstractmethod
     def stages(self, graph: NestingGraph[N, V]
@@ -103,8 +82,7 @@ class StagedOp[N: Label, V: Place](GraphOp[N, V]):
         '''Yield a stage's ops; receive the graph they leave.'''
 
     def staged(self, graph: NestingGraph[N, V]) -> tuple[Stage[N, V], ...]:
-        '''Every stage, each op applied to the graph *that* op meets: the derivation,
-        kept.'''
+        '''Every stage, with the graph it left.'''
         out, decide, g = [], self.stages(graph), graph
         try:
             ops = next(decide)
@@ -126,19 +104,16 @@ class StagedOp[N: Label, V: Place](GraphOp[N, V]):
 # ---------------------------------------------------------------- plan
 
 class Plan[N: Label, V: Place](Frozen):
-    '''
-    A base graph plus the operations applied to it. A `Frozen` with no rules of its
-    own: what it buys is the cached hash and a pickle that carries `base` and `ops`
-    and no prefix graph, which `graph` rebuilds on demand.
-    '''
+    '''A base graph plus the ops applied to it. It pickles as `base` and `ops`; `graph` is
+    rebuilt on demand.'''
 
     base : NestingGraph[N, V]
     ops  : tuple[GraphOp[N, V], ...] = ()
 
     @cached_property
     def trunk(self) -> 'Plan[N, V] | None':
-        '''This plan minus its last op; `None` for the base. Cached, so every prefix
-        of a plan is one object and is built once.'''
+        '''This plan minus its last op; `None` for the base. Cached, so each prefix is built
+        once.'''
         return Plan(self.base, self.ops[:-1]) if self.ops else None
 
     @cached_property
@@ -152,7 +127,7 @@ class Plan[N: Label, V: Place](Frozen):
             raise TypeError(f'cannot add {type(op).__name__} to a Plan')
         graph = op(self.graph)
         plan  = Plan(self.base, self.ops + (op,))
-        # prime the trunk by the current graph.        
+        # Both are already known: do not rebuild them.
         plan.__dict__.update(trunk=self, graph=graph)
         return plan
 
