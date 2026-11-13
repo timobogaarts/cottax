@@ -346,15 +346,15 @@ def test_the_walk_stops_where_nothing_is_nested():
     assert walk(shared)[1].held is None
 
 
-def test_a_link_whose_cycle_runs_through_a_removed_leaf_is_dropped_inside():
+def test_a_link_whose_cycle_runs_through_a_removed_leaf_rings_nothing_inside():
     '''`i` a child of `o`, on `o`'s cycle only through the leaf `l`: with `l` removed, `o`
-    is on no cycle, so the link means nothing in the rest of the cycle and is dropped there.
+    is on no cycle, so the link stays, inert, its ends in different components of the rest.
     `i` keeps its ring, `o` is drawn as a plain node inside the grey ring, and the drawing
     refuses nothing.'''
     g = link_through_leaf()
     grey = walk(g)[0]
     assert isinstance(grey.entry, Unresolved) and grey.entry.problems == (N('o'), N('l'))
-    assert removed(grey) == (N('l'),) and not grey.held.within
+    assert removed(grey) == (N('l'),) and dict(grey.held.within) == {N('i'): N('o')}
     assert [(b.problem, b.depth) for b in walk(g) if b.solved] == [(None, 0), (N('i'), 1)]
     assert sequence(g) == (N('l'), N('i'), N('B'), N('o'), N('A'))
 

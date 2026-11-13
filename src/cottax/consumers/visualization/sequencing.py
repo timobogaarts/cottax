@@ -8,9 +8,8 @@ included.
 from collections.abc import Iterator, Sequence
 from functools import cached_property
 
-from ...core.frozen import AbstractVar, Frozen, OrderedMap, violations
+from ...core.frozen import AbstractVar, Frozen, OrderedMap
 from ...core import AbstractGraph, ExecutableGraph, Plan, Label, NestingGraph, body_of
-from ...core.refusal_kinds import Unreachable
 
 
 def graph_drawn(handed: NestingGraph | ExecutableGraph | Plan) -> NestingGraph:
@@ -83,23 +82,16 @@ class Unresolved(Entry):
         cycles through them are broken and the rings inside can be drawn. Removed are the
         leaves among them (no children), so a problem with children keeps its ring; where
         none is a leaf, all of them, so their children keep theirs. A parent-child link whose
-        cycle ran only through a removed problem means nothing in the rest, and is dropped
-        there. `None` where nothing is nested: the cycle is drawn whole.
+        cycle ran only through a removed problem stays, inert: its ends fall into different
+        components of the rest, so nothing rings it. `None` where nothing is nested: the
+        cycle is drawn whole.
         '''
         links = self.subgraph.within
         if not links:
             return None
         parents = set(links.values())
         removed = {p for p in self.problems if p not in parents} or set(self.problems)
-        rest    = self.subgraph.graph.subgraph(n for n in self.nodes if n not in removed)
-        kept    = OrderedMap((child, parent) for child, parent in links.items()
-                             if child not in removed and parent not in removed)
-        broken  = {(v.inner, v.outer) for v in violations(NestingGraph, rest, kept)
-                   if isinstance(v, Unreachable)}
-        # dropping a link takes an ancestor from its child and the child's descendants, so
-        # their cycles only grow, and every link kept still holds
-        return NestingGraph(rest, OrderedMap((child, parent) for child, parent in kept.items()
-                                             if (child, parent) not in broken))
+        return self.subgraph.subgraph(n for n in self.nodes if n not in removed)
 
 
 def entries(g: NestingGraph) -> tuple[Entry, ...]:
