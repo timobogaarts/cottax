@@ -12,3 +12,4 @@ Examples
    examples/implicit_sellar
    examples/coupled_ode
    examples/non_jax
+   examples/optimal_control

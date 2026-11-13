@@ -15,6 +15,16 @@ class Span(Mint):
     '''Where the span is read unless `span=` names it: `^span.<the first state>`.'''
 
 
+class Kinks(Mint):
+    '''Where the times the rate bends at are read, written as a value: `^kinks.<the first
+    state>`.'''
+
+
+class Jumps(Mint):
+    '''Where the times the rate jumps at are read, written as a value: `^jumps.<the first
+    state>`.'''
+
+
 class Times(Mint):
     '''Where the save times are read, written as a value: `^times.<the first state>`, or
     `^times.<the problem>` for a driver's.'''
