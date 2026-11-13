@@ -22,6 +22,28 @@ class Path(ABC):
     '''
 
     segments : KeyPath
+    _hash    : int = dataclasses.field(init=False, repr=False, compare=False)
+    '''The hash of `segments`, taken once: a place keys every map a graph derives, and a
+    graph derives them anew after every edit. Not part of the value, nor of a pickle (a
+    hash does not outlive its process).'''
+    _prefixes : tuple | None = dataclasses.field(init=False, repr=False, compare=False)
+    '''`prefixes`, once asked: kept as the hash is, and for the same reason.'''
+
+    def __hash__(self) -> int:
+        return self._hash
+
+    @property
+    def prefixes(self) -> tuple:
+        '''Every strict prefix, root first: the root, `.x`, `.x.y` of `.x.y.z`. Built on the
+        first ask and kept, each with its own hash taken.'''
+        if (kept := self._prefixes) is None:
+            cls, segments = type(self), self.segments
+            kept = tuple(cls(segments[:i]) for i in range(len(segments)))
+            object.__setattr__(self, '_prefixes', kept)
+        return kept
+
+    def __reduce__(self):
+        return type(self), (self.segments,)
 
     @property
     def spelling(self) -> str:
@@ -40,6 +62,8 @@ class Path(ABC):
             raise TypeError(
                 'Path is abstract: a place is either a variable or node (use `NodePath` or `VarPath`)'
             )
+        object.__setattr__(self, '_hash', hash(self.segments))
+        object.__setattr__(self, '_prefixes', None)
 
     def __repr__(self) -> str:
         '''

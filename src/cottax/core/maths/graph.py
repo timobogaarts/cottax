@@ -5,7 +5,7 @@ that follows from owns and reads alone
 The rules first: a graph is a set of bindings that satisfies them.
 '''
 
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping
 from typing import Self
 from functools import cached_property
 
@@ -13,7 +13,7 @@ import networkx as nx
 
 from ..frozen import Frozen, OrderedMap, Violation
 from .definition import NodeDefinition
-from .places import Label, Place, comparables_in, is_prefix, overlaps, prefixes, strictly_below
+from .places import Label, Place, comparables_in, is_prefix, overlaps, prefixes
 
 
 # ---------------------------------------------------------------- the rules: what the bindings obey
@@ -39,16 +39,6 @@ def owned_overlaps[N: Label, V: Place](owned: Iterable[tuple[N, V]]) -> Iterator
         below.update(prefixes(place))
 
 
-def owned_against[N: Label, V: Place](owned: Iterable[tuple[N, V]], owners: Mapping[V, N],
-                                      below: 'set[V] | None' = None) -> Iterator[Violation]:
-    '''Every `(owner, place)` comparable to a place `owners` already holds; `below` is
-    `strictly_below(owners)` when the caller keeps it.'''
-    below = strictly_below(owners) if below is None else below
-    for node, place in owned:
-        for other in comparables_in(place, owners, below):
-            yield owned_comparably(place, node, other, owners[other])
-
-
 def check_reads_are_exact(g: 'AbstractGraph') -> Iterator[Violation]:
     '''
     No read is strictly inside or around another node's owned place: a read is
@@ -56,16 +46,8 @@ def check_reads_are_exact(g: 'AbstractGraph') -> Iterator[Violation]:
 
     o || p  or  o = p   ∀ n_i, n_j ∊ N:  o ∊ O_i, p ∊ I_j        
     '''
-    yield from reads_exact_against(g.readers, g.owners)
-
-
-def reads_exact_against[N: Label, V: Place](readers: Mapping[V, Sequence[N]],
-                                            owners: Mapping[V, N],
-                                            below: 'set[V] | None' = None,
-                                            ) -> Iterator[Violation]:
-    '''`check_reads_are_exact` of `readers` against `owners` alone: a rebinding's proof
-    asks it of what is new, and reports the same kinds the rule does.'''
-    for place, other in overlaps(readers, owners, below):
+    readers, owners = g.readers, g.owners
+    for place, other in overlaps(readers, owners):
         if other != place:                                   # equal is the (correct) edge
             yield (ReadInsideOwner if is_prefix(other, place) else OwnerInsideRead)(
                 place, other, tuple(readers[place]), owners[other])
@@ -97,17 +79,6 @@ class AbstractGraph[N: Label, V: Place](Frozen):
         Which V is read by which N (multiple)
         '''        
         return readers_of(self.definitions)
-
-    @cached_property
-    def owned_below(self) -> set[V]:
-        '''Every place with an owned extension: what makes an edit's lookup of its own
-        places against the owners cost no scan of them.'''
-        return strictly_below(self.owners)
-
-    @cached_property
-    def read_below(self) -> set[V]:
-        '''The same, of the reads.'''
-        return strictly_below(self.readers)
 
     @cached_property
     def components(self) -> tuple[tuple[N, ...], ...]:
@@ -249,7 +220,7 @@ class AbstractGraph[N: Label, V: Place](Frozen):
                      if owner in self.descendants([reader]))
 
     # ------------------------------------------------------------ restriction
-    # Every other edit is an op (`plan/`), with its proof.
+    # Every other edit is an op (`plan/`).
 
     @cached_property
     def _position(self) -> dict[N, int]:

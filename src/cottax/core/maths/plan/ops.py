@@ -18,9 +18,7 @@ type Relabel[N: Label, V: Place] = Mapping[N, Renaming[V]]
 
 
 def check_renames_places_the_node_has(op: 'Rewire', graph: NestingGraph) -> Iterator[Violation]:
-    '''
-    Cannot rename a place the node does not read or own.
-    '''
+    '''A node only renames places it reads or owns.'''
     for name, m in op.renaming(graph).items():
         node = graph[name]
         has  = set(node.reads) | set(node.owns)
@@ -29,17 +27,14 @@ def check_renames_places_the_node_has(op: 'Rewire', graph: NestingGraph) -> Iter
 
 
 class Rewire[N: Label, V: Place](Redefine[N, V]):
-    """
-    Rename the places a definition reads and owns only.
-    """
+    """Rename places a node reads and owns; nothing else of it changes."""
 
     checks_graph = (check_renames_places_the_node_has,)
 
     @abstractmethod
     def renaming(self, graph: NestingGraph[N, V]) -> Relabel[N, V]:
-        '''Per node, old place -> new. One map: a node reads a place or owns it, never
-        both, so nothing has to say which field a renaming lands in.'''
-        ...
+        '''Per node, old place -> new. One map serves reads and owns: a node never has a
+        place in both.'''
 
     def redefined(self, graph: NestingGraph[N, V]) -> Mapping[N, NodeDefinition[V]]:
         return {name: graph[name].relabel(m)
@@ -76,14 +71,14 @@ class Rename[N: Label, V: Place](Rewire[N, V]):
 # ---------------------------------------------------------------- Cutting
 
 def check_readers(op: 'Cut') -> Iterator[Violation]:
-    '''A cut has readers: with none, the copy is a name nothing reads.'''
+    '''A cut has readers; with none, nothing would read the copy.'''
     if not op.readers:
         yield NoReaders(op.var, op.copy)
 
 
 def check_cuts_a_produced_place(op: 'Cut', graph: NestingGraph) -> Iterator[Violation]:
-    '''A boundary input renamed leaves nothing to close the cut against, and a second cut
-    of one variable would put more readers on the first copy.'''
+    '''`var` is produced (a boundary input has nothing to close the cut against), and its
+    copy is not in use (a second cut would add readers to the first copy).'''
     owners = graph.graph.owners
     if op.var not in owners:
         yield NotProduced(op.var)
@@ -92,17 +87,14 @@ def check_cuts_a_produced_place(op: 'Cut', graph: NestingGraph) -> Iterator[Viol
 
 
 def check_readers_read_var(op: 'Cut', graph: NestingGraph) -> Iterator[Violation]:
-    '''Every reader reads `var`. The producer owns it, so renaming there would move the
-    output and leave `var` a boundary input.'''
+    '''Every reader reads `var`. Renaming on the producer would move the output instead.'''
     if off := tuple(r for r in op.readers if r in graph and op.var not in graph[r].reads):
         yield DoesNotRead(op.var, off)
 
 
 class Cut[N: Label, V: Place](Rewire[N, V]):
-    '''
-    Rewire the *reads* of `readers` onto a copy of `var`. The producer and `var` are
-    untouched, so a reader outside `readers` still gets the computed value.
-    '''
+    '''Make `readers` read a copy of `var`. The producer and every other reader are
+    untouched.'''
 
     var     : V
     readers : tuple[N, ...]
@@ -135,20 +127,20 @@ def check_unknowns(op: 'Determine') -> Iterator[Violation]:
 
 
 def check_determines_nothing_yet(op: 'Determine', graph: NestingGraph) -> Iterator[Violation]:
-    '''What a condition node determines is replaced, never added to.'''
+    '''The node determines nothing yet: unknowns are set, never added to.'''
     if unknowns := tuple(graph[op.requirement].unknowns):
         yield AlreadyDetermined(op.requirement, unknowns)
 
 
 def check_determines_something(op: 'Undetermine', graph: NestingGraph) -> Iterator[Violation]:
-    '''The inverse: there is something to drop.'''
+    '''There is something to drop.'''
     if not graph[op.problem].unknowns:
         yield AlreadyUndetermined(op.problem)
 
 
 class Determine[N: Label, V: Place](Redefine[N, V]):
-    '''A requirement, with the unknowns it determines named: `determined`, asked of the
-    node, so what makes an answer right stays the condition node's own business.'''
+    '''Name the unknowns a requirement determines. The node builds its own new definition
+    (`determined`).'''
 
     requirement : N
     unknowns    : tuple[V, ...]

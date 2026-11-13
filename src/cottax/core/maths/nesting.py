@@ -3,6 +3,7 @@ Nesting graph: Graph + nesting forest
 '''
 
 from collections.abc import Iterable, Iterator, Mapping
+from dataclasses import replace
 from typing import Self
 from functools import cached_property
 
@@ -75,6 +76,9 @@ def check_nesting_ends_on_one_cycle(g: 'NestingGraph') -> Iterator[Violation]:
     p ~ q  in  N \\ A(q)   ∀ (p, q) ∊ W       i.e.  p ∊ S_q, the cycle of q
 
     A pair with an end unbound or not a problem is skipped: those are other rules'.
+
+    Not a rule of `NestingGraph`: nothing that reads a nesting needs it, so a plan may cut
+    a nested pair apart and `Unnest` it after. `ExecutableGraph` asks it.
     '''
     for inner, outer in g.within.items():
         if not all(e in g.definitions and is_problem(g.definitions[e]) for e in (inner, outer)):
@@ -114,7 +118,10 @@ class NestingGraph[N: Label, V: Place](Frozen):
     graph  : AbstractGraph[N, V]
     within : OrderedMap[N, N]
     checks = (check_nesting_ends_bound, check_no_nesting_loops,
-              check_nesting_ends_are_problems, check_nesting_ends_on_one_cycle)
+              check_nesting_ends_are_problems)
+    '''What makes a nesting readable. That each pair shares a cycle
+    (`check_nesting_ends_on_one_cycle`) is not asked here: a pair that does not is inert to
+    every query of this graph, so it is `ExecutableGraph`'s to refuse.'''
 
     # ------------------------------------------------------------ the bindings, its own
 
@@ -196,17 +203,15 @@ class NestingGraph[N: Label, V: Place](Frozen):
         dropping pairs with one end not kept.
         '''
         kept  = set(keep)
-        child = self._carried(graph=self.graph.subgraph(kept),
-                                within=OrderedMap((i, o) for i, o in self.within.items() if i in kept and o in kept))
-        first(check_nesting_ends_on_one_cycle(child))
-        return child
+        return self._carried(graph=self.graph.subgraph(kept),
+                             within=OrderedMap((i, o) for i, o in self.within.items() if i in kept and o in kept))
 
     def contract(self, blocks: tuple[tuple[N, ...], ...]) -> Self:
         '''
         Each block of at least two nodes contracted into one `Function` at its first
         member's place: reading what the block reads from outside, owning what it owns.
-        Every pair with an end in a block is dropped, since a box is no problem. A pair
-        outside keeps its cycle, since a contraction only adds paths, so nothing is re-asked.
+        Every pair with an end in a block is dropped, since a box is no problem. The
+        result is built through the checked constructors: every rule is asked of it.
         '''
         position = self.graph._position
         members = [n for block in blocks for n in block]
@@ -225,9 +230,9 @@ class NestingGraph[N: Label, V: Place](Frozen):
             boxed[order[0]] = Function(reads, owns)
         gone = set(members) - set(boxed)
         definitions = OrderedMap((n, boxed.get(n, d)) for n, d in self.definitions.items() if n not in gone)
-        return self._carried(graph=self.graph._carried(definitions=definitions),
-                             within=OrderedMap((i, o) for i, o in self.within.items()
-                                               if i not in members and o not in members))
+        return replace(self, graph=replace(self.graph, definitions=definitions),
+                       within=OrderedMap((i, o) for i, o in self.within.items()
+                                         if i not in members and o not in members))
 
 
 # ---------------------------------------------------------------- a proof about one
@@ -283,7 +288,7 @@ class Unreachable(Violation):
     error    = ValueError
     template = ('{inner!r} and {outer!r} are not on one cycle, so no iteration of the one '
                  're-runs the other and there is nothing for the nesting to mean -- '
-                 '`Unnest` it before cutting or rewiring the pair apart')
+                 '`Unnest` it, or keep the pair on one cycle')
 
 
 class SelfNested(Violation):

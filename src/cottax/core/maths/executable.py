@@ -6,7 +6,7 @@ problem whose edges lie right against its cycle. Typed separately: an Executable
 
 from collections.abc import Iterator
 
-from .nesting import NestingGraph, ProvedGraph
+from .nesting import NestingGraph, ProvedGraph, check_nesting_ends_on_one_cycle
 from .kinds import requirements
 from .places import Label, Place
 from ..frozen import Violation
@@ -21,6 +21,21 @@ def body_of[G: NestingGraph](g: G) -> G:
 
 
 # ---------------------------------------------------------------- the rules: what an executable graph obeys
+
+def check_nestings_share_a_cycle(b: 'ExecutableGraph') -> Iterator[Violation]:
+    '''
+    Both ends of every nesting are on one cycle (`check_nesting_ends_on_one_cycle`): a pair
+    that is not is inert to the graph, and here it would name a problem answered inside
+    an iteration that never re-runs it.
+
+    p ~ q  in  N \\ A(q)   ∀ (p, q) ∊ W
+
+    Asked first, and of the whole graph: the level rules below read `within`, and a pair
+    off its outer's cycle hides its inner from them (it is neither outermost nor a sibling
+    of what shares its cycle), so they pass a graph `steps` cannot read.
+    '''
+    yield from check_nesting_ends_on_one_cycle(b.graph)
+
 
 def check_no_requirements(b: 'ExecutableGraph') -> Iterator[Violation]:
     '''
@@ -122,11 +137,13 @@ def check_other_owns_off_cycle(b: 'ExecutableGraph') -> Iterator[Violation]:
 
 class ExecutableGraph[N: Label, V: Place](ProvedGraph[N, V]):
     '''
-    A graph proved executable: one problem per level, its body a DAG, and every
-    problem's edges against its cycle -- conditions on it, everything else off it.
+    A graph proved executable: every nesting on one cycle, one problem per level, its
+    body a DAG, and every problem's edges against its cycle -- conditions on it, everything
+    else off it.
     '''
 
-    checks = (check_no_requirements, check_one_problem_per_level, check_body_is_dag,
+    checks = (check_nestings_share_a_cycle,
+              check_no_requirements, check_one_problem_per_level, check_body_is_dag,
               check_all_conditions_on_cycle, check_other_reads_off_cycle,
               check_other_owns_off_cycle)
 
