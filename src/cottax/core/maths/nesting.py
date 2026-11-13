@@ -3,6 +3,7 @@ Nesting graph: Graph + nesting forest
 '''
 
 from collections.abc import Iterable, Iterator, Mapping
+from dataclasses import replace
 from typing import Self
 from functools import cached_property
 
@@ -209,8 +210,8 @@ class NestingGraph[N: Label, V: Place](Frozen):
         '''
         Each block of at least two nodes contracted into one `Function` at its first
         member's place: reading what the block reads from outside, owning what it owns.
-        Every pair with an end in a block is dropped, since a box is no problem. A pair
-        outside keeps its cycle, since a contraction only adds paths, so nothing is re-asked.
+        Every pair with an end in a block is dropped, since a box is no problem. The
+        result is built through the checked constructors: every rule is asked of it.
         '''
         position = self.graph._position
         members = [n for block in blocks for n in block]
@@ -229,9 +230,9 @@ class NestingGraph[N: Label, V: Place](Frozen):
             boxed[order[0]] = Function(reads, owns)
         gone = set(members) - set(boxed)
         definitions = OrderedMap((n, boxed.get(n, d)) for n, d in self.definitions.items() if n not in gone)
-        return self._carried(graph=self.graph._carried(definitions=definitions),
-                             within=OrderedMap((i, o) for i, o in self.within.items()
-                                               if i not in members and o not in members))
+        return replace(self, graph=replace(self.graph, definitions=definitions),
+                       within=OrderedMap((i, o) for i, o in self.within.items()
+                                         if i not in members and o not in members))
 
 
 # ---------------------------------------------------------------- a proof about one
