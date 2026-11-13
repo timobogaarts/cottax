@@ -12,21 +12,12 @@ from functools import reduce
 
 from ..definition import NodeDefinition
 from ...frozen import Frozen, OrderedMap, Violation, first
-from ..kinds import is_problem
-from ..nesting import NestingGraph, NestingLoop, NotAProblem, SelfNested, Unbound
+from ..nesting import NestingGraph, NestingLoop
 from ..places import Label, Place
 from .algebra import GraphOp
 
 
 # ---------------------------------------------------------------- the level
-
-class Edited[N: Label, V: Place](Frozen):
-    '''What a primitive changes: the new definitions or nesting, `None` for one left as
-    it is.'''
-
-    definitions : OrderedMap[N, NodeDefinition[V]] | None
-    within      : OrderedMap[N, N] | None
-
 
 class Primitive[N: Label, V: Place](GraphOp[N, V]):
     '''
@@ -34,22 +25,6 @@ class Primitive[N: Label, V: Place](GraphOp[N, V]):
     is asked in full, after every primitive. What a valid result would not show -- a name
     replaced, a pair dropped -- is the op's to refuse first, in its `checks_graph`.
     '''
-
-    @abstractmethod
-    def edited(self, graph: NestingGraph[N, V]) -> Edited[N, V]:
-        '''What this op changes of `graph`, which may assume every `checks_graph` case
-        holds.'''
-
-    def _apply[G: NestingGraph[N, V]](self, graph: G) -> G:
-        '''`graph` with the definitions or the nesting changed, every rule of it asked.
-        Bindings left as they are, are not built again.'''
-        e = self.edited(graph)
-        changes = {}
-        if e.definitions is not None:
-            changes['graph'] = replace(graph.graph, definitions=e.definitions)
-        if e.within is not None:
-            changes['within'] = e.within
-        return replace(graph, **changes)
 
 
 # ================================================================ the primitives
@@ -75,16 +50,18 @@ class Rebind[N: Label, V: Place](Primitive[N, V]):
     def rebinding(self, graph: NestingGraph[N, V]) -> Rebinding[N, V]:
         '''What this op removes and defines of `graph`.'''
 
-    def edited(self, graph: NestingGraph[N, V]) -> Edited[N, V]:
+    def _apply[G: NestingGraph[N, V]](self, graph: G) -> G:
         '''The bindings kept in their order, the defined ones in place; the new ones
         appended; a nesting pair through a removed node dropped (a derived op that may
         not strand one refuses first).'''
         r = self.rebinding(graph)
         definitions = {n: r.define.get(n, d) for n, d in graph.definitions.items() if n not in r.remove}
         definitions |= {n: d for n, d in r.define.items() if n not in definitions}
-        within = (OrderedMap((i, o) for i, o in graph.within.items() if i not in r.remove and o not in r.remove)
-                  if r.remove else None)
-        return Edited(OrderedMap(definitions), within)
+        return replace(
+            graph,
+            graph=replace(graph.graph, definitions=OrderedMap(definitions)),
+            within=OrderedMap((i, o) for i, o in graph.within.items()
+                              if i not in r.remove and o not in r.remove))
 
 
 # ---------------------------------------------------------------- the intent of a rebinding
@@ -258,28 +235,22 @@ class Combine[N: Label, V: Place, D: NodeDefinition](Rebind[N, V]):
 
 def check_nesting[N: Label](op: 'Nest', g: NestingGraph[N, Place]) -> Iterator[Violation]:
     """
-    What one new pair needs of the nesting alone: both ends bound; the inner not
-    already answered inside something; both problems; a forest still (not a problem
-    inside itself, no loop through what already encloses the outer). That the pair --
-    and every pair now under `inner` -- shares a cycle at its level is not asked of a
-    nesting: it is `ExecutableGraph`'s rule (`check_nestings_share_a_cycle`).
+    What only the op can say of its one new pair: the inner is not already answered
+    inside something (the pair would replace that one), and the outer is not answered
+    inside the inner (the loop named by the pair that closes it). Every other rule of a
+    nesting -- ends bound, both problems, nothing inside itself -- is the graph's, asked
+    of the result.
     """
     inner, outer = op.inner, op.outer
-    if inner not in g.definitions or outer not in g.definitions:
-        yield Unbound(inner, outer)
-        return
-    if inner == outer:
-        yield SelfNested(inner)
-        return
     if (already := g.within.get(inner)) is not None:
         yield AlreadyNested(inner, already)
         return
-    if missing := tuple(e for e in (inner, outer) if not is_problem(g.definitions[e])):
-        yield NotAProblem(missing)
-        return
-    chain = g.enclosing(outer)
-    if inner in chain:
-        yield NestingLoop(inner, outer, (outer, *chain[:chain.index(inner) + 1]))
+    chain = [outer]
+    while (at := g.within.get(chain[-1])) is not None and at not in chain:
+        chain.append(at)
+        if at == inner:
+            yield NestingLoop(inner, outer, tuple(chain))
+            return
 
 
 def check_unnesting[N: Label](op: 'Unnest', g: NestingGraph[N, Place]) -> Iterator[Violation]:
@@ -295,12 +266,10 @@ class Nest[N: Label](Primitive[N, Place]):
     inner : N
     outer : N
 
-    # `check_nesting` refuses the one new pair by what is wrong with it (already nested, a
-    # loop through what encloses the outer), before the rules of the result are asked.
     checks_graph = (check_nesting,)
 
-    def edited(self, graph: NestingGraph[N, Place]) -> Edited[N, Place]:
-        return Edited(None, graph.within | {self.inner: self.outer})
+    def _apply[G: NestingGraph[N, Place]](self, graph: G) -> G:
+        return replace(graph, within=graph.within | {self.inner: self.outer})
 
     def __repr__(self) -> str:
         return f'nest({self.inner} in {self.outer})'
@@ -315,8 +284,8 @@ class Unnest[N: Label](Primitive[N, Place]):
 
     checks_graph = (check_unnesting,)
 
-    def edited(self, graph: NestingGraph[N, Place]) -> Edited[N, Place]:
-        return Edited(None, OrderedMap((i, o) for i, o in graph.within.items() if i != self.inner))
+    def _apply[G: NestingGraph[N, Place]](self, graph: G) -> G:
+        return replace(graph, within=OrderedMap((i, o) for i, o in graph.within.items() if i != self.inner))
 
     def __repr__(self) -> str:
         return f'unnest({self.inner})'

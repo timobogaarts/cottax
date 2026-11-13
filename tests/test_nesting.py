@@ -98,7 +98,7 @@ def test_undetermining_one_end_is_refused_rather_than_dropped(nested):
 def test_the_nesting_is_a_forest_on_the_value_not_only_on_the_op(mdf):
     '''A loop is refused wherever it arrives: built from nothing, or closed by a `Nest`
     -- at length one (`x` inside itself) and at any length. The rule is the graph's
-    (`check_no_nesting_loops`, `check_nesting`), so an op never has to say it.'''
+    (`check_no_nesting_loops`); `check_nesting` only names the pair that closes one.'''
     with pytest.raises(ValueError, match='closes a loop'):
         graph_of(mdf.definitions, OrderedMap({n('mda'): n('opt'), n('opt'): n('mda')}))
     with pytest.raises(ValueError, match='inside itself'):

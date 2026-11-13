@@ -374,10 +374,10 @@ def test_every_case_a_rule_can_name_has_wording():
     with pytest.raises(KeyError, match='not a node of this graph'):     # `check_nesting_ends_bound`, at construction
         G({a: states([], ['x'])}, {a: b})
     seen(check_delete_keeps_nesting_whole(Delete((a,)), G(cyc, {a: b})))  # one end lost
-    seen(check_nesting(Nest(a, b), G({a: states([], ['x'])})))                  # unbound
-    seen(check_nesting(Nest(a, t), G(cyc)))                                     # t not a problem
+    seen(violations(NestingGraph, G({a: states([], ['x'])}).graph, OrderedMap({a: b})))   # unbound
+    seen(violations(NestingGraph, G(cyc).graph, OrderedMap({a: t})))            # t not a problem
     seen(check_nesting(Nest(a, b), G(cyc, {a: b})))                             # already
-    seen(check_nesting(Nest(a, a), G(cyc)))                                     # inside itself
+    seen(violations(NestingGraph, G(cyc).graph, OrderedMap({a: a})))            # inside itself
     seen(check_nesting(Nest(a, b), G(cyc, {b: a})))                             # loop
     seen(violations(ExecutableGraph, G({a: states([], ['x']), b: states([], ['y'])}, {a: b})))   # unreachable
     seen(check_blocks_own_something(G({a: states(['x'], []), b: states(['y'], [])}), ((a, b),)))  # a box owning nothing
