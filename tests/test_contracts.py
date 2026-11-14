@@ -19,7 +19,7 @@ from cottax.relational.contracts import (
 )
 from cottax.consumers.execution.interface import DriverImplementation
 from cottax.consumers.execution.run import check_implements_its_driver
-from cottax.core.realisation import ImplementedDriven
+from cottax.core.realisation import implemented
 from cottax.relational import Eq, Le, Relation, RelationalCondition, is_fixed_point
 
 
@@ -166,7 +166,7 @@ class Minimises(DriverImplementation[ConstrainedMinimisation]):
 def refusals(driver: DriverContract, implementation, condition=ROOT_FIND) -> list:
     node = Driven(condition, driver, *slots(driver, condition))
     return [type(v) for v in check_implements_its_driver(W('p'),
-                                                         ImplementedDriven(node, implementation))]
+                                                         implemented(node, implementation))]
 
 
 def test_an_implementation_implements_a_level_or_a_final_through_a_generic_level():

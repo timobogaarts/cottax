@@ -11,8 +11,8 @@ from jax.tree_util import GetAttrKey
 from cottax.core.frozen import OrderedMap
 from cottax.core.maths.plan import ComposedOp, Delete, GraphOp, Insert, Plan
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core import Function
-from cottax.core.realisation import ImplementedFunction
+from cottax.core import FunctionalNode
+from cottax.core.realisation import implemented
 from graphs import graph_of
 
 
@@ -28,7 +28,7 @@ Z, M, Y1, Y2, F, C, R = (V(s) for s in 'z M y1 y2 f c r'.split())
 
 
 def call(reads, owns):
-    return ImplementedFunction(Function(tuple(reads), tuple(owns)), lambda *a: None)
+    return implemented(FunctionalNode(tuple(reads), tuple(owns)), lambda *a: None)
 
 
 def source(var):

@@ -11,7 +11,7 @@ import jax.numpy as jnp
 import pytest
 from jax.tree_util import DictKey
 
-from cottax.core import Function
+from cottax.core import FunctionalNode
 from cottax.core.frozen import OrderedMap
 from cottax.core.driven import Driven
 from cottax.relational.contracts import RootFinding
@@ -24,7 +24,7 @@ from cottax.core import answer_for_places
 from cottax.pytree.consumers.execution import PytreeStructure, completed
 import purposes
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core.realisation import ImplementedDriven, ImplementedFunction
+from cottax.core.realisation import implemented
 from cottax.relational import Eq, Relation, RelationalCondition
 from cottax.relational.consumers.execution.jax_solvers import Newton
 from graphs import graph_of
@@ -51,9 +51,9 @@ def square(start=START(V('u'))) -> CallableGraph:
     '''`u * u == z`, a root find from a start at `start`.'''
     condition = RelationalCondition((Relation(V('r'), None, Eq),), (), (V('u'),), ())
     return CallableGraph(graph_of({
-        N('res'): ImplementedFunction(Function((V('u'), V('z')), (V('r'),)),
+        N('res'): implemented(FunctionalNode((V('u'), V('z')), (V('r'),)),
                                       lambda u, z: u * u - z),
-        N('h')  : ImplementedDriven(Driven(condition, RootFinding(steps=False),
+        N('h')  : implemented(Driven(condition, RootFinding(steps=False),
                                            ((start,),), ()),
                                     Newton(rtol=1e-10, atol=1e-10)),
     }))
@@ -90,8 +90,8 @@ def test_a_lookalike_of_a_var_path_is_refused_by_name():
     '''Read at the `VarPath` of its keys, it would read `a` before the run computes it.'''
     a     = Lookalike((DictKey('a'),))
     graph = CallableGraph(graph_of({
-        N('g'): ImplementedFunction(Function((V('c'),), (V('a'),)), lambda c: 10 * c),
-        N('f'): ImplementedFunction(Function((a,), (V('b'),)), lambda a: a + 1),
+        N('g'): implemented(FunctionalNode((V('c'),), (V('a'),)), lambda c: 10 * c),
+        N('f'): implemented(FunctionalNode((a,), (V('b'),)), lambda a: a + 1),
     }))
     with pytest.raises(TypeError) as refused:
         on_tree(graph, {'a': 1.0, 'b': 0.0, 'c': 2.0})
@@ -225,9 +225,9 @@ def test_a_place_is_read_under_the_key_it_is_given_under():
 
 
 def test_a_place_inside_what_a_slot_reads_whole_is_read():
-    inside = CallableGraph(graph_of({N('f'): ImplementedFunction(Function((V('area', 'x'),), (V('y'),)),
+    inside = CallableGraph(graph_of({N('f'): implemented(FunctionalNode((V('area', 'x'),), (V('y'),)),
                                                                  lambda x: x)}))
-    whole  = CallableGraph(graph_of({N('f'): ImplementedFunction(Function((V('area'),), (V('y'),)),
+    whole  = CallableGraph(graph_of({N('f'): implemented(FunctionalNode((V('area'),), (V('y'),)),
                                                                  lambda area: area)}))
     tree   = {'area': {'x': 1.0, 'w': 2.0}}
     # what is beside the read, inside the area, is not read; all of an area read whole is.
@@ -237,7 +237,7 @@ def test_a_place_inside_what_a_slot_reads_whole_is_read():
 
 
 def test_a_start_the_graph_computes_reads_nothing():
-    warm = ImplementedFunction(Function((V('z'),), (START(V('u')),)), lambda z: z)
+    warm = implemented(FunctionalNode((V('z'),), (START(V('u')),)), lambda z: z)
     graph = CallableGraph(graph_of({**square().graph.graph.definitions, N('warm'): warm}))
     tree  = {'u': 1.0, 'z': 9.0}
     assessed = cx.flat.assess(graph, read_from={cx.Inputs: tree, Start: tree})      # `u` is the root find's unknown

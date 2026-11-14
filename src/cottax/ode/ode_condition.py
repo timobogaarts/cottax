@@ -2,6 +2,7 @@
 one span, the place its time is given at, and the times the rate bends or jumps at.'''
 
 from ..core import ConditionalNode, Place, Renaming, Violation
+from ..core.maths.definition import attributes_text
 from ..core.frozen import Frozen
 
 
@@ -100,7 +101,7 @@ class OdeCondition[V: Place](ConditionalNode[V]):
         breaks = ''.join(f'; {name} at {", ".join(map(str, at))}'
                          for name, at in (('kinks', self.kinks), ('jumps', self.jumps)) if at)
         return (f'OdeCondition({"; ".join(map(repr, self.relations))}; over '
-                f'{self.span}{time}{breaks})')
+                f'{self.span}{time}{breaks}){attributes_text(self)}')
 
 
 def is_ode(node: object) -> bool:

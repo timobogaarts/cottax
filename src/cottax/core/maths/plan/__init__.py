@@ -9,4 +9,4 @@ from .algebra import ComposedOp, GraphOp, Plan, Stage, StagedOp, refusals
 from .primitive import (
     Primitive, Rebind, Rebinding, Combine, Delete, Insert, Nest, Redefine, Unnest,
 )
-from .ops import Cut, Rename, Replace, Rewire, SetOwnsInside
+from .ops import Cut, RemoveAttribute, Rename, Replace, Rewire, SetAttribute, SetOwnsInside

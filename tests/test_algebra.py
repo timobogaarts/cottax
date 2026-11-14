@@ -12,9 +12,9 @@ from jax.tree_util import GetAttrKey
 
 from cottax.core.frozen import OrderedMap
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core import Function, body_of, enclosers
+from cottax.core import FunctionalNode, body_of, enclosers
 from cottax.core.maths.nesting import BlockTooSmall, NodeInTwoBlocks, check_blocks_partition
-from cottax.core.realisation import ImplementedFunction
+from cottax.core.realisation import implemented
 from cottax.relational import Eq, Relation, RelationalCondition
 from cottax.consumers.visualization.sequencing import entries
 from graphs import graph_of
@@ -29,7 +29,7 @@ def N(*keys) -> NodePath:
 
 
 def call(reads, owns):
-    return ImplementedFunction(Function(tuple(V(r) for r in reads), tuple(V(o) for o in owns)),
+    return implemented(FunctionalNode(tuple(V(r) for r in reads), tuple(V(o) for o in owns)),
                        lambda *a: None)
 
 
@@ -81,7 +81,7 @@ def test_a_variable_still_has_exactly_one_producer():
 
 def nested(reads, owns):
     '''`call`, but each name is a *sequence* of keys, so paths can nest.'''
-    return ImplementedFunction(Function(tuple(V(*r) for r in reads), tuple(V(*o) for o in owns)),
+    return implemented(FunctionalNode(tuple(V(*r) for r in reads), tuple(V(*o) for o in owns)),
                        lambda *a: None)
 
 
@@ -305,7 +305,7 @@ def test_contract_is_the_quotient_by_the_blocks(sellar):
     it owns, bound at the first member's place; the other members gone.'''
     g = sellar.contract(((N('d2'), N('d1')),))
     assert g.nodes == (N('z'), N('d1'), N('obj'), N('con'))
-    assert g[N('d1')] == Function((V('z'),), (V('y1'), V('y2')))     # y1 / y2 internal, not read
+    assert g[N('d1')] == FunctionalNode((V('z'),), (V('y1'), V('y2')))     # y1 / y2 internal, not read
     assert g.graph.is_acyclic
     assert sellar.contract(()) == sellar
 
@@ -314,7 +314,7 @@ def test_contract_coarsens_and_never_refines(sellar):
     '''A path through a box may appear where none was: `obj` and `con` in one box
     puts `con` downstream of `y2`, which it never read.'''
     g = sellar.contract(((N('obj'), N('con')),))
-    assert g[N('obj')] == Function((V('z'), V('y1'), V('y2')), (V('f'), V('c')))
+    assert g[N('obj')] == FunctionalNode((V('z'), V('y1'), V('y2')), (V('f'), V('c')))
     assert set(g.graph.descendants([N('d2')])) >= {N('obj')}
     assert set(sellar.graph.descendants([N('d2')])) >= {N('obj'), N('con')}
 

@@ -17,7 +17,7 @@ import jax.tree_util as jtu
 import pytest
 from jax.tree_util import DictKey as D
 
-from cottax.core import Function, GraphWithValues
+from cottax.core import FunctionalNode, GraphWithValues
 from cottax.core.frozen import OrderedMap
 from cottax.consumers.execution import run as run_graph
 from cottax.assemblies.jax import flat
@@ -27,7 +27,7 @@ def to_graph(*models):
     return flat.declare(*models).graph
 from cottax.consumers.execution.jax_jit import JitGraph
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core.realisation import ImplementedFunction
+from cottax.core.realisation import implementation_of, implemented
 from graphs import graph_of
 
 
@@ -61,7 +61,7 @@ def test_re_assembling_a_graph_gives_an_equal_graph():
 
 def test_the_body_is_the_function_and_not_its_wrapper():
     '''The wrapper is a declaration: what runs is the function it wraps.'''
-    assert build()[node('gain')].implementation is gain
+    assert implementation_of(build()[node('gain')]) is gain
 
 
 def test_a_re_assembled_graph_traces_once():
@@ -99,10 +99,10 @@ def test_a_callable_value_is_a_body_when_it_compares_by_value():
 
 def _proved(implementation):
     '''The ratchet is a jit fact, so it is asked where the jit cache key is built: a
-    node carrying anything at all is a legitimate `ImplementedFunction`, and `JitGraph`
+    node carrying anything at all is a legitimately implemented function, and `JitGraph`
     is what refuses what jit cannot re-assemble.'''
     return JitGraph(graph_of(OrderedMap({
-        node('one'): ImplementedFunction(Function((var('z'),), (var('q'),)),
+        node('one'): implemented(FunctionalNode((var('z'),), (var('q'),)),
                                  implementation)})))
 
 

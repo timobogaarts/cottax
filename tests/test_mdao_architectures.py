@@ -7,11 +7,11 @@ and MDF and IDF driven agree. Fixtures and helpers are `test_cutting.py`'s.
 
 import pytest
 
-from cottax.core import Function
+from cottax.core import FunctionalNode
 from cottax.core.maths.executable import ExecutableGraph
 from cottax.core.maths.plan import Combine, Nest, Plan
 from cottax.core.frozen import OrderedMap, violations
-from cottax.core.realisation import ImplementedFunction
+from cottax.core.realisation import implemented
 from cottax.consumers.architectures import (
     IDF, MDA, MDF, Analysis, Architecture, Bodies, Boxes, Coupled, Disciplines, IndividualFeasible,
     Monolithic, MultidisciplinaryFeasible, OnCycle, Simultaneous, Solves,
@@ -55,8 +55,8 @@ def test_a_box_is_a_problem_with_its_body(implicit):
     binding order, the body here.'''
     assert body_of_problem(implicit, N('h1')) == (D1,)
     folded = implicit.contract(((N('h1'), D1), (N('h2'), D2)))
-    assert folded[D1] == Function((V('z'), V('y2')), (V('r1'), V('y1')))
-    assert folded[D2] == Function((V('z'), V('y1')), (V('r2'), V('y2')))
+    assert folded[D1] == FunctionalNode((V('z'), V('y2')), (V('r1'), V('y1')))
+    assert folded[D2] == FunctionalNode((V('z'), V('y1')), (V('r2'), V('y2')))
     assert N('h1') not in folded and folded.nodes == (OPT, D1, D2, N('obj'), N('con'))
 
 
@@ -669,7 +669,7 @@ def test_mdf_and_idf_reach_the_same_optimum():
         return VarPath((DictKey(name),))
 
     def body(reads, owns, fn):
-        return ImplementedFunction(Function(tuple(D(r) for r in reads),
+        return implemented(FunctionalNode(tuple(D(r) for r in reads),
                                             tuple(D(o) for o in owns)), fn)
 
     model = graph_of(OrderedMap({

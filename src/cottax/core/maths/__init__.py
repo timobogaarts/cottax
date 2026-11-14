@@ -15,7 +15,7 @@ kinds       graph            (graph: the bindings and the theory over them; no k
  ||          ||
  \/          \/
 nesting <----'               (has a graph, and the nesting over it; `contract`, which builds
-                              a `Function` per block; ProvedGraph, a proof's base)
+                              a `FunctionalNode` per block; ProvedGraph, a proof's base)
  ||-------> dispatch         (the one `Answer` for a graph's places, or its node names)
  ||-------> valued           (GraphWithValues: a proved graph and a value at each input)
  ||------------------------
@@ -34,9 +34,12 @@ from .places import (
     Label, Place, PlaceToPlace, comparable, comparables_in, prefixes,
 )
 from .mints import Closure, Copy, Mint, Minting, mint_of, minted, unminted
-from .definition import NodeDefinition, Renaming, relabelled
+from .definition import (
+    Attribute, NodeDefinition, Renaming, relabelled, misfits, with_attributes,
+    without_attribute,
+)
 from .kinds import (
-    ConditionalNode, Function, FunctionalNode, is_encloser, enclosers,
+    ConditionalNode, FunctionalNode, is_encloser, enclosers,
 )
 from .graph import AbstractGraph
 from .nesting import NestingGraph, ProvedGraph
@@ -45,7 +48,7 @@ from .valued import GraphWithValues
 from .plan import (
     Plan, ComposedOp, GraphOp, StagedOp, refusals,
     Rebind, Rebinding, Combine, Cut, Delete, Insert, Nest, Redefine, Rename, Replace, Rewire,
-    SetOwnsInside,
+    SetOwnsInside, SetAttribute, RemoveAttribute,
     Unnest,
 )
 from .executable import ExecutableGraph, body_of

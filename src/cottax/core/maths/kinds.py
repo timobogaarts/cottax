@@ -4,7 +4,7 @@ import dataclasses
 from collections.abc import Iterator, Mapping
 
 from ..frozen import AbstractVar, Violation
-from .definition import NodeDefinition, Renaming, relabelled
+from .definition import NodeDefinition, Renaming, attributes_text, relabelled
 from .places import Label, Place
 
 # ---------------------------------------------------------------- the two branches
@@ -20,25 +20,22 @@ def check_owns_something(d: 'NodeDefinition') -> Iterator[Violation]:
 
 
 class FunctionalNode[V: Place](NodeDefinition[V]):
-    """A computation: reads in, owns out. Only checked it produces something (beyond the base NodeDefinition checks)"""
-
-    checks = (check_owns_something,)
-
-
-class Function[V: Place](FunctionalNode[V]):
-    """A computation: what it reads and what it owns."""
+    """A computation: what it reads and what it owns. Only checked it produces something
+    (beyond the base NodeDefinition checks). """
 
     reads : tuple[V, ...]
     owns  : tuple[V, ...]
 
-    def relabel(self, renaming: Renaming[V]) -> 'Function[V]':
+    checks = (check_owns_something,)
+
+    def relabel(self, renaming: Renaming[V]) -> 'FunctionalNode[V]':
         return dataclasses.replace(self,
                                    reads = relabelled(self.reads, renaming),
                                    owns  = relabelled(self.owns,  renaming))
 
     def __repr__(self) -> str:
-        return (f'Function({", ".join(str(v) for v in self.reads)} -> '
-                f'{", ".join(str(v) for v in self.owns)})')
+        return (f'FunctionalNode({", ".join(str(v) for v in self.reads)} -> '
+                f'{", ".join(str(v) for v in self.owns)}){attributes_text(self)}')
 
 
 def check_states_something(node: 'ConditionalNode') -> Iterator[Violation]:

@@ -10,6 +10,7 @@ from collections.abc import Iterator
 from typing import Any
 
 from ...core import ConditionalNode, Label, NestingGraph, Place, Renaming, Violation, relabelled
+from ...core.maths.definition import attributes_text
 from ...core.frozen import AbstractVar
 from .driver import DriverContract, PerUnknown, Role
 
@@ -20,6 +21,10 @@ def check_pairing(driven: 'Driven') -> Iterator[Violation]:
     if isinstance(driven.condition, DrivenNode):
         yield DrivenTwice(driven.condition, driver)
         return
+    if driven.condition.attributes:
+        # until the driver is the condition's own fields: an attribute here is inside the
+        # wrapper, where nothing asking the graph's node for it would find it
+        yield ConditionCarries(driven.condition, tuple(k.__name__ for k in driven.condition.attributes))
     if not driven.contract.accepts(driven.condition):
         accepts = driven.contract.accepts
         yield NotAccepted(driver, driven.condition, getattr(accepts, '__name__', repr(accepts)))
@@ -58,8 +63,7 @@ class DrivenNode[V: Place](ConditionalNode[V]):
 
     @abstractmethod
     def undriven(self) -> ConditionalNode[V]:
-        '''The condition node with the driver taken off: what `Undrive` edits. A final
-        that cannot have it taken off refuses here.'''
+        '''The condition node with the driver taken off: what `Undrive` edits.'''
 
     def data_of(self, role: type) -> tuple[V, ...] | None:
         '''The places its driver takes `role` at, the slot read off the node: one per unknown
@@ -127,7 +131,7 @@ class Driven[V: Place](DrivenNode[V]):
                       tuple(relabelled(slot, renaming) for slot in self.reports))
 
     def __repr__(self) -> str:
-        return f'Driven({self.condition!r} by {type(self.contract).__name__})'
+        return f'Driven({self.condition!r} by {type(self.contract).__name__}){attributes_text(self)}'
 
 
 def _joined[V](slots: tuple[tuple[V, ...], ...]) -> tuple[V, ...]:
@@ -161,6 +165,14 @@ class DrivenTwice(Violation):
     error    = TypeError
     template = ('{problem!r} already carries an algorithm, so a {driver} cannot answer it '
                 'too -- `Undrive` it first')
+
+
+class ConditionCarries(Violation):
+    problem    : object
+    attributes : tuple
+    error    = TypeError
+    template = ('{problem!r} carries {attributes}, and a driver goes on a bare condition node: '
+                'what the driven node carries is set on it, once the driver is on')
 
 
 class NotAccepted(Violation):

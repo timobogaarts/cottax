@@ -11,7 +11,7 @@ from ...core import (
 )
 from ...core.frozen import OrderedMap, checked
 from ...core.driven import DrivenNode
-from ...core.realisation import ImplementedDriven, RealisedGraph, is_implemented
+from ...core.realisation import RealisedGraph, implementation_of, is_implemented
 from .interface import DriverImplementation
 from .interface_types import ConditionMap, ConditionValues, Context, Posed, Unknowns
 from .refusals import (
@@ -32,8 +32,8 @@ def check_function_callable[N: Label, V: Place](name: N, node: NodeDefinition[V]
     Callable function for functional nodes
     '''
     if isinstance(node, FunctionalNode) and is_implemented(node) \
-            and not callable(node.implementation):
-        yield NotCallable(name, node.implementation)
+            and not callable(implementation_of(node)):
+        yield NotCallable(name, implementation_of(node))
 
 
 def check_implements_its_driver[N: Label, V: Place](name: N, node: NodeDefinition[V]
@@ -46,7 +46,7 @@ def check_implements_its_driver[N: Label, V: Place](name: N, node: NodeDefinitio
     data and reports?
     '''
     if isinstance(node, DrivenNode) and is_implemented(node):
-        implementation = node.implementation
+        implementation = implementation_of(node)
         if not isinstance(implementation, DriverImplementation):
             yield NotADriverImplementation(name, implementation)
         elif not isinstance(node.contract, implementation.implements):
@@ -139,7 +139,7 @@ def _blame(e: Exception, name: Any) -> None:
 
 def _call(name: Any, node: Any, env: Env) -> None:
     '''A body returns the value at its one owned place, or one value per place.'''
-    result = node.implementation(*env.read(node.reads))
+    result = implementation_of(node)(*env.read(node.reads))
     if len(node.owns) > 1:
         try:
             got = f'{len(result)} values'
@@ -150,11 +150,11 @@ def _call(name: Any, node: Any, env: Env) -> None:
     env.write(node.owns, (result,) if len(node.owns) == 1 else result)
 
 
-def _solve(node: ImplementedDriven, interior: CallableGraph, env: Env) -> None:
+def _solve(node: DrivenNode, interior: CallableGraph, env: Env) -> None:
     conditions = InteriorConditionMap.posing(node, interior)
 
     # Solve: posed what the values mean and what is asked back, nothing of the graph
-    values, reports = node.implementation(
+    values, reports = implementation_of(node)(
         Posed(node.condition, node.contract.reports, conditions, conditions.context_places),
         env.read(conditions.context_places),
         dict(zip(node.contract.takes, map(env.read, node.data))))

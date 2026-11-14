@@ -14,13 +14,13 @@ from jax.tree_util import GetAttrKey
 from cottax.core.frozen import OrderedMap
 from cottax.relational import Min, Objective
 from cottax.core.maths.plan import Cut, Insert, Plan
-from cottax.core import ConditionalNode, Function, body_of, enclosers
+from cottax.core import ConditionalNode, FunctionalNode, body_of, enclosers
 from cottax.core.driven import Assign, Driven, DriverContract, is_driven
 from cottax.core.driven import Start
 from cottax.assemblies.jax import absolute
 
 assign = absolute.assign
-from cottax.core.realisation import ImplementedDriven, ImplementedFunction
+from cottax.core.realisation import implemented
 from cottax.relational import (
     Eq, Le, Relation, RelationalCondition, is_fixed_point, is_optimise, is_root_find,
 )
@@ -50,7 +50,7 @@ X, Z, M, Y1, Y2, F, C, R = (V(s) for s in 'x z M y1 y2 f c r'.split())
 
 
 def call(reads, owns):
-    return ImplementedFunction(Function(tuple(reads), tuple(owns)), lambda *a: None)
+    return implemented(FunctionalNode(tuple(reads), tuple(owns)), lambda *a: None)
 
 
 def source(var):
@@ -308,7 +308,7 @@ def test_a_fold_refuses_a_node_that_is_not_the_kind_it_declared(two_problems):
     what it found -- against `+`'s own `TypeError`, which names only two types.'''
     with pytest.raises(TypeError, match='well-defined over one kind only') as e:
         Combine(PROBLEM(N('mda')), (N('ha'), N('fb'),), RelationalCondition)(two_problems)
-    assert '.fb' in str(e.value) and 'Implemented' in str(e.value)
+    assert '.fb' in str(e.value) and 'FunctionalNode' in str(e.value)
     with pytest.raises(KeyError, match='not a node of this graph'):
         Combine(PROBLEM(N('mda')), (N('ha'), N('nope'),), RelationalCondition)(two_problems)
 
@@ -326,11 +326,8 @@ def test_a_fold_refuses_a_driven_problem(two_problems):
 def test_a_fold_declares_what_it_folds(two_problems):
     '''The kind is the op's intent, so it is a field and not something read back off the
     graph: a replay against a changed model refuses rather than folding what it finds.
-    A kind with no `+` at all is refused when the op is built, before any graph.'''
-    with pytest.raises(TypeError, match='defines no `\\+`'):
-        Combine(PROBLEM(N('mda')), (N('ha'), N('hb'),), ImplementedDriven)
-    # A level defines no `+` either -- it leaves one to its finals, so it is refused too
-    # and the kind names the final that is actually folded.
+    A kind with no `+` at all is refused when the op is built, before any graph: a level
+    defines none -- it leaves one to its finals -- so the kind names the final folded.'''
     with pytest.raises(TypeError, match='defines no `\\+`'):
         Combine(PROBLEM(N('mda')), (N('ha'), N('hb'),), ConditionalNode)
 
@@ -505,9 +502,9 @@ def stated(*relations) -> RelationalCondition:
     return RelationalCondition(relations, (), (), ())
 
 
-def plain(reads, owns) -> Function:
+def plain(reads, owns) -> FunctionalNode:
     '''A computation with nothing to call: all these edits see.'''
-    return Function(tuple(reads), tuple(owns))
+    return FunctionalNode(tuple(reads), tuple(owns))
 
 
 def graph_with(statement: RelationalCondition) -> NestingGraph:

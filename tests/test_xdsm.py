@@ -19,8 +19,8 @@ from cottax.relational import Eq, Le, Relation, RelationalCondition
 from cottax.core.maths.plan import Cut
 from cottax.relational.rewrites import FixedPointCut
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core import Function
-from cottax.core.realisation import ImplementedFunction
+from cottax.core import FunctionalNode
+from cottax.core.realisation import implemented
 import purposes
 from cottax.relational.consumers.visualization import FIXED_POINT, OPTIMISE
 from cottax.consumers.visualization.style import DARK, PYXDSM, TERRACOTTA
@@ -69,7 +69,7 @@ def N(*keys) -> NodePath:
 
 
 def call(reads, owns):
-    return ImplementedFunction(Function(tuple(V(r) for r in reads), tuple(V(o) for o in owns)),
+    return implemented(FunctionalNode(tuple(V(r) for r in reads), tuple(V(o) for o in owns)),
                        lambda *a: None)
 
 
@@ -179,7 +179,7 @@ def mdf():
     hat_y2 = Cut(V('y2'), [N('d1')], HAT).copy
     return graph_of(OrderedMap({
         N('opt'): optimise(V('f'), (V('z'),)),
-        N('d1') : ImplementedFunction(Function((V('z'), hat_y2), (V('y1'),)), lambda *a: None),
+        N('d1') : implemented(FunctionalNode((V('z'), hat_y2), (V('y1'),)), lambda *a: None),
         N('d2') : call(['z', 'y1'], ['y2']),
         N('mda'): fixed_point((V('y2'),), (hat_y2,)),
         N('obj'): call(['z', 'y1', 'y2'], ['f']),
@@ -201,7 +201,7 @@ def test_a_problems_conditions_are_slotted_by_what_each_one_says():
             (Relation(V('h'), None, Eq), Relation(V('g'), None, Le),
              Relation(hat_y2, V('y2'), Eq)),
             (Objective(V('f'), Min),), (V('z'), hat_y2), ()),
-        N('m')  : ImplementedFunction(Function((V('z'), hat_y2),
+        N('m')  : implemented(FunctionalNode((V('z'), hat_y2),
                                        (V('f'), V('g'), V('h'), V('y2'))),
                               lambda *a: None),
     }))
@@ -343,8 +343,8 @@ def test_two_places_spelled_alike_are_refused_naming_both():
     drawn from whichever owner came last.'''
     ab, a_b = VarPath((DictKey('a'), DictKey('b'))), VarPath((DictKey('a'), GetAttrKey('b')))
     g = graph_of(OrderedMap({
-        N('p'): Function((), (ab,)), N('q'): Function((), (a_b,)),
-        N('r'): Function((ab,), (V('z'),)),
+        N('p'): FunctionalNode((), (ab,)), N('q'): FunctionalNode((), (a_b,)),
+        N('r'): FunctionalNode((ab,), (V('z'),)),
     }))
     for draw in (xdsm_struct, render_xdsm_svg):
         with pytest.raises(ValueError) as e:
@@ -354,7 +354,7 @@ def test_two_places_spelled_alike_are_refused_naming_both():
 
 def test_two_node_names_spelled_alike_are_refused_naming_both():
     n0, s0 = NodePath((DictKey(0),)), NodePath((SequenceKey(0),))
-    g = graph_of(OrderedMap({n0: Function((), (V('x'),)), s0: Function((V('x'),), (V('y'),))}))
+    g = graph_of(OrderedMap({n0: FunctionalNode((), (V('x'),)), s0: FunctionalNode((V('x'),), (V('y'),))}))
     with pytest.raises(ValueError) as e:
         render_xdsm_svg(g)
     assert e.value.args[0] == SpelledAlike(n0, s0, '[0]').message

@@ -6,7 +6,7 @@ from collections.abc import Callable, Iterator, Mapping
 
 from ...core import (
     ComposedOp, ConditionalNode, Label, NestingGraph, NodeDefinition, Place, Redefine, Violation,
-    violations,
+    misfits, violations,
 )
 from .driver import DriverContract
 from .nodes import Driven, DrivenTwice, is_driven
@@ -77,11 +77,14 @@ def check_undrives_a_driven_node(op: 'Undrive', graph: NestingGraph) -> Iterator
     node = graph[op.problem]
     if not is_driven(node):
         yield NotDriven(op.problem, type(node).__name__)
+    else:
+        yield from misfits(node.undriven(), node.attributes)
 
 
 class Undrive[N: Label, V: Place](Redefine[N, V]):
     '''The inverse of `Assign`: the condition node alone again, and the driver's places
-    gone with it -- `undriven`, asked of the node, so a wrapper refuses for itself.'''
+    gone with it. What the driven node carries is carried onto it and must fit it: what
+    runs the driver does not, so it comes off first.'''
 
     problem : N
 

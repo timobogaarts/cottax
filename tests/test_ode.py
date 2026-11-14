@@ -18,7 +18,7 @@ import pytest
 import cottax.assemblies.jax as cx
 
 from cottax.core import (
-    AbstractGraph, Combine, ExecutableGraph, Function, GaussSeidel, GraphWithValues,
+    AbstractGraph, Combine, ExecutableGraph, FunctionalNode, GaussSeidel, GraphWithValues,
     NestingGraph, Rename,
 )
 from cottax.core.maths.definition import OwnsTwice, ReadsOwn
@@ -28,7 +28,7 @@ from cottax.relational.rewrites import Determine, Undetermine
 from cottax.core.frozen import OrderedMap, choice, violations
 from cottax.core.maths.plan import Nest, Plan, refusals
 from cottax.core.driven import Assign, DrivenGraph, Start
-from cottax.core.realisation import Implement, ImplementedFunction
+from cottax.core.realisation import Implement, implemented
 from cottax.consumers.declaration import declare
 from cottax.consumers.execution import CallableGraph, run
 from cottax.consumers.execution.interface import DriverImplementation
@@ -146,7 +146,7 @@ def test_an_ode_determines_its_states_and_nothing_else():
     x, v, r, q = Word('x'), Word('v'), Word('r'), Word('q')
     ode = OdeCondition((Dt(x, r, Word('x0')), Dt(v, q, Word('v0'))), Word('t'))
     g = NestingGraph(AbstractGraph(OrderedMap({
-        Word('body'): Function((x, v), (r, q)), Word('ode'): ode})), OrderedMap())
+        Word('body'): FunctionalNode((x, v), (r, q)), Word('ode'): ode})), OrderedMap())
     with pytest.raises(TypeError, match='what it owns inside is not a choice'):
         Undetermine(Word('ode')).apply(g)
     assert [type(v) for v in refusals(Determine(Word('ode'), (x,)), g)] == [OwnsInsideNotAChoice]
@@ -175,7 +175,7 @@ def test_over_a_toy_place_an_ode_is_proved_rewritten_driven_and_run_on_floats():
     '''Asked of a place only what core asks: `Word` is segments and a `str`.'''
     w = Word
     g = NestingGraph(AbstractGraph(OrderedMap({
-        w('body'): ImplementedFunction(Function((w('x'), w('k')), (w('r'),)), lambda x, k: -k * x),
+        w('body'): implemented(FunctionalNode((w('x'), w('k')), (w('r'),)), lambda x, k: -k * x),
         w('ode') : OdeCondition((Dt(w('x'), w('r'), w('x0')),), w('span')),
     })), OrderedMap())
     assert ExecutableGraph(g).graph == g

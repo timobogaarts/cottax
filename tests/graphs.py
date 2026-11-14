@@ -7,8 +7,8 @@ from jax.tree_util import GetAttrKey, tree_leaves_with_path
 from cottax.core.frozen import OrderedMap
 from cottax.core.maths.graph import AbstractGraph
 from cottax.core.maths.nesting import NestingGraph
-from cottax.core import Function, NodeDefinition
-from cottax.core.realisation import ImplementedFunction
+from cottax.core import FunctionalNode, NodeDefinition
+from cottax.core.realisation import implemented
 from cottax.pytree.path import NodePath, VarPath
 from cottax.relational import Eq, Min, Objective, Relation, RelationalCondition
 
@@ -29,7 +29,7 @@ def three_problems(*nesting: tuple[str, str]) -> NestingGraph:
     def V(k): return VarPath((GetAttrKey(k),))
     def N(k): return NodePath((GetAttrKey(k),))
     def call(reads, owns):
-        return ImplementedFunction(Function(tuple(map(V, reads)), tuple(map(V, owns))),
+        return implemented(FunctionalNode(tuple(map(V, reads)), tuple(map(V, owns))),
                                    lambda *a: 0.0)
     return graph_of({
         N('p')  : RelationalCondition((), (Objective(V('f'), Min),), (V('z'),), ()),

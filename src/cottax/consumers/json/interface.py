@@ -31,11 +31,11 @@ class Spelling[T: NodeDefinition](Answer):
 
     @abstractmethod
     def write[V: Place](self, node: T, w: Writer[Any, V]) -> dict:
-        '''The node's fields; recursive through wrapped nodes (Driven/Implemented)'''
+        '''The node's fields; recursive through a wrapped node (Driven)'''
 
     @abstractmethod
     def read[V: Place](self, data: dict, r: Reader[Any, V]) -> T:
-        '''The node `data` spells: recursive through wrapped nodes (Driven/Implemented)'''
+        '''The node `data` spells: recursive through a wrapped node (Driven)'''
 
 
 class PlaceCodec[V: Place](Answer):

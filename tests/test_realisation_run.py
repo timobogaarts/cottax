@@ -16,7 +16,7 @@ from typing import Any
 
 from jax.tree_util import DictKey
 
-from cottax.core import Function, GraphWithValues
+from cottax.core import FunctionalNode, GraphWithValues
 from cottax.core.maths.plan import Plan, Rename
 from cottax.consumers.execution import CallableGraph, run as run_graph
 from cottax.consumers.execution.interface import DriverImplementation
@@ -29,7 +29,7 @@ import purposes
 from cottax.core.frozen import OrderedMap
 from cottax.pytree.path import NodePath, VarPath
 from cottax.core.driven import DriverContract, PerProblem, PerUnknown
-from cottax.core.realisation import ImplementedFunction
+from cottax.core.realisation import implemented
 from cottax.relational import Eq, Relation, RelationalCondition, is_root_find
 
 
@@ -41,8 +41,8 @@ X, K, U, Y, R_U, F = (v(s) for s in ('x', 'k', 'u', 'y', 'r_u', 'f'))
 CLOSE = NodePath((DictKey('DiscA.close'),))
 
 
-def call(reads, owns, fn) -> ImplementedFunction:
-    return ImplementedFunction(Function(tuple(reads), tuple(owns)), fn)
+def call(reads, owns, fn) -> 'FunctionalNode':
+    return implemented(FunctionalNode(tuple(reads), tuple(owns)), fn)
 
 
 def model():

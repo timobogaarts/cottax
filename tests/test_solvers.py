@@ -12,7 +12,7 @@ import jax.numpy as jnp
 import pytest
 from jax.tree_util import DictKey
 
-from cottax.core import Function, GraphWithValues
+from cottax.core import FunctionalNode, GraphWithValues
 from cottax.relational import Min, Objective
 from cottax.core.frozen import OrderedMap
 from cottax.core.driven import Driven
@@ -22,7 +22,7 @@ from cottax.consumers.execution import CallableGraph, run
 from cottax.consumers.execution.interface_types import ConditionMap, Posed
 import purposes
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core.realisation import ImplementedDriven, ImplementedFunction
+from cottax.core.realisation import implemented
 from cottax.relational import Eq, Le, Relation, RelationalCondition
 from cottax.relational.consumers.execution.jax_solvers.canonical_nlp import Canonical, canonical
 from cottax.relational.consumers.execution.jax_solvers import BFGS, Newton, Picard
@@ -168,12 +168,12 @@ def test_a_newton_counts_squareness_in_leaves_not_relations():
 
 # ---------------------------------------------------------------- run through a graph
 
-def call(reads, owns, fn) -> ImplementedFunction:
-    return ImplementedFunction(Function(tuple(reads), tuple(owns)), fn)
+def call(reads, owns, fn) -> 'FunctionalNode':
+    return implemented(FunctionalNode(tuple(reads), tuple(owns)), fn)
 
 
-def driven(condition, driver, implementation, reports=()) -> ImplementedDriven:
-    return ImplementedDriven(driven_node(condition, driver, reports), implementation)
+def driven(condition, driver, implementation, reports=()) -> 'Driven':
+    return implemented(driven_node(condition, driver, reports), implementation)
 
 
 def cosine(driver, implementation, reports=()) -> CallableGraph:

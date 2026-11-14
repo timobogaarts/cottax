@@ -16,7 +16,7 @@ from typing import Any
 import pytest
 
 from cottax.core import (
-    AbstractGraph, Function, GraphWithValues, NestingGraph, Solve, violations,
+    AbstractGraph, FunctionalNode, GraphWithValues, NestingGraph, Solve, violations,
 )
 from cottax.core.maths.valued import InputMissing, NotAPlace, OwnedGiven
 from cottax.core.frozen import OrderedMap
@@ -30,7 +30,7 @@ from cottax.consumers.execution.refusals import (
 from cottax.consumers.execution.interface import DriverImplementation
 from cottax.consumers.execution.run import InteriorConditionMap
 from cottax.core.realisation import (
-    ImplementDrivers, ImplementedDriven, ImplementedFunction, RealisedGraph, Unimplement,
+    ImplementDrivers, implemented, RealisedGraph, Unimplement,
 )
 from cottax.relational import Eq, Relation, RelationalCondition, is_root_find
 
@@ -135,8 +135,8 @@ class Returns(DriverImplementation[Newton]):
 
 # ---------------------------------------------------------------- the model
 
-def call(reads, owns, fn) -> ImplementedFunction:
-    return ImplementedFunction(Function(tuple(reads), tuple(owns)), fn)
+def call(reads, owns, fn) -> 'FunctionalNode':
+    return implemented(FunctionalNode(tuple(reads), tuple(owns)), fn)
 
 
 def places(problem: Word, unknown: Word, driver: DriverContract) -> tuple:
@@ -146,9 +146,9 @@ def places(problem: Word, unknown: Word, driver: DriverContract) -> tuple:
             tuple((W(f'^{role.__name__.lower()}.{problem}'),) for role in driver.reports))
 
 
-def driven(problem: Word, condition, implementation=newton, driver=Newton()) -> ImplementedDriven:
+def driven(problem: Word, condition, implementation=newton, driver=Newton()) -> 'Driven':
     (unknown,) = condition.owns_inside
-    return ImplementedDriven(Driven(condition, driver, *places(problem, unknown, driver)),
+    return implemented(Driven(condition, driver, *places(problem, unknown, driver)),
                              implementation)
 
 
@@ -333,9 +333,9 @@ def test_implementations_are_chosen_by_contract_and_chosen_again_on_what_the_gra
     bare = Unimplement((CLOSE,)).apply(flat().graph)
     op   = ImplementDrivers(OrderedMap({Bisection: Returns(print), Newton: newton}))
     (implement,) = op.composed(bare)
-    assert implement.implementations == OrderedMap({CLOSE: newton})
+    assert implement.values == OrderedMap({CLOSE: newton})
     assert math.isclose(ran(CallableGraph(op.apply(bare)))[U], exact_u(1.0), rel_tol=1e-12)
-    with pytest.raises(ValueError, match='nothing to implement'):
+    with pytest.raises(ValueError, match='no attribute to set'):
         op.apply(flat().graph)
 
 
@@ -343,7 +343,7 @@ def test_the_most_specific_contract_is_chosen_whatever_order_the_map_is_written_
     bare = Unimplement((CLOSE,)).apply(flat().graph)
     for written in ({DriverContract: Returns(print), Newton: newton}, {Newton: newton, DriverContract: Returns(print)}):
         (implement,) = ImplementDrivers(OrderedMap(written)).composed(bare)
-        assert implement.implementations == OrderedMap({CLOSE: newton})
+        assert implement.values == OrderedMap({CLOSE: newton})
 
 
 

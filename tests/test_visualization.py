@@ -16,9 +16,9 @@ import pytest
 from jax.tree_util import DictKey, GetAttrKey
 
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core import ExecutableGraph, Function, SteppedExecutableGraph
+from cottax.core import ExecutableGraph, FunctionalNode, SteppedExecutableGraph
 from cottax.core.maths.plan import Cut, Plan
-from cottax.core.realisation import ImplementedFunction
+from cottax.core.realisation import implemented
 from cottax.core.frozen import OrderedMap
 from cottax.consumers.visualization.style import DARK, PYXDSM, TERRACOTTA
 from cottax.pytree.consumers.visualization import NoFormat
@@ -57,7 +57,7 @@ def DN(*keys) -> NodePath:
 
 
 def call(reads, owns):
-    return ImplementedFunction(Function(tuple(reads), tuple(owns)), lambda *a: None)
+    return implemented(FunctionalNode(tuple(reads), tuple(owns)), lambda *a: None)
 
 
 @pytest.fixture

@@ -16,7 +16,7 @@ import sys
 import pytest
 
 from cottax.core import (
-    AbstractGraph, ComposedOp, ConditionalNode, Cut, ExecutableGraph, Function, GaussSeidel,
+    AbstractGraph, ComposedOp, ConditionalNode, Cut, ExecutableGraph, FunctionalNode, GaussSeidel,
     GraphWithValues, Insert, Mint, Minting, NestingGraph, is_encloser, minted,
 )
 from cottax.core.frozen import OrderedMap, answer, answers, choice, violations
@@ -73,7 +73,7 @@ class Raw(Vanishes):
 def coupled(place, kind):
     p = lambda *s: place(s)
     return NestingGraph(AbstractGraph(OrderedMap({
-        p('body'): Function((p('k'), p('u')), (p('r'),)),
+        p('body'): FunctionalNode((p('k'), p('u')), (p('r'),)),
         p('cond'): kind((p('r'),), (p('u'),)),
     })), OrderedMap())
 
@@ -363,7 +363,7 @@ class Gap(ComposedOp):
         copies = tuple(c.copy for c in self.cuts)
         gaps   = tuple(map(GapOf(), copies))
         return (*self.cuts, Insert(OrderedMap({
-            minted(GapOf(), self.at): Function((*(c.var for c in self.cuts), *copies), gaps),
+            minted(GapOf(), self.at): FunctionalNode((*(c.var for c in self.cuts), *copies), gaps),
             self.at: Zero(gaps, copies)})))
 
 
@@ -383,8 +383,8 @@ def test_the_toy_is_placed_by_an_architecture_closing_its_own_way():
     '''Two toy models coupled through their states: an MDA asks each what it is, cuts once,
     closes the cut by the toy's `Gap` and nests both models in the closure.'''
     g = NestingGraph(AbstractGraph(OrderedMap({
-        T('a'): Function((T('k'), T('u'), T('v')), (T('ra'),)), T('A'): Zero((T('ra'),), (T('u'),)),
-        T('b'): Function((T('u'), T('v')), (T('rb'),)),         T('B'): Zero((T('rb'),), (T('v'),)),
+        T('a'): FunctionalNode((T('k'), T('u'), T('v')), (T('ra'),)), T('A'): Zero((T('ra'),), (T('u'),)),
+        T('b'): FunctionalNode((T('u'), T('v')), (T('rb'),)),         T('B'): Zero((T('rb'),), (T('v'),)),
     })), OrderedMap())
     out = (Plan(g) + MDA(GaussSeidel(), ClosedByGap())).graph
     closure, hat = Tok((purposes.Closure(), 'a')), Tok((purposes.Copy(), 'v'))

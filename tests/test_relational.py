@@ -22,10 +22,10 @@ from cottax.relational.relational_condition import (
     FixedAndMoved, FixedRelation, NotARel, ParameterUnrelated, RelatesNothing,
 )
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core import Function, enclosers, violations
+from cottax.core import FunctionalNode, enclosers, violations
 from cottax.core.maths.definition import ReadsOwn
 from cottax.core.maths.kinds import ReadOnBothSides
-from cottax.core.realisation import ImplementedFunction
+from cottax.core.realisation import implemented
 from cottax.core.driven import Driven
 from cottax.relational.contracts import RootFinding, is_iteration
 from cottax.assemblies.jax import absolute
@@ -71,8 +71,8 @@ def stated(*relations) -> RelationalCondition:
 
 
 def model() -> dict:
-    return {n('m'): ImplementedFunction(
-        Function((v('u'),), (v('gu'), v('r'), v('cost'), v('g1'))),
+    return {n('m'): implemented(
+        FunctionalNode((v('u'),), (v('gu'), v('r'), v('cost'), v('g1'))),
         lambda u: (0.5 * u + 1.0, u, u, u),
     )}
 
@@ -349,7 +349,7 @@ def test_a_shape_predicate_answers_false_off_a_relational_condition():
     A function, or a driven node, has no relations to read: every predicate answers
     False, and a drawing gives it no category.
     """
-    body = ImplementedFunction(Function((v('u'),), (v('r'),)), lambda u: u)
+    body = implemented(FunctionalNode((v('u'),), (v('r'),)), lambda u: u)
     driven = Driven(root_find((v('r'),), (v('u'),)), RootFinding(steps=False),
                     ((purposes.Start()(v('u')),),), ())
     for node in (body, driven):
@@ -389,7 +389,7 @@ def test_the_join_refuses_anything_but_a_relational_condition_on_either_side():
     plain  = root_find((v('r'),), (v('u'),))
     driven = Driven(root_find((v('r2'),), (v('x'),)), RootFinding(steps=False),
                     ((purposes.Start()(v('x')),),), ())
-    body   = ImplementedFunction(Function((v('u'),), (v('r'),)), lambda u: u)
+    body   = implemented(FunctionalNode((v('u'),), (v('r'),)), lambda u: u)
     for a, b in ((plain, driven), (driven, plain), (body, body),
                  (optimise(v('f'), (v('x'),)), driven)):
         with pytest.raises(TypeError, match='unsupported operand'):

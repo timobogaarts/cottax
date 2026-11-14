@@ -6,7 +6,7 @@ jax, nothing computed: the graph's jaxpr and every place's shape.
 import dataclasses
 import functools
 import types
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from typing import Any
 
 import jax
@@ -15,7 +15,7 @@ from jax.tree_util import tree_leaves
 
 from ...core import GraphWithValues, Label, NodeDefinition, Place, Violation
 from ...core.frozen import Frozen, OrderedMap
-from ...core.realisation import is_implemented
+from ...core.realisation import implementation_of, is_implemented
 from .run import CallableGraph, blamed, check_callable, run
 from .refusals import BodyByIdentity, PartialBody, TraceFailed, Unhashable
 
@@ -40,6 +40,10 @@ def _unhashable(x: object) -> Iterator[str]:
         for f in dataclasses.fields(x):
             yield from _unhashable(getattr(x, f.name))
         return
+    if isinstance(x, Mapping):                    # a node's attributes, whether or not a pytree
+        for value in x.values():
+            yield from _unhashable(value)
+        return
     for leaf in tree_leaves(x):
         if leaf is not x and dataclasses.is_dataclass(leaf) and not isinstance(leaf, type):
             yield from _unhashable(leaf)
@@ -59,7 +63,7 @@ def check_reassembles[N: Label, V: Place](name: N, node: NodeDefinition[V]
     '''
     if not is_implemented(node):
         return
-    implementation = node.implementation
+    implementation = implementation_of(node)
     if isinstance(implementation, types.MethodType):
         yield BodyByIdentity(name, implementation)
     if isinstance(implementation, functools.partial):

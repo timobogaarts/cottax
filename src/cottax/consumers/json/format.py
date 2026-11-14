@@ -6,14 +6,13 @@ from collections.abc import Callable, Iterator
 from typing import Any
 
 from ...core import (
-    AbstractGraph, Function, Label, NestingGraph, NodeDefinition, Place, Violation,
+    AbstractGraph, FunctionalNode, Label, NestingGraph, NodeDefinition, Place, Violation,
     answer_for_labels, answer_for_places,
 )
 from ...core.frozen import Frozen, OrderedMap, answer, answered, answers, checked, dotted, violations
+from ...core import with_attributes
 from ...core.driven import Driven
-from ...core.realisation import (
-    Implemented, ImplementedDriven, ImplementedFunction, NotImplementable, implemented_as,
-)
+from ...core.realisation import Implementation, implementation_of, implemented
 
 
 from .interface import LabelCodec, PlaceCodec, Spelling
@@ -24,6 +23,9 @@ from .refusals import (
 
 
 FORMAT, VERSION = 'cottax.graph', 1
+
+IMPLEMENTED = 'implemented'
+'''The kind a node carrying what runs it is written as: the bare node, and the implementation.'''
 
 def loaded(name: str) -> object:
     '''What `module:qualname` names, among the modules already imported: a file imports
@@ -140,9 +142,17 @@ class NodeWriter[N: Label, V: Place](Frozen):
         return _Refused(Unexportable(self.name, what, reason))
 
     def node(self, node: NodeDefinition[V]) -> dict:
-        '''`node` by its final's spelling; without implementations, a wrapped one as its node.'''
-        if isinstance(node, Implemented) and not self.implementations:
-            return self.node(node.node)
+        '''`node` by its final's spelling; one carrying what runs it as that around the bare
+        node, or, without implementations, as the bare node. A spelling writes a node's
+        fields, so any other attribute is refused, where it would be dropped.'''
+        if node.attributes:
+            if others := [k.__name__ for k in node.attributes if k is not Implementation]:
+                raise self.refuse(', '.join(others), 'an attribute this format has no spelling for')
+            bare = self.node(with_attributes(node, OrderedMap()))
+            if not self.implementations:
+                return bare
+            return {'kind': IMPLEMENTED, 'node': bare,
+                    'implementation': self.implementation(implementation_of(node))}
         if (spelling := answer(Spelling, node, None)) is None:
             raise self.refuse(dotted(type(node)),
                               'no spelling is registered for its class: import the module that '
@@ -187,6 +197,8 @@ class NodeReader[N: Label, V: Place](Frozen):
     def places(self, data: list) -> tuple[V, ...]:      return tuple(self.place(p) for p in data)
 
     def node(self, data: dict) -> NodeDefinition[V]:
+        if data['kind'] == IMPLEMENTED:
+            return implemented(self.node(data['node']), self.implementation(data['implementation']))
         if (spelling := by_word(Spelling, 'kind').get(data['kind'])) is None:
             raise UnknownKind(self.name, data['kind']).raised
         return spelling.read(data, self)
@@ -223,15 +235,15 @@ def _lookup(module: str, qualname: str) -> object:
 
 # ---------------------------------------------------------------- core's own spellings
 
-@answers(Function)
-class FunctionSpelling(Spelling[Function]):
+@answers(FunctionalNode)
+class FunctionSpelling(Spelling[FunctionalNode]):
     kind = 'function'
 
-    def write[V: Place](self, node: Function[V], w: Writer[Any, V]) -> dict:
+    def write[V: Place](self, node: FunctionalNode[V], w: Writer[Any, V]) -> dict:
         return {'reads': w.places(node.reads), 'owns': w.places(node.owns)}
 
-    def read[V: Place](self, data: dict, r: Reader[Any, V]) -> Function[V]:
-        return Function(r.places(data['reads']), r.places(data['owns']))
+    def read[V: Place](self, data: dict, r: Reader[Any, V]) -> FunctionalNode[V]:
+        return FunctionalNode(r.places(data['reads']), r.places(data['owns']))
 
 
 @answers(Driven)
@@ -255,19 +267,3 @@ class DrivenSpelling(Spelling[Driven]):
         return Driven(r.node(data['condition']), driver,
                       tuple(r.places(s['places']) for s in data['data']),
                       tuple(r.places(s['places']) for s in data['reports']))
-
-
-@answers(ImplementedFunction, ImplementedDriven)
-class ImplementedSpelling(Spelling[Implemented]):
-    '''The node and what runs it; the final is the node's level's (`implemented_as`).'''
-
-    kind = 'implemented'
-
-    def write[V: Place](self, node: Implemented[V], w: Writer[Any, V]) -> dict:
-        return {'node': w.node(node.node), 'implementation': w.implementation(node.implementation)}
-
-    def read[V: Place](self, data: dict, r: Reader[Any, V]) -> Implemented[V]:
-        inner = r.node(data['node'])
-        if (final := implemented_as(inner)) is None:
-            raise NotImplementable(r.name, type(inner).__name__).raised
-        return final(inner, r.implementation(data['implementation']))

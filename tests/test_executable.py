@@ -14,7 +14,7 @@ from cottax.core.maths.steps import SteppedExecutableGraph
 from cottax.core.driven import Assign, DriverContract
 from cottax.consumers.execution import CallableGraph, run
 from cottax.consumers.execution.interface import DriverImplementation
-from cottax.core.realisation import Implement, ImplementDrivers, ImplementedFunction, is_implemented
+from cottax.core.realisation import Implement, ImplementDrivers, implemented, is_implemented
 from cottax.consumers.visualization.sequencing import Run, Solve, entries
 from cottax.consumers.visualization.kinds import problem_type_of
 from cottax.core.maths.plan import Nest, Plan
@@ -24,7 +24,7 @@ from cottax.relational import (
 )
 from cottax.core import Combine, GraphWithValues
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core import Function, enclosers
+from cottax.core import FunctionalNode, enclosers
 import purposes
 from graphs import graph_of
 from cottax.core.maths.nesting import NestingGraph
@@ -41,8 +41,8 @@ def N(*keys) -> NodePath:
 
 
 def call(reads, owns, fn=lambda *a: None):
-    return ImplementedFunction(
-        Function(reads=tuple(V(r) for r in reads), owns=tuple(V(o) for o in owns)), fn)
+    return implemented(
+        FunctionalNode(reads=tuple(V(r) for r in reads), owns=tuple(V(o) for o in owns)), fn)
 
 
 def problem(reads, owns):
@@ -555,10 +555,10 @@ def test_a_callable_graph_is_an_executable_one_with_more_proved(two_problems, co
 
 
 def test_a_declared_function_is_executable_but_not_callable(two_problems):
-    '''A bare `Function` is drawn, rewritten and proved executable; only running it is
+    '''A bare `FunctionalNode` is drawn, rewritten and proved executable; only running it is
     refused, and the refusal names `Implement`.'''
     g = graph_of(OrderedMap({**dict(two_problems.definitions.items()),
-                          N('post'): Function((V('f'),), (V('g'),))}))
+                          N('post'): FunctionalNode((V('f'),), (V('g'),))}))
     ExecutableGraph(g)
     with pytest.raises(ValueError, match=r'\.post.*`Implement` it'):
         CallableGraph(driven(g, solving(N('ha')), solving(N('hb'))))
@@ -567,7 +567,7 @@ def test_a_declared_function_is_executable_but_not_callable(two_problems):
 def test_implement_fills_the_slot_the_proof_refuses(two_problems):
     '''`Implement` wraps the declaration, so the same graph proves callable.'''
     g = graph_of(OrderedMap({**dict(two_problems.definitions.items()),
-                          N('post'): Function((V('f'),), (V('g'),))}))
+                          N('post'): FunctionalNode((V('f'),), (V('g'),))}))
     g = driven(g, solving(N('ha')), solving(N('hb')),
                Implement(OrderedMap({N('post'): lambda f: 2 * f})))
     assert ran(g)[V('g')] == pytest.approx(6.0)
