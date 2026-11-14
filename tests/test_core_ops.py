@@ -12,7 +12,7 @@ Names are built by hand from key entries, as in `test_algebra.py` and `test_rewr
 import pytest
 from jax.tree_util import GetAttrKey
 
-from cottax.core import Function, problems
+from cottax.core import Function, enclosers
 from cottax.core.maths.plan import Cut, Determine, Insert, Plan, Undetermine, refusals
 from cottax.core.driven import Undrive
 from cottax.relational.contracts import RootFinding
@@ -184,7 +184,7 @@ def test_determine_names_the_unknowns_and_keeps_the_binding():
     assert p.graph.nodes == (N('m'), N('c'))            # in place: the binding did not move
     assert problem_type_of(p.graph[N('c')]) == 'root-find'
     assert p.graph[N('c')].unknowns == (U,)
-    assert problems(p.graph.definitions) == (N('c'),)
+    assert enclosers(p.graph.definitions) == (N('c'),)
 
 
 def test_determine_takes_no_target_type_because_the_shape_follows():

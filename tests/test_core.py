@@ -31,7 +31,7 @@ from cottax.core.maths.plan.primitive import (
 from cottax.core.refusal_kinds import DoesNotRead
 from cottax.core.maths.executable import ExecutableGraph
 from cottax.core.frozen import Answer, OrderedMap, answers
-from cottax.core.maths.nesting import (BoxOwnsNothing, NotAProblem, Unbound, check_blocks_own_something,
+from cottax.core.maths.nesting import (BoxOwnsNothing, NotAnEncloser, Unbound, check_blocks_own_something,
                                       check_blocks_partition)
 from cottax.pytree.path import VarPath
 from cottax.core import Mint, Minting
@@ -285,7 +285,7 @@ def test_a_nesting_with_a_bad_end_is_listed_not_raised():
     a, t = Word('a'), Word('t')
     graph = AbstractGraph(OrderedMap({a: states([], ['x']), t: toy([], ['y'])}))
     assert [type(v) for v in violations(NestingGraph, graph, OrderedMap({Word('zz'): a}))] == [Unbound]
-    assert [type(v) for v in violations(NestingGraph, graph, OrderedMap({t: a}))] == [NotAProblem]
+    assert [type(v) for v in violations(NestingGraph, graph, OrderedMap({t: a}))] == [NotAnEncloser]
 
 
 def test_a_contraction_refuses_a_block_owning_nothing():

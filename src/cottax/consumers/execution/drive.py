@@ -24,10 +24,10 @@ class Drive(ComposedOp):
     places          : Callable[[object, tuple, DriverContract], tuple[tuple, tuple]]
 
     def composed(self, graph: NestingGraph) -> tuple[GraphOp, ...]:
-        undriven = {p for p in graph.problems if not is_driven(graph[p])}
+        undriven = {p for p in graph.enclosers if not is_driven(graph[p])}
         picked = OrderedMap((p, self.chosen(p, node) if p in undriven
                              else self.covering(p, node.contract))
-                            for p in graph.problems
+                            for p in graph.enclosers
                             if not is_implemented(node := graph[p]))
         def assigned(p, implementation: DriverImplementation) -> Assign:
             driver = self.contract_for(implementation)

@@ -11,7 +11,7 @@ from .maths import (
     Label, Place, PlaceToPlace, comparable, comparables_in, prefixes,
     Closure, Copy, Mint, Minting, mint_of, minted, unminted,
     NodeDefinition, Renaming, relabelled,
-    ConditionalNode, Function, FunctionalNode, is_requirement, is_problem, requirements, problems,
+    ConditionalNode, Function, FunctionalNode, is_requirement, is_encloser, requirements, enclosers,
     AbstractGraph,
     NestingGraph, ProvedGraph,
     answer_for_labels, answer_for_places,

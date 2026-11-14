@@ -16,7 +16,7 @@ def body_of[G: NestingGraph](g: G) -> G:
     '''
     The graph without its problems: what is run, never answered.
     '''
-    ps = set(g.problems)
+    ps = set(g.enclosers)
     return g.subgraph(n for n in g.nodes if n not in ps)
 
 
@@ -55,14 +55,14 @@ def check_body_is_dag(b: 'ExecutableGraph') -> Iterator[Violation]:
     '''
     g = b.graph
     for cycle in body_of(g).graph.cycles:
-        held = [p for p in g.problems if set(cycle) <= set(g.cycle_of(p))]
+        held = [p for p in g.enclosers if set(cycle) <= set(g.cycle_of(p))]
         if held:
             yield StillCyclic(max(held, key=lambda p: len(g.enclosing(p))), cycle)
         else:
             yield NoProblem(cycle)
 
 
-def check_one_problem_per_level(b: 'ExecutableGraph') -> Iterator[Violation]:
+def check_one_encloser_per_level(b: 'ExecutableGraph') -> Iterator[Violation]:
     '''
     No two problems nested in the same thing -- both outermost, or both answered
     inside one problem -- are on one cycle. 
@@ -76,8 +76,8 @@ def check_one_problem_per_level(b: 'ExecutableGraph') -> Iterator[Violation]:
     equal chains.
     '''
     g  = b.graph
-    ps = set(g.problems)
-    for q in g.problems:
+    ps = set(g.enclosers)
+    for q in g.enclosers:
         cycle    = g.cycle_of(q)
         siblings = tuple(p for p in cycle if p in ps and g.within.get(p) == g.within.get(q))
         if len(siblings) > 1 and siblings[0] == q:                  # said once, by the first
@@ -95,7 +95,7 @@ def check_all_conditions_on_cycle(b: 'ExecutableGraph') -> Iterator[Violation]:
     unknown can move it. A read nothing produces at all (a boundary input) is one.
     '''
     g = b.graph
-    for p in g.problems:
+    for p in g.enclosers:
         cycle = g.cycle_of(p)
         d     = g.definitions[p]
         if len(cycle) == 1:
@@ -111,7 +111,7 @@ def check_other_reads_off_cycle(b: 'ExecutableGraph') -> Iterator[Violation]:
     I^out_p ∩ O(S_p) = ∅   ∀ p ∊ N_P
     '''
     g = b.graph
-    for p in g.problems:
+    for p in g.enclosers:
         d    = g.definitions[p]
         held = set(g.cycle_of(p))
         if inside := tuple(v for v in d.reads_outside if g.graph.owners.get(v) in held):
@@ -125,7 +125,7 @@ def check_other_owns_off_cycle(b: 'ExecutableGraph') -> Iterator[Violation]:
     '''
     g       = b.graph
     readers = g.graph.readers
-    for p in g.problems:
+    for p in g.enclosers:
         d    = g.definitions[p]
         held = set(g.cycle_of(p))
         if inside := [(v, r) for v in d.owns_outside
@@ -141,7 +141,7 @@ class ExecutableGraph[N: Label, V: Place](ProvedGraph[N, V]):
     '''
 
     checks = (check_nestings_share_a_cycle,
-              check_no_requirements, check_one_problem_per_level, check_body_is_dag,
+              check_no_requirements, check_one_encloser_per_level, check_body_is_dag,
               check_all_conditions_on_cycle, check_other_reads_off_cycle,
               check_other_owns_off_cycle)
 
@@ -152,7 +152,7 @@ class ExecutableGraph[N: Label, V: Place](ProvedGraph[N, V]):
 def _outline(g: NestingGraph) -> str:
     '''The top level in one line: each component in dependency order, a component
     answered by an outermost problem as `solve(problem)[members]`, one node bare.'''
-    outer = set(g.outermost_problems)
+    outer = set(g.outermost_enclosers)
     def one(component) -> str:
         members = ', '.join(str(n) for n in component)
         if held := [p for p in component if p in outer]:

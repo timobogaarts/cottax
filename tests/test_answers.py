@@ -17,7 +17,7 @@ import pytest
 
 from cottax.core import (
     AbstractGraph, ComposedOp, ConditionalNode, Cut, ExecutableGraph, Function, GaussSeidel,
-    GraphWithValues, Insert, Mint, Minting, NestingGraph, is_problem, minted,
+    GraphWithValues, Insert, Mint, Minting, NestingGraph, is_encloser, minted,
 )
 from cottax.core.frozen import OrderedMap, answer, answers, choice, violations
 from cottax.core.maths.definition import relabelled
@@ -214,7 +214,7 @@ class ZeroSpelling(Spelling[Zero]):
 
 class Secant(DriverContract):
     '''A contract of the toy's: any problem of one scalar unknown, from a start.'''
-    accepts = staticmethod(is_problem)
+    accepts = staticmethod(is_encloser)
     takes   = (Start,)
     reports = ()
 

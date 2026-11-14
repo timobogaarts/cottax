@@ -616,7 +616,7 @@ def test_the_default_closing_binds_a_closure_in_its_own_namespace():
     g   = cx.absolute.declare({'disc1': flat.function(lambda z1, y2: z1 - 0.2 * y2, 'y1')}, disc2,
                       objective, {'opt': cx.absolute.optimise(minimise=v('f'), design=(v('z1'),))}).graph
     out = (Plan(g) + cx.flat.mdf(n('opt'))).graph
-    closures = [p for p in out.problems if p != n('opt')]
+    closures = [p for p in out.enclosers if p != n('opt')]
     assert [p.segments[0] for p in closures] == [purposes.Closure()]
 
 
@@ -714,7 +714,7 @@ def test_the_mdf_absorbs_constraints_declared_where_computed(x64):
     assert cx.Relation(v('g2'), v('g2_max'), cx.Le) in top.relations
     assert v('g2_max') in top.parameters and cx.absolute.node(cx.require(N['margin2'])) not in model.graph
 
-    for p in model.graph.problems:
+    for p in model.graph.enclosers:
         driver = (ConstrainedMinimisation(steps=False) if p == n('opt')
                   else RootFinding(steps=False))
         model += cx.absolute.assign(p, driver)

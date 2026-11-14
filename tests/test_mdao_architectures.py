@@ -514,7 +514,7 @@ def test_two_closures_on_one_cycle_are_one_mda_under_mdf(implicit):
         Plan(implicit) + mdf(OnePerVariable())
     apart = FixedPointClosing(HAT, AtVariable())
     m = (Plan(implicit) + MDF(OnePerVariable(), apart, OPT)).graph
-    mda, = [p for p in m.problems if p not in implicit.problems]
+    mda, = [p for p in m.enclosers if p not in implicit.enclosers]
     assert dict(m.within) == {mda: OPT, N('h1'): mda, N('h2'): mda}
     assert set(m[mda].unknowns) == {HAT(V('y1')), HAT(V('y2'))}
     ExecutableGraph(m)
@@ -594,7 +594,7 @@ def test_mda_is_mdf_without_the_top(implicit, sellar):
     assert dict(r.graph.within) == {N('h1'): Y2_MDA, N('h2'): Y2_MDA}
     ExecutableGraph(r.graph)
     explicit = (Plan(without_top(sellar)) + MDA(GaussSeidel(), CLOSING)).graph
-    assert explicit.problems == (Y2_MDA,) and not explicit.within
+    assert explicit.enclosers == (Y2_MDA,) and not explicit.within
     ExecutableGraph(explicit)
     assert repr(MDA(GaussSeidel(), CLOSING)) == 'mda(disciplines, gauss_seidel, closing(^copy, at_first_member(^closure)))'
 
@@ -627,7 +627,7 @@ class AbsorbedMDA(Coupled):
 def test_an_absorbed_mda_needs_no_copy(implicit):
     r = AbsorbedMDA(GaussSeidel(), CLOSING).resolution(without_top(implicit))
     assert r.closures == ()
-    assert r.graph.problems == (N('h1'),) and N('h2') not in r.graph
+    assert r.graph.enclosers == (N('h1'),) and N('h2') not in r.graph
     assert r.graph[N('h1')].unknowns == (V('y1'), V('y2'))
     assert HAT(V('y2')) not in r.graph.graph.variables
     ExecutableGraph(r.graph)
@@ -643,7 +643,7 @@ def test_an_analysis_refuses_a_design(implicit):
 
 def test_two_cycles_are_two_closures_under_mda(two_cycles):
     g = (Plan(without_top(two_cycles)) + MDA(GaussSeidel(), CLOSING)).graph
-    assert names(g.problems) == ['^closure.A1', '^closure.B1']
+    assert names(g.enclosers) == ['^closure.A1', '^closure.B1']
     ExecutableGraph(g)
 
 

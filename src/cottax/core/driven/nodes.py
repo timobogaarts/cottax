@@ -153,7 +153,7 @@ def role_slots[N: Label, V: Place](graph: NestingGraph[N, V], role: type[Role]
     its problem, and for a per-unknown role the unknown it pairs with (`None` for a
     per-problem one). A place two problems take is there twice.'''
     return tuple((place, name, unknown)
-                 for name in graph.problems if is_driven(node := graph[name])
+                 for name in graph.enclosers if is_driven(node := graph[name])
                  and (places := node.places_of(role)) is not None
                  for place, unknown in (zip(places, node.owns_inside) if issubclass(role, PerUnknown)
                                         else ((places[0], None),)))

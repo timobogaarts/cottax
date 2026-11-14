@@ -24,7 +24,7 @@ from cottax.relational import (
 )
 from cottax.core import Combine, GraphWithValues
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core import Function, problems
+from cottax.core import Function, enclosers
 import purposes
 from graphs import graph_of
 from cottax.core.maths.nesting import NestingGraph
@@ -148,7 +148,7 @@ def test_a_nested_problem_is_a_solve_inside_the_interior(mdf):
 def test_every_interior_at_every_depth_is_the_same_proof(sellar, two_solves, mdf):
     class Stronger(SteppedExecutableGraph):
         checks_node = ()
-    mda, = [n for n in problems(mdf.definitions) if n != N('opt')]
+    mda, = [n for n in enclosers(mdf.definitions) if n != N('opt')]
     for graph in (sellar, two_solves, (Plan(mdf) + Nest(mda, N('opt'))).graph,
                   (Plan(mdf) + Nest(N('opt'), mda)).graph):
         for level in (SteppedExecutableGraph, Stronger):
@@ -211,7 +211,7 @@ def driven(graph, *ops, implementations=OrderedMap({SelfStarting: Subtract()})) 
     plan = Plan(graph)
     for op in ops:
         plan = plan + op
-    if any(not is_implemented(plan.graph[n]) for n in problems(plan.graph.definitions)):
+    if any(not is_implemented(plan.graph[n]) for n in enclosers(plan.graph.definitions)):
         plan = plan + ImplementDrivers(implementations)
     return plan.graph
 
@@ -383,8 +383,8 @@ def test_a_proof_reads_as_the_graph_it_proves(two_problems):
     assert blocking.definitions is g.definitions and blocking.nodes == g.nodes
     assert blocking[g.nodes[0]] is g[g.nodes[0]] and g.nodes[0] in blocking
     assert blocking.within is g.within
-    assert blocking.outermost_problems == g.outermost_problems
-    p = g.outermost_problems[0]
+    assert blocking.outermost_enclosers == g.outermost_enclosers
+    p = g.outermost_enclosers[0]
     assert blocking.cycle_of(p) == g.cycle_of(p) and blocking.enclosing(p) == g.enclosing(p)
     assert blocking.interior(p) == g.interior(p) and type(blocking.interior(p)) is type(g)
     assert blocking.subgraph(g.nodes) == g and type(blocking.subgraph(g.nodes)) is type(g)
@@ -423,7 +423,7 @@ def mdf():
 def test_either_problem_may_be_the_outer_one(mdf):
     '''Both orderings are structurally legal, which is why nesting is *stated* -- on the
     graph, by `Nest`, and read from there.'''
-    mda, = [n for n in problems(mdf.definitions) if n != N('opt')]
+    mda, = [n for n in enclosers(mdf.definitions) if n != N('opt')]
 
     outer_opt = ExecutableGraph((Plan(mdf) + Nest(mda, N('opt'))).graph)
     outer_mda = ExecutableGraph((Plan(mdf) + Nest(N('opt'), mda)).graph)
@@ -470,7 +470,7 @@ def test_a_level_exists_only_where_a_statement_encloses_another(mdf):
 def test_a_level_answers_one_problem(mdf):
     # A problem has one enclosing iteration, so `within` cannot key it twice.
     nested = (Plan(mdf) + Nest(MDA, N('opt'))).graph
-    mda, = [n for n in problems(nested.definitions) if n != N('opt')]
+    mda, = [n for n in enclosers(nested.definitions) if n != N('opt')]
     with pytest.raises(ValueError, match='already answered inside'):
         Plan(nested) + Nest(mda, N('opt'))
 

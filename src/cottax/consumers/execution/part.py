@@ -4,7 +4,7 @@ name or read from a caller's structures, as a surface's methods.'''
 from collections.abc import Callable, Iterator, Mapping
 from typing import Any
 
-from ...core import GraphWithValues, Label, Minting, NestingGraph, Place, PlaceToPlace, ProvedGraph, is_problem
+from ...core import GraphWithValues, Label, Minting, NestingGraph, Place, PlaceToPlace, ProvedGraph, is_encloser
 from ...core.driven import AssignByRule, DriverContract, Role, is_driven, role_slots
 from ...core.frozen import AbstractVar, OrderedMap, answer
 from ..surface.interface import Part
@@ -149,7 +149,7 @@ class Running(Part):
         unknown = self.place(written, role=f'`values[{key.__name__}]`')
         at = graph.graph.owners.get(unknown)
         node = graph[at] if at is not None else None
-        if node is None or not is_problem(node) or unknown not in node.owns_inside:
+        if node is None or not is_encloser(node) or unknown not in node.owns_inside:
             why = ('which nothing owns' if node is None else
                    f'which {at!r} computes and does not determine')
             raise NotAnUnknown(key.__name__, unknown, why).raised

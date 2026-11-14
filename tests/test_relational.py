@@ -22,7 +22,7 @@ from cottax.relational.relational_condition import (
     FixedAndMoved, FixedRelation, NotARel, ParameterUnrelated, RelatesNothing,
 )
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core import Function, problems, violations
+from cottax.core import Function, enclosers, violations
 from cottax.core.maths.definition import ReadsOwn
 from cottax.core.maths.kinds import ReadOnBothSides
 from cottax.core.realisation import ImplementedFunction
@@ -422,7 +422,7 @@ def test_driven_join():
 
 def test_a_proof_refuses_a_statement_that_determines_nothing():
     g = graph_with(stated(Relation(v('r'), None, Eq)))
-    assert problems(g.definitions) == ()
+    assert enclosers(g.definitions) == ()
     with pytest.raises(ValueError, match='holds .* against nothing'):
         ExecutableGraph(g)
 

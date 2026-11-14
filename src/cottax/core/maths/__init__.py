@@ -36,7 +36,7 @@ from .places import (
 from .mints import Closure, Copy, Mint, Minting, mint_of, minted, unminted
 from .definition import NodeDefinition, Renaming, relabelled
 from .kinds import (
-    ConditionalNode, Function, FunctionalNode, is_requirement, is_problem, requirements, problems,
+    ConditionalNode, Function, FunctionalNode, is_requirement, is_encloser, requirements, enclosers,
 )
 from .graph import AbstractGraph
 from .nesting import NestingGraph, ProvedGraph

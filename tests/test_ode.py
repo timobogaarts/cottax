@@ -495,7 +495,7 @@ def test_mdf_cuts_nothing_inside_the_odes_loop_and_fits_the_logistic_rate():
                 {'opt': s.optimise(design=('k',), minimise='f')}).graph
     plan = Plan(g) + architecture(MDF)
     assert dict(plan.graph.within) == {solve_at('logistic'): node('opt')}
-    assert plan.graph.problems == g.problems
+    assert plan.graph.enclosers == g.enclosers
     plan += drive(BFGS(rtol=1e-10, atol=1e-10), diffrax_run())
     tree = s.run(CallableGraph(plan.graph), {cx.Inputs: ivp((0.0, 1.0), x=0.1)},
                  read_from=from_state({'k': 0.5, 'target': logistic_at(1.0)}))

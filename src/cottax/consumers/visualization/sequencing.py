@@ -102,7 +102,7 @@ def entries(g: NestingGraph) -> tuple[Entry, ...]:
     out : list[Entry] = []
     for component in g.graph.components:
         sub   = g.subgraph(component)
-        found = sub.outermost_problems
+        found = sub.outermost_enclosers
         if len(found) > 1:
             out.append(Unresolved(sub, found))
         elif found:
@@ -136,7 +136,7 @@ class Block(Frozen):
         '''What is ringed inside it: the entry's `held` where that holds a problem, else
         `None`, so a solve whose interior holds no problem rings nothing inside.'''
         held = self.entry.held
-        return held if held is not None and held.problems else None
+        return held if held is not None and held.enclosers else None
 
     @property
     def problem(self) -> Label | None:

@@ -12,7 +12,7 @@ from .maths.graph import (
 )
 from .maths.kinds import OwnsNothing, ReadOnBothSides, StatesNothing
 from .maths.nesting import (
-    BlockTooSmall, BoxOwnsNothing, NestingLoop, NodeInTwoBlocks, NotAProblem, SelfNested, Unbound,
+    BlockTooSmall, BoxOwnsNothing, NestingLoop, NodeInTwoBlocks, NotAnEncloser, SelfNested, Unbound,
     Unreachable,
 )
 from .maths.plan.ops import (
@@ -33,7 +33,7 @@ __all__ = [
     'RequirementUnanswered', 'SeveralOutermost', 'StillCyclic',
     'OwnAroundOwner', 'OwnedTwice', 'OwnerInsideRead', 'OwnInsideOwner', 'ReadInsideOwner',
     'OwnsNothing', 'ReadOnBothSides', 'StatesNothing',
-    'BlockTooSmall', 'BoxOwnsNothing', 'NestingLoop', 'NodeInTwoBlocks', 'NotAProblem',
+    'BlockTooSmall', 'BoxOwnsNothing', 'NestingLoop', 'NodeInTwoBlocks', 'NotAnEncloser',
     'SelfNested', 'Unbound', 'Unreachable',
     'AlreadyCut', 'AlreadyDetermined', 'AlreadyUndetermined', 'DoesNotRead', 'NoReaders',
     'NotProduced', 'NotRenamed', 'NoUnknowns', 'UnknownTwice',

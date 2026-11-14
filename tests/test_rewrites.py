@@ -13,7 +13,7 @@ from jax.tree_util import GetAttrKey
 from cottax.core.frozen import OrderedMap
 from cottax.relational import Min, Objective
 from cottax.core.maths.plan import Cut, Insert, Plan
-from cottax.core import ConditionalNode, Function, body_of, problems
+from cottax.core import ConditionalNode, Function, body_of, enclosers
 from cottax.core.driven import Assign, Driven, DriverContract, is_driven
 from cottax.core.driven import Start
 from cottax.assemblies.jax import absolute
@@ -127,7 +127,7 @@ def test_a_fixed_point_cut_is_one_node_and_stays_cyclic(looped):
     g = o(looped)
     assert names(g) == ['.d1', '.d2', '.obj', '^solve.y1']
     assert not g.graph.is_acyclic
-    assert problems(g.definitions) == (o.at,)
+    assert enclosers(g.definitions) == (o.at,)
     assert is_fixed_point(g[o.at])
     assert g[o.at].relations == (Relation(o.copies[0], Y1, Eq),)   # `^copy.y1 = y1`
     assert g[o.at].owns == o.copies and g[o.at].reads == o.vars
