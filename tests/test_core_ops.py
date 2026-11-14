@@ -1,10 +1,6 @@
 '''
-`core/maths/plan/ops.py`'s edits on what a node reads, owns and determines: `Cut`, which
-names no relation, and `Determine` / `Undetermine`, which ask the node itself
-(`ConditionalNode.determined`) for the condition node over other unknowns.
-
-A condition node is written as a `RelationalCondition`, since `core` ships no final; what is
-under test is what the op writes into the graph, and never how the condition node is spelled.
+`core/maths/plan/ops.py`'s edits on what a node reads and owns: `Cut`, which names no
+relation. `Determine` / `Undetermine` are relational's, and `test_rewrites.py`'s.
 
 Names are built by hand from key entries, as in `test_algebra.py` and `test_rewrites.py`.
 '''
@@ -12,20 +8,12 @@ Names are built by hand from key entries, as in `test_algebra.py` and `test_rewr
 import pytest
 from jax.tree_util import GetAttrKey
 
-from cottax.core import Function, enclosers
-from cottax.core.maths.plan import Cut, Determine, Insert, Plan, Undetermine, refusals
-from cottax.core.driven import Undrive
-from cottax.relational.contracts import RootFinding
-from cottax.assemblies.jax import absolute
-
-assign = absolute.assign
+from cottax.core import Function
+from cottax.core.maths.plan import Cut, Insert, Plan, refusals
 import purposes
 from cottax.core.frozen import OrderedMap
 from cottax.pytree.path import NodePath, VarPath
-from cottax.relational import Eq, Relation, RelationalCondition
-from cottax.consumers.visualization.kinds import problem_type_of
 from graphs import graph_of
-from cottax.core.maths.nesting import NestingGraph
 
 
 HAT = purposes.Copy()
@@ -49,11 +37,6 @@ def call(reads, owns) -> Function:
 
 def source(var) -> Function:
     return call([], [var])
-
-
-def stated(*relations) -> RelationalCondition:
-    '''A requirement: relations alone.'''
-    return RelationalCondition(relations, (), (), ())
 
 
 def names(graph):
@@ -170,77 +153,3 @@ def test_a_cut_names_its_copy_by_the_function_it_carries():
     cut = Cut(Y1, (N('d2'),), purposes.Guess())
     assert cut.copy.spelling == '^guess.y1'
     assert repr(cut) == 'cut(.y1->^guess.y1)'
-
-
-# ---------------------------------------------------------------- the unknowns
-
-def graph_with(statement: RelationalCondition) -> NestingGraph:
-    '''One model owning everything a condition node below relates, and the condition node.'''
-    return graph_of(OrderedMap({N('m'): call([U], [GU, R, C]), N('c'): statement}))
-
-
-def test_determine_names_the_unknowns_and_keeps_the_binding():
-    p = Plan(graph_with(stated(Relation(R, None, Eq)))) + Determine(N('c'), (U,))
-    assert p.graph.nodes == (N('m'), N('c'))            # in place: the binding did not move
-    assert problem_type_of(p.graph[N('c')]) == 'root-find'
-    assert p.graph[N('c')].unknowns == (U,)
-    assert enclosers(p.graph.definitions) == (N('c'),)
-
-
-def test_determine_takes_no_target_type_because_the_shape_follows():
-    '''The op edits the unknowns and nothing else, so what makes an answer right is read
-    back off the relations the condition node already carries.'''
-    p = Plan(graph_with(stated(Relation(U, GU, Eq)))) + Determine(N('c'), (U,))
-    assert problem_type_of(p.graph[N('c')]) == 'fixed-point'
-    assert p.graph[N('c')].reads == (GU,)               # the term moved to an unknown
-
-
-def test_undetermine_is_the_inverse():
-    for req in (stated(Relation(R, None, Eq)), stated(Relation(U, GU, Eq))):
-        p = Plan(graph_with(req)) + Determine(N('c'), (U,))
-        assert (p + Undetermine(N('c'))).graph[N('c')] == req
-
-
-def test_determine_refuses_a_statement_that_already_determines_something():
-    p = Plan(graph_with(stated(Relation(R, None, Eq)))) + Determine(N('c'), (U,))
-    with pytest.raises(TypeError, match='`Undetermine` it first'):
-        p + Determine(N('c'), (GU,))
-
-
-def test_undetermine_refuses_a_statement_that_determines_nothing():
-    with pytest.raises(TypeError, match='nothing to take off'):
-        Plan(graph_with(stated(Relation(R, None, Eq)))) + Undetermine(N('c'))
-
-
-def test_the_ops_read_written():
-    assert repr(Determine(N('c'), (U,))) == 'determine(.c <- .u)'
-    assert repr(Undetermine(N('c'))) == 'undetermine(.c)'
-
-
-# ------------------------------------------- what a node answered by an algorithm says
-
-def driven() -> Plan:
-    '''A root find with a contract on it; nothing runs, what is under test is the
-    refusal.'''
-    g = graph_of(OrderedMap({N('m'): call([U], [R]),
-                          N('c'): RelationalCondition((Relation(R, None, Eq),), (), (U,), ())}))
-    return Plan(g) + assign(N('c'), RootFinding(steps=False))
-
-
-def test_what_a_driven_statement_determines_cannot_be_edited():
-    '''The algorithm was chosen for the problem as it stands and its data is derived
-    from the unknowns it had, so the node itself refuses -- `Determine` never gets a
-    kind to test, and `Undetermine` reaches the same refusal one step later.'''
-    p = driven()
-    with pytest.raises(TypeError, match='`Undrive` it first'):
-        p.graph[N('c')].determined((Z,))
-    with pytest.raises(TypeError, match='`Undrive` it first'):
-        p + Undetermine(N('c'))
-    with pytest.raises(TypeError, match='`Undetermine` it first'):
-        p + Determine(N('c'), (Z,))
-
-
-def test_undriving_first_is_what_makes_it_editable():
-    p = driven() + Undrive(N('c')) + Undetermine(N('c'))
-    assert p.graph[N('c')].unknowns == ()
-    assert (p + Determine(N('c'), (U,))).graph[N('c')] == driven().graph[N('c')].condition

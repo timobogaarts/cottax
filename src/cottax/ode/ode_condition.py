@@ -88,12 +88,6 @@ class OdeCondition[V: Place](ConditionalNode[V]):
                             both(self.kinks, other.kinks), both(self.jumps, other.jumps),
                             other.time if self.time is None else self.time)
 
-    def determined(self, unknowns: tuple[V, ...]) -> 'OdeCondition[V]':
-        '''Itself, handed exactly its states and time: what it determines is not edited.'''
-        if tuple(unknowns) != self.owns_inside:
-            raise DeterminesItsStates(self.owns_inside, tuple(unknowns)).raised
-        return self
-
     def relabel(self, renaming: Renaming[V]) -> 'OdeCondition[V]':
         return OdeCondition(tuple(d.relabel(renaming) for d in self.relations),
                             renaming.get(self.span, self.span),
@@ -115,14 +109,6 @@ def is_ode(node: object) -> bool:
 
 
 # ----------------------------------------------------------------- violation finals
-
-class DeterminesItsStates(Violation):
-    states   : tuple
-    unknowns : tuple
-    error    = ValueError
-    template = ('an ODE determines its states and nothing else (its time with them, where it '
-                'gives one): {states!r}, not {unknowns!r}')
-
 
 class SpansDiffer(Violation):
     span  : object

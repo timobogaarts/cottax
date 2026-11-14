@@ -1,6 +1,7 @@
 '''
-`relational/rewrites.py`: the rewrites that write or join a relation, and what each one
-does to the graph it is applied to. `Cut` itself is `core`'s, and `test_core_ops.py`'s.
+`relational/rewrites.py`: the rewrites that write or join a relation or name its unknowns,
+and what each one does to the graph it is applied to. `Cut` itself is `core`'s, and
+`test_core_ops.py`'s.
 
 Names are built by hand from key entries, as in `test_algebra.py` and `test_xdsm.py`.
 The minted ones are asked of the op (`op.copies`, `op.at`) and never spelled here:
@@ -24,7 +25,11 @@ from cottax.relational import (
     Eq, Le, Relation, RelationalCondition, is_fixed_point, is_optimise, is_root_find,
 )
 from cottax.core import Combine
-from cottax.relational.rewrites import FixedPointCut
+from cottax.relational.rewrites import Determine, FixedPointCut, Undetermine
+from cottax.relational.contracts import RootFinding
+from cottax.core.driven import Undrive
+from cottax.core.maths.nesting import NestingGraph
+from cottax.consumers.visualization.kinds import problem_type_of
 from cottax.pytree.path import NodePath, VarPath
 import purposes
 from graphs import graph_of
@@ -490,14 +495,109 @@ def test_a_rewire_reaches_the_statement_a_driver_wraps():
     assert [p.spelling for slot in after.data for p in slot] == ['^start.u']   # untouched
 
 
+# ---------------------------------------------------------------- the unknowns
+
+U, GU = V('u'), V('gu')
+
+
+def stated(*relations) -> RelationalCondition:
+    '''A requirement: relations alone.'''
+    return RelationalCondition(relations, (), (), ())
+
+
+def plain(reads, owns) -> Function:
+    '''A computation with nothing to call: all these edits see.'''
+    return Function(tuple(reads), tuple(owns))
+
+
+def graph_with(statement: RelationalCondition) -> NestingGraph:
+    '''One model owning everything a condition node below relates, and the condition node.'''
+    return graph_of(OrderedMap({N('m'): plain([U], [GU, R, C]), N('c'): statement}))
+
+
+def test_determine_names_the_unknowns_and_keeps_the_binding():
+    p = Plan(graph_with(stated(Relation(R, None, Eq)))) + Determine(N('c'), (U,))
+    assert p.graph.nodes == (N('m'), N('c'))            # in place: the binding did not move
+    assert problem_type_of(p.graph[N('c')]) == 'root-find'
+    assert p.graph[N('c')].unknowns == (U,)
+    assert enclosers(p.graph.definitions) == (N('c'),)
+
+
+def test_determine_takes_no_target_type_because_the_shape_follows():
+    '''The op edits the unknowns and nothing else, so what makes an answer right is read
+    back off the relations the condition node already carries.'''
+    p = Plan(graph_with(stated(Relation(U, GU, Eq)))) + Determine(N('c'), (U,))
+    assert problem_type_of(p.graph[N('c')]) == 'fixed-point'
+    assert p.graph[N('c')].reads == (GU,)               # the term moved to an unknown
+
+
+def test_undetermine_is_the_inverse():
+    for req in (stated(Relation(R, None, Eq)), stated(Relation(U, GU, Eq))):
+        p = Plan(graph_with(req)) + Determine(N('c'), (U,))
+        assert (p + Undetermine(N('c'))).graph[N('c')] == req
+
+
+def test_determine_refuses_a_statement_that_already_determines_something():
+    p = Plan(graph_with(stated(Relation(R, None, Eq)))) + Determine(N('c'), (U,))
+    with pytest.raises(TypeError, match='`Undetermine` it first'):
+        p + Determine(N('c'), (GU,))
+
+
+def test_undetermine_refuses_a_statement_that_determines_nothing():
+    with pytest.raises(TypeError, match='nothing to take off'):
+        Plan(graph_with(stated(Relation(R, None, Eq)))) + Undetermine(N('c'))
+
+
+def test_the_ops_read_written():
+    assert repr(Determine(N('c'), (U,))) == 'determine(.c <- .u)'
+    assert repr(Undetermine(N('c'))) == 'undetermine(.c)'
+
+
+# ------------------------------------------- what a node answered by an algorithm says
+
+def driven() -> Plan:
+    '''A root find with a contract on it; nothing runs, what is under test is the
+    refusal.'''
+    g = graph_of(OrderedMap({N('m'): plain([U], [R]),
+                          N('c'): RelationalCondition((Relation(R, None, Eq),), (), (U,), ())}))
+    return Plan(g) + assign(N('c'), RootFinding(steps=False))
+
+
+def test_what_a_driven_statement_determines_cannot_be_edited():
+    '''The algorithm was chosen for the problem as it stands and its data is derived
+    from the unknowns it had: a driven node derives what it owns inside, so both ops refuse.'''
+    p = driven()
+    with pytest.raises(TypeError, match='`Undrive` it first'):
+        p + Determine(N('c'), (Z,))
+    with pytest.raises(TypeError, match='`Undrive` it first'):
+        p + Undetermine(N('c'))
+
+
+def test_undriving_first_is_what_makes_it_editable():
+    p = driven() + Undrive(N('c')) + Undetermine(N('c'))
+    assert p.graph[N('c')].unknowns == ()
+    assert (p + Determine(N('c'), (U,))).graph[N('c')] == driven().graph[N('c')].condition
+
+
 def test_every_rewrite_case_has_wording():
     """The ops' own checks, each formatting: what `__post_init__` used to raise."""
     from cottax.core import violations
-    from cottax.relational.rewrites import CutTwice, NothingCut
+    from cottax.core import refusals
+    from cottax.core.refusal_kinds import OwnedInsideTwice, OwnsInsideNotAChoice
+    from cottax.relational.rewrites import (
+        AlreadyDetermined, AlreadyUndetermined, CutTwice, NoUnknowns, NothingCut,
+    )
     cut = Cut(Y1, (N('d2'),), HAT)
+    req = graph_with(stated(Relation(R, None, Eq)))
     produced = set()
     for vs in (violations(FixedPointCut, (), N('mda')),
-               violations(FixedPointCut, (cut, cut), N('mda'))):
+               violations(FixedPointCut, (cut, cut), N('mda')),
+               violations(Determine, N('c'), ()),
+               violations(Determine, N('c'), (U, U)),
+               refusals(Determine(N('c'), (GU,)), (Plan(req) + Determine(N('c'), (U,))).graph),
+               refusals(Undetermine(N('c')), req),
+               refusals(Undetermine(N('m')), req)):
         for x in vs:
             produced.add(type(x)); x.message
-    assert produced == {NothingCut, CutTwice}
+    assert produced == {NothingCut, CutTwice, NoUnknowns, OwnedInsideTwice, AlreadyDetermined,
+                        AlreadyUndetermined, OwnsInsideNotAChoice}

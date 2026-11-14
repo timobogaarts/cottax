@@ -78,7 +78,6 @@ class Unanswered(ConditionalNode):
     reads_outside = ()
     owns_outside  = ()
     def relabel(self, renaming): return self
-    def determined(self, unknowns): return Unanswered(self.reads_inside, unknowns)
 
 
 class Answered(ConditionalNode):
@@ -88,7 +87,6 @@ class Answered(ConditionalNode):
     reads_outside = ()
     owns_outside  = ()
     def relabel(self, renaming): return self
-    def determined(self, unknowns): return Answered(self.reads_inside, unknowns)
 
 
 TOY = Kind('toy', 'toy (r ~ 0)', 'a toy category: r near zero', True, ('#a1b2c3', '#123456'))
@@ -176,7 +174,6 @@ class Twin(ConditionalNode):
     reads_outside = ()
     owns_outside  = ()
     def relabel(self, renaming): return self
-    def determined(self, unknowns): return Twin(self.reads_inside, unknowns)
 
 
 TWIN = Kind('toy', 'another toy', 'not the toy category', False, ('#ffffff', '#000000'))

@@ -5,7 +5,7 @@ The relational declarations: a function paired with a condition node over what i
 from collections.abc import Iterator
 from typing import Any
 
-from ....core import ConditionalNode, Label, NodeDefinition, Place, Violation, is_requirement, minted
+from ....core import ConditionalNode, Label, NodeDefinition, Place, Violation, minted
 from ....core.frozen import AbstractVar, Frozen, OrderedMap, violations, name_of
 from ....consumers.surface.interface import DerivedNames
 from ...mints import Cond, Require
@@ -177,7 +177,7 @@ def check_subject_to(problem: 'Problem') -> Iterator[Violation]:
     '''A problem is subject to constraint wrappers and requirements, nothing else.'''
     for c in problem.subject_to:
         if not (isinstance(c, Constraint) or (isinstance(c, RelationalCondition)
-                                              and is_requirement(c))):
+                                              and not c.unknowns)):
             yield NotHeldAs(repr(c))
 
 

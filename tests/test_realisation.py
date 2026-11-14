@@ -16,17 +16,20 @@ from dataclasses import dataclass
 import pytest
 
 from cottax.core import (
-    AbstractGraph, ConditionalNode, Function, NestingGraph, Rename, Replace, refusals,
+    AbstractGraph, ConditionalNode, Function, NestingGraph, Rename, Replace,
+    refusals,
     violations,
 )
 from cottax.core.maths.definition import relabelled
+from cottax.core.refusal_kinds import OwnsInsideNotAChoice
+from cottax.relational.rewrites import Undetermine
 from cottax.core.frozen import OrderedMap
 from cottax.core.driven import (
     Assign, Driven, DrivenGraph, DriverContract, PerProblem, PerUnknown, Role, Undrive,
     is_driven,
 )
 from cottax.core.driven.nodes import (
-    DeterminedWhileDriven, DrivenTwice, NotAccepted, RoleMisplaced, RoleTwice, RoleUnsized,
+    DrivenTwice, NotAccepted, RoleMisplaced, RoleTwice, RoleUnsized,
     SlotsMiscounted,
 )
 from cottax.core.driven.ops import NotAConditionalNode, NotDriven
@@ -37,7 +40,7 @@ from cottax.core.realisation import (
 )
 from cottax.core.realisation.proof import NoImplementation
 from cottax.core.realisation.implemented import (
-    DeterminedWhileImplemented, ImplementedTwice, NoContract, NotAFunction,
+    ImplementedTwice, NoContract, NotAFunction,
     UndrivenWhileImplemented, NodeNamedTwice, NotImplementable, NotImplementedYet,
     NothingImplemented,
 )
@@ -71,9 +74,6 @@ class Holds(ConditionalNode):
     def relabel(self, renaming):
         return Holds(relabelled(self.reads_inside, renaming),
                      relabelled(self.owns_inside, renaming), relabelled(self.reads_outside, renaming))
-
-    def determined(self, unknowns):
-        return Holds(self.reads_inside, tuple(unknowns), self.reads_outside)
 
 
 # ---------------------------------------------------------------- toy roles and drivers
@@ -217,12 +217,6 @@ def test_the_refusal_names_the_predicate():
         Driven(Holds((r,), (u, v)), Solo(), *placed((u, v)))
 
 
-def test_a_driven_statement_is_not_redetermined():
-    with pytest.raises(TypeError) as caught:
-        Driven(Holds((r,), (u,)), Bare(), *NONE).determined((g,))
-    assert DeterminedWhileDriven.template.split(' {')[0] in str(caught.value)
-
-
 def test_a_driven_node_hashes_and_pickles():
     '''A node is a jit cache key and a plan pickles.'''
     node = Driven(Holds((r,), (u,)), Solo(), *placed())
@@ -362,9 +356,7 @@ def test_the_outer_layer_comes_off_first():
     assert UndrivenWhileImplemented.template.split(' {')[0] in str(caught.value)
     assert kinds(refusals(Assign(W('solve'), Bare(), *NONE), done)) == [DrivenTwice]
     assert kinds(refusals(again, done))                              == [ImplementedTwice]
-    with pytest.raises(TypeError) as caught:
-        done[W('solve')].determined((g,))
-    assert DeterminedWhileImplemented.template.split(' {')[0] in str(caught.value)
+    assert kinds(refusals(Undetermine(W('solve')), done)) == [OwnsInsideNotAChoice]
 
 
 def test_a_body_goes_on_a_function_and_nothing_else():

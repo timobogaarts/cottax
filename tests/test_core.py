@@ -19,8 +19,8 @@ from cottax.core.maths.graph import (
     OwnAroundOwner, OwnInsideOwner, OwnedTwice, OwnerInsideRead, ReadInsideOwner,
 )
 from cottax.core import (
-    AbstractGraph, NestingGraph, Combine, ConditionalNode, Cut, Determine, FunctionalNode,
-    Rename, Undetermine, refusals,
+    AbstractGraph, NestingGraph, Combine, ConditionalNode, Cut, FunctionalNode,
+    Rename, SetOwnsInside, refusals,
     Violation, NodeDefinition, Insert, Delete,
     violations, comparables_in, first, prefixes,
     answer_for_labels, answer_for_places, GraphWithValues,
@@ -102,7 +102,6 @@ class States(ConditionalNode):
     reads_outside = ()
     owns_outside  = ()
     def relabel(self, renaming): return self
-    def determined(self, unknowns): return States(self.reads_inside, unknowns)
     def __add__(self, other):
         '''The whole of what `Combine` asks of a kind -- no relation anywhere.'''
         if not isinstance(other, States):
@@ -122,8 +121,6 @@ class Driven(ConditionalNode):
     reads_outside = property(lambda self: tuple(v for vs in self.data for v in vs))
     owns_outside  = property(lambda self: tuple(v for vs in self.reports for v in vs))
     def relabel(self, renaming): return self
-    def determined(self, unknowns): return Driven(self.problem.determined(unknowns),
-                                                  self.data, self.reports)
 
 
 def body(reads, owns):          return declared(reads, owns)   # a body is no edge: the abstract sees a function
@@ -316,6 +313,17 @@ def test_a_graph_is_answered_for_the_class_of_its_places_or_of_its_names():
         answer_for_places(Said, G({Word('a'): Toy((), (Word('x'),))}))
 
 
+def test_what_a_condition_node_owns_inside_is_set_where_it_is_stored():
+    """`SetOwnsInside` writes the field on any kind that stores it -- no relation anywhere
+    -- and both ways: some makes an encloser, none a requirement again."""
+    a, b = Word('a'), Word('b')
+    g = G({a: states(['y'], []), b: toy(['u'], ['y'])})
+    set_ = SetOwnsInside(a, places(['u'])).apply(g)
+    assert set_[a] == states(['y'], ['u']) and set_.enclosers == (a,)
+    assert SetOwnsInside(a, ()).apply(set_)[a] == states(['y'], [])
+    assert repr(SetOwnsInside(a, places(['u']))) == 'set_owns_inside(a <- u)'
+
+
 def test_every_case_a_rule_can_name_has_wording():
     """
     A missing template is a `KeyError` raised at the moment something else went wrong,
@@ -352,8 +360,7 @@ def test_every_case_a_rule_can_name_has_wording():
     seen(violations(Insert, OrderedMap({})))                                   # nothing inserted
     seen(violations(Delete, ()))                                            # nothing deleted
     seen(violations(Cut, Word('x'), (), lambda w: w))                       # a copy nothing reads
-    seen(violations(Determine, a, ()))                                      # determines nothing
-    seen(violations(Determine, a, places(['u', 'u'])))                      # an unknown twice
+    seen(violations(SetOwnsInside, a, places(['u', 'u'])))                  # a place owned inside twice
     seen(violations(Combine, a, (b,), States))                              # fewer than two
     seen(violations(Combine, a, (b, b), States))                            # a node twice
     seen(violations(Combine, a, (a, b), Toy))                               # a kind with no `+`
@@ -363,8 +370,7 @@ def test_every_case_a_rule_can_name_has_wording():
     hat  = lambda w: Word(w.segments + ('hat',))
     onto = lambda w: Word('y')
     g = G({a: states(['y'], ['u']), b: toy([], ['x'])})
-    seen(refusals(Determine(a, places(['v'])), g))                      # already determined
-    seen(refusals(Undetermine(a), G({a: states(['y'], [])})))           # nothing to drop
+    seen(refusals(SetOwnsInside(a, ()), G({a: driven(['y'], ['u'])})))  # a driven node derives it: not a choice
     seen(refusals(Rename(b, ((Word('nope'), Word('q')),)), g))          # a place it has not got
     seen(refusals(Cut(Word('free'), (b,), hat), g))                     # nothing produces it
     seen(refusals(Cut(Word('x'), (a,), onto), g))                       # the minted name is taken

@@ -1,9 +1,10 @@
 '''
 Ops on `Redefine`: what a node reads and owns renamed (`Rewire`, `Rename`, `Cut`), a
-definition replaced (`Replace`), and what it determines (`Determine`, `Undetermine`).
+definition replaced (`Replace`), and what a condition node owns inside set (`SetOwnsInside`).
 '''
 
 from abc import abstractmethod
+import dataclasses
 from collections.abc import Iterator, Mapping
 
 from ..definition import NodeDefinition, Renaming
@@ -116,87 +117,64 @@ class Cut[N: Label, V: Place](Rewire[N, V]):
         return f'cut({self.var}->{self.copy})'
 
 
-# ---------------------------------------------------------------- the unknowns
+# ---------------------------------------------------------------- what is owned inside
 
-def check_unknowns(op: 'Determine') -> Iterator[Violation]:
-    '''Something is determined, and nothing twice.'''
-    if not op.unknowns:
-        yield NoUnknowns()
-    if len(set(op.unknowns)) != len(op.unknowns):
-        yield UnknownTwice(tuple(op.unknowns))
+def check_owned_once(op: 'SetOwnsInside') -> Iterator[Violation]:
+    """No place is owned inside twice."""
+    if twice := tuple(dict.fromkeys(p for p in op.owns_inside if op.owns_inside.count(p) > 1)):
+        yield OwnedInsideTwice(twice)
 
 
-def check_determines_nothing_yet(op: 'Determine', graph: NestingGraph) -> Iterator[Violation]:
-    '''The node determines nothing yet: unknowns are set, never added to.'''
-    if unknowns := tuple(graph[op.requirement].owns_inside):
-        yield AlreadyDetermined(op.requirement, unknowns)
+def stores_owns_inside(node: object) -> bool:
+    """`node` stores `owns_inside` as a field: what `SetOwnsInside` can set."""
+    return dataclasses.is_dataclass(node) and 'owns_inside' in {
+        f.name for f in dataclasses.fields(node)}
 
 
-def check_determines_something(op: 'Undetermine', graph: NestingGraph) -> Iterator[Violation]:
-    '''There is something to drop.'''
-    if not graph[op.problem].owns_inside:
-        yield AlreadyUndetermined(op.problem)
+def check_owns_inside_is_stored(op: 'SetOwnsInside', graph: NestingGraph) -> Iterator[Violation]:
+    """The node stores `owns_inside`: one that derives it -- from its states, from the
+    node it wraps -- has no choice to set."""
+    if not stores_owns_inside(node := graph[op.node]):
+        yield OwnsInsideNotAChoice(op.node, type(node).__name__)
 
 
-class Determine[N: Label, V: Place](Redefine[N, V]):
-    '''Name the unknowns a requirement determines. The node builds its own new definition
-    (`determined`).'''
+class SetOwnsInside[N: Label, V: Place](Redefine[N, V]):
+    """A condition node owns `owns_inside` inside, and nothing else of it changes: with
+    none it is a requirement, with some an encloser. For a kind that stores `owns_inside`
+    as a field."""
 
-    requirement : N
-    unknowns    : tuple[V, ...]
+    node        : N
+    owns_inside : tuple[V, ...]
 
-    checks = (check_unknowns,)
-    checks_graph = (check_determines_nothing_yet,)
-
-    def redefined(self, graph: NestingGraph[N, V]) -> Mapping[N, NodeDefinition[V]]:
-        return {self.requirement: graph[self.requirement].determined(self.unknowns)}
-
-    def __repr__(self) -> str:
-        return f'determine({self.requirement} <- {", ".join(str(u) for u in self.unknowns)})'
-
-
-class Undetermine[N: Label, V: Place](Redefine[N, V]):
-    '''The inverse of `Determine`: the unknowns dropped, the condition node kept.'''
-
-    problem : N
-
-    checks_graph = (check_determines_something,)
+    checks = (check_owned_once,)
+    checks_graph = (check_owns_inside_is_stored,)
 
     def redefined(self, graph: NestingGraph[N, V]) -> Mapping[N, NodeDefinition[V]]:
-        return {self.problem: graph[self.problem].determined(())}
+        return {self.node: dataclasses.replace(graph[self.node], owns_inside=self.owns_inside)}
 
     def __repr__(self) -> str:
-        return f'undetermine({self.problem})'
+        return f'set_owns_inside({self.node} <- {", ".join(str(p) for p in self.owns_inside)})'
 
 
 # ----------------------------------------------------------------- violation finals
+
+class OwnedInsideTwice(Violation):
+    places : tuple[Place, ...]
+    error    = ValueError
+    template = '{places!r} is owned inside twice'
+
+class OwnsInsideNotAChoice(Violation):
+    node : Label
+    kind : str
+    error    = TypeError
+    template = ('{node!r} is a {kind}, and what it owns inside is not a choice -- if it '
+                'carries a driver, `Undrive` it first')
 
 class NoReaders(Violation):
     var  : Place
     copy : Place
     error    = ValueError
     template = 'cut({var}): no readers, so {copy!r} would be a name nothing reads'
-
-class NoUnknowns(Violation):
-    error    = ValueError
-    template = 'determine(): no unknowns -- a condition node that determines nothing is what it already is'
-
-class UnknownTwice(Violation):
-    unknowns : tuple[Place, ...]
-    error    = ValueError
-    template = 'determine(): {unknowns!r} names an unknown twice'
-
-class AlreadyDetermined(Violation):
-    requirement : Label
-    unknowns    : tuple[Place, ...]
-    error    = TypeError
-    template = ('{requirement!r} already determines {unknowns!r} -- `Undetermine` it first, so '
-                'the earlier choice is dropped deliberately rather than silently replaced')
-
-class AlreadyUndetermined(Violation):
-    problem : Label
-    error    = TypeError
-    template = '{problem!r} already determines nothing, so there is nothing to take off'
 
 class NotRenamed(Violation):
     node   : Label

@@ -278,7 +278,7 @@ class NotAnEncloser(Violation):
     nodes : tuple[Label, ...]
     error    = ValueError
     template = ('{nodes} determines nothing, so no iteration of it answers anything -- an end '
-                 'of a nesting is a problem: `Determine` it, naming the unknowns it fixes, or '
+                 'of a nesting is a problem: determine it, naming the unknowns it fixes, or '
                  '`Unnest` it first so the plan says the nesting went')
 
 

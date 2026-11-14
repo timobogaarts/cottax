@@ -97,12 +97,6 @@ class Driven[V: Place](DrivenNode[V]):
     @property
     def owns_outside(self) -> tuple[V, ...]:   return self.condition.owns_outside + _joined(self.reports)
 
-    def determined(self, unknowns: tuple[V, ...]) -> 'Driven[V]':
-        '''Refused: an algorithm was chosen for the node as it stands, and its
-        per-unknown slots are laid out against the unknowns it had.'''
-        raise DeterminedWhileDriven(type(self.contract).__name__, self.owns_inside,
-                                    tuple(unknowns)).raised
-
     def undriven(self) -> ConditionalNode[V]:
         return self.condition
 
@@ -160,16 +154,6 @@ def role_slots[N: Label, V: Place](graph: NestingGraph[N, V], role: type[Role]
 
 
 # ----------------------------------------------------------------- violation finals
-
-class DeterminedWhileDriven(Violation):
-    driver   : str
-    unknowns : tuple
-    asked    : tuple
-    error    = TypeError
-    template = ('a {driver} answers this problem over {unknowns!r}, so it cannot be made to '
-                'determine {asked!r} -- the algorithm was chosen for the problem as it '
-                'stands; `Undrive` it first')
-
 
 class DrivenTwice(Violation):
     problem : object

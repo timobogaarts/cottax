@@ -7,7 +7,7 @@ problem whose edges lie right against its cycle. Typed separately: an Executable
 from collections.abc import Iterator
 
 from .nesting import NestingGraph, ProvedGraph, check_nesting_ends_on_one_cycle
-from .kinds import requirements
+from .kinds import ConditionalNode
 from .places import Label, Place
 from ..frozen import Violation
 
@@ -39,13 +39,13 @@ def check_nestings_share_a_cycle(b: 'ExecutableGraph') -> Iterator[Violation]:
 
 def check_no_requirements(b: 'ExecutableGraph') -> Iterator[Violation]:
     '''
-    No requirement is left: every condition is a problem's, held by unknowns.
+    Every condition node owns something inside: no requirement is left.
 
     N_P = N_C
     '''
-    g = b.graph
-    for n in requirements(g.definitions):
-        yield RequirementUnanswered(n, tuple(g.definitions[n].reads_inside))
+    for n, d in b.graph.definitions.items():
+        if isinstance(d, ConditionalNode) and not d.owns_inside:
+            yield RequirementUnanswered(n, tuple(d.reads_inside))
 
 def check_body_is_dag(b: 'ExecutableGraph') -> Iterator[Violation]:
     '''
@@ -168,7 +168,7 @@ class RequirementUnanswered(Violation):
     conditions : tuple[Place, ...]
     error    = ValueError
     template = ('{node!r} holds {conditions} against nothing: it has no unknowns, so no driver '
-                 'can move it -- `Determine` it by a variable on its cycle, or drop it')
+                 'can move it -- determine it by a variable on its cycle, or drop it')
 
 class SeveralOutermost(Violation):
     cycle    : tuple[Label, ...]

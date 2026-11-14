@@ -132,18 +132,19 @@ class RelationalCondition[V: Place](ConditionalNode[V]):
 
     relations  : tuple[Relation[V], ...]
     objectives : tuple[Objective[V], ...]
-    unknowns   : tuple[V, ...]
-    parameters : tuple[V, ...]
-    '''Terms read and held fixed while the unknowns move: a bound, a limit. Read
-    outside, so a proof asks them off the problem's cycle.'''
+    owns_inside   : tuple[V, ...]
+    '''The unknowns it determines; none for a requirement.'''
+    reads_outside : tuple[V, ...]
+    '''The parameters: terms read and held fixed while the unknowns move: a bound, a
+    limit. Read outside, so a proof asks them off the problem's cycle.'''
     owns_outside = ()
 
     checks = (check_relates_something, check_parameters)
 
     @property
-    def owns_inside(self) -> tuple[V, ...]:    return self.unknowns
+    def unknowns(self) -> tuple[V, ...]:    return self.owns_inside
     @property
-    def reads_outside(self) -> tuple[V, ...]:  return self.parameters
+    def parameters(self) -> tuple[V, ...]:  return self.reads_outside
     @property
     def reads_inside(self) -> tuple[V, ...]:
         '''The objectives, then every relation's terms that are neither unknowns nor
@@ -163,10 +164,6 @@ class RelationalCondition[V: Place](ConditionalNode[V]):
                                    self.parameters + tuple(p for p in other.parameters
                                                            if p not in self.parameters))
 
-    def determined(self, unknowns: tuple[V, ...]) -> 'RelationalCondition[V]':
-        '''Same ConditionalNode but determined by the unknowns.'''
-        return dataclasses.replace(self, unknowns=unknowns)
-
     def relabel(self, renaming: Renaming[V]) -> 'RelationalCondition[V]':
         '''
         Relabels the relations, objectives, unknowns and parameters.
@@ -175,8 +172,8 @@ class RelationalCondition[V: Place](ConditionalNode[V]):
             self,
             relations  = tuple(r.relabel(renaming) for r in self.relations),
             objectives = tuple(o.relabel(renaming) for o in self.objectives),
-            unknowns   = relabelled(self.unknowns,   renaming),
-            parameters = relabelled(self.parameters, renaming),
+            owns_inside   = relabelled(self.owns_inside,   renaming),
+            reads_outside = relabelled(self.reads_outside, renaming),
         )
 
     def __repr__(self) -> str:

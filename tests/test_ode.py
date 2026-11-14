@@ -18,12 +18,13 @@ import pytest
 import cottax.assemblies.jax as cx
 
 from cottax.core import (
-    AbstractGraph, Combine, Determine, ExecutableGraph, Function, GaussSeidel, GraphWithValues,
-    NestingGraph, Rename, Undetermine,
+    AbstractGraph, Combine, ExecutableGraph, Function, GaussSeidel, GraphWithValues,
+    NestingGraph, Rename,
 )
 from cottax.core.maths.definition import OwnsTwice, ReadsOwn
 from cottax.core.maths.executable import SeveralOutermost
-from cottax.core.maths.plan.ops import AlreadyDetermined
+from cottax.core.refusal_kinds import OwnsInsideNotAChoice
+from cottax.relational.rewrites import Determine, Undetermine
 from cottax.core.frozen import OrderedMap, choice, violations
 from cottax.core.maths.plan import Nest, Plan, refusals
 from cottax.core.driven import Assign, DrivenGraph, Start
@@ -41,7 +42,7 @@ from cottax.consumers.architectures import IDF, MDA, MDF, SAND
 from cottax.consumers.architectures.refusals import NotCombinable
 from cottax.ode import Dt, OdeCondition, is_ode
 from cottax.ode.contracts import Integration, Integrator
-from cottax.ode.ode_condition import DeterminesItsStates, SpansDiffer
+from cottax.ode.ode_condition import SpansDiffer
 from cottax.ode.consumers.visualization import INTEGRATE
 import cottax.ode.consumers  # noqa: F401  registers its answers
 from test_core import Word
@@ -141,20 +142,14 @@ def test_a_state_twice_or_a_state_that_is_a_rate_is_refused_by_core():
 
 
 def test_an_ode_determines_its_states_and_nothing_else():
-    '''Handed its states it is itself; `Undetermine` and a subset are refused by the node,
-    and `Determine` before it, since an ODE is always a problem.'''
+    '''What an ODE owns inside is not a choice: `Determine` and `Undetermine` refuse it.'''
     x, v, r, q = Word('x'), Word('v'), Word('r'), Word('q')
     ode = OdeCondition((Dt(x, r, Word('x0')), Dt(v, q, Word('v0'))), Word('t'))
-    assert ode.determined((x, v)) is ode
-    for unknowns in ((), (x,), (v, x)):
-        with pytest.raises(ValueError, match='an ODE determines its states and nothing else'):
-            ode.determined(unknowns)
     g = NestingGraph(AbstractGraph(OrderedMap({
         Word('body'): Function((x, v), (r, q)), Word('ode'): ode})), OrderedMap())
-    refused = DeterminesItsStates((x, v), ())
-    with pytest.raises(ValueError, match=refused.message.replace('(', r'\(').replace(')', r'\)')):
+    with pytest.raises(TypeError, match='what it owns inside is not a choice'):
         Undetermine(Word('ode')).apply(g)
-    assert [type(v) for v in refusals(Determine(Word('ode'), (x,)), g)] == [AlreadyDetermined]
+    assert [type(v) for v in refusals(Determine(Word('ode'), (x,)), g)] == [OwnsInsideNotAChoice]
 
 
 # ================================================================ generic in the place
@@ -662,7 +657,6 @@ def test_time_is_owned_by_the_ode_given_inside_and_t1_outside():
                   record='xs', times='ts')
     ode = declare(rate).graph[solve_at('forced')].condition
     assert ode.owns_inside == ode.owns == (s.place('x'), s.place('t'))
-    assert ode.determined((s.place('x'), s.place('t'))) is ode
     ts = jnp.linspace(0.0, 1.5, 4)
     out = s.run(declare(rate) + drive(diffrax_run()),
                 {cx.Inputs: {'span': (0.0, 1.5), 'ts': ts}})

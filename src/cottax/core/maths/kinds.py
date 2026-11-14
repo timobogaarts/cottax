@@ -1,7 +1,6 @@
 '''Node kinds: functional and conditional.'''
 
 import dataclasses
-from abc import abstractmethod
 from collections.abc import Iterator, Mapping
 
 from ..frozen import AbstractVar, Violation
@@ -84,16 +83,8 @@ class ConditionalNode[V: Place](NodeDefinition[V]):
     @property
     def reads(self) -> tuple[V, ...]:  return self.reads_inside + self.reads_outside
 
-    @abstractmethod
-    def determined(self, unknowns: tuple[V, ...]) -> 'ConditionalNode[V]':
-        """The same condition node, owning these inside. What `Determine` and `Undetermine`
-        edit; a final that cannot have them changed refuses here."""
 
 # ---------------------------------------------------------------- the predicates
-def is_requirement(d: object) -> bool:
-    """A requirement: a condition node that reads inside and owns nothing there: n ∊ N_C \\ N_P."""
-    return isinstance(d, ConditionalNode) and not bool(d.owns_inside)
-
 def is_encloser(d: object) -> bool:
     """An encloser: a condition node that owns something inside, and so has a cycle around
     it -- a solve, an integration. n ∊ N_P = {n ∊ N_C : O^in_n ≠ ∅}."""
@@ -103,10 +94,6 @@ def is_encloser(d: object) -> bool:
 def enclosers[N: Label](definitions: Mapping[N, NodeDefinition]) -> tuple[N, ...]:
     """The enclosers among `definitions`, in the order given."""
     return tuple(n for n, d in definitions.items() if is_encloser(d))
-
-def requirements[N: Label](definitions: Mapping[N, NodeDefinition]) -> tuple[N, ...]:
-    """The requirements, in the order given."""
-    return tuple(n for n, d in definitions.items() if is_requirement(d))
 
 
 # ----------------------------------------------------------------- violation finals

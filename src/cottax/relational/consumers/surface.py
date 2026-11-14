@@ -1,16 +1,22 @@
 '''
-Relational's part of a `Surface`: `RelationalEditing`, cuts closed by a fixed point.
+Relational's part of a `Surface`: `RelationalEditing`, a requirement determined and cuts
+closed by a fixed point.
 '''
 
 from collections.abc import Mapping
 
 from ...core import Closure, Cut, Label, Place, PlaceToPlace
-from .. import FixedPointCut
+from .. import Determine, FixedPointCut
 from ...consumers.surface.interface import Editing
 
 
 class RelationalEditing(Editing):
-    '''The relational edit a study writes by hand: cuts closed by a fixed point.'''
+    '''The relational edits a study writes by hand: a requirement determined, and cuts
+    closed by a fixed point.'''
+
+    def determine(self, requirement: Label, *unknowns: Place) -> Determine:
+        '''The requirement determines `unknowns`: a problem.'''
+        return Determine(requirement, unknowns)
 
     def fixed_point_cut(self, cuts: Place | Mapping[Place, tuple[Label, ...]],
                         readers: tuple[Label, ...] | None = None, *, at: Label | None = None,

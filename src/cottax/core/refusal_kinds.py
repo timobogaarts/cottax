@@ -16,8 +16,8 @@ from .maths.nesting import (
     Unreachable,
 )
 from .maths.plan.ops import (
-    AlreadyCut, AlreadyDetermined, AlreadyUndetermined, DoesNotRead, NoReaders, NotProduced,
-    NotRenamed, NoUnknowns, UnknownTwice,
+    AlreadyCut, DoesNotRead, NoReaders, NotProduced, NotRenamed, OwnedInsideTwice,
+    OwnsInsideNotAChoice,
 )
 from .maths.plan.primitive import (
     AlreadyNested, NameTaken, NodeTwice, NotAddable, NotBound, NotNested, NotOfKind,
@@ -35,8 +35,8 @@ __all__ = [
     'OwnsNothing', 'ReadOnBothSides', 'StatesNothing',
     'BlockTooSmall', 'BoxOwnsNothing', 'NestingLoop', 'NodeInTwoBlocks', 'NotAnEncloser',
     'SelfNested', 'Unbound', 'Unreachable',
-    'AlreadyCut', 'AlreadyDetermined', 'AlreadyUndetermined', 'DoesNotRead', 'NoReaders',
-    'NotProduced', 'NotRenamed', 'NoUnknowns', 'UnknownTwice',
+    'AlreadyCut', 'DoesNotRead', 'NoReaders', 'NotProduced', 'NotRenamed', 'OwnedInsideTwice',
+    'OwnsInsideNotAChoice',
     'AlreadyNested', 'NameTaken', 'NodeTwice', 'NotAddable', 'NotBound', 'NotNested',
     'NotOfKind', 'NothingDeleted', 'NothingInserted', 'NothingToCombine', 'Stranded',
     'InputMissing', 'NotAPlace', 'OwnedGiven',

@@ -95,10 +95,6 @@ class ImplementedDriven[V: Place](Implemented[V], DrivenNode[V]):
     @property
     def reports(self) -> tuple[tuple[V, ...], ...]:    return self.node.reports
 
-    def determined(self, unknowns: tuple[V, ...]) -> 'ImplementedDriven[V]':
-        '''Refused: take off the outer layer first.'''
-        raise DeterminedWhileImplemented(self.owns_inside, tuple(unknowns)).raised
-
     def undriven(self) -> ConditionalNode[V]:
         '''Refused: the implementation runs this driver, so it comes off first.'''
         raise UndrivenWhileImplemented(type(self.contract).__name__).raised
@@ -255,13 +251,6 @@ class NoContract(Violation):
     error    = TypeError
     template = ('{node!r} is a {kind} with no driver, so there is no contract for an '
                 'implementation to answer -- `Assign` one first')
-
-class DeterminedWhileImplemented(Violation):
-    unknowns : tuple
-    asked    : tuple
-    error    = TypeError
-    template = ('this node is implemented over {unknowns!r}, so it cannot be made to determine '
-                '{asked!r} -- `Unimplement` it first')
 
 class UndrivenWhileImplemented(Violation):
     driver : str

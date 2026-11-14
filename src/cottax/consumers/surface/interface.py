@@ -15,7 +15,7 @@ from collections.abc import Callable, Mapping
 from typing import Any
 
 from ...core import (
-    Combine, Cut, Delete, Determine, Label, Nest, Place, PlaceToPlace, Rename, Unnest,
+    Combine, Cut, Delete, Label, Nest, Place, PlaceToPlace, Rename, Unnest,
 )
 from ...core.frozen import AbstractClassVar, AbstractVar, Answer, Choice, Frozen, OrderedMap
 from ...core.realisation import Implement
@@ -128,10 +128,6 @@ class Editing(Part):
     def rename(self, node: Label, onto: Mapping[Place, Place]) -> Rename:
         '''The node reads and owns each place of `onto` at the place it maps to.'''
         return Rename(node, tuple(onto.items()))
-
-    def determine(self, requirement: Label, *unknowns: Place) -> Determine:
-        '''The requirement determines `unknowns`: a problem.'''
-        return Determine(requirement, unknowns)
 
     def nest(self, inner: Label, outer: Label) -> Nest:
         '''The problem `inner` is answered inside every iteration of `outer`.'''

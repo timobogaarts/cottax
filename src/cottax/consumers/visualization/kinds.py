@@ -14,7 +14,7 @@ from .style import Style
 
 STATED_TEXT  = 'requirement, no unknowns named'
 '''What a key says of a condition node with no category.'''
-STATED_TITLE = 'asserted, determining nothing -- `Determine` it to name its unknowns'
+STATED_TITLE = 'asserted, determining nothing -- determine it to name its unknowns'
 '''What hovering says of one.'''
 
 

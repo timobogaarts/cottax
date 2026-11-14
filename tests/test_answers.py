@@ -65,9 +65,6 @@ class Vanishes(ConditionalNode):
     def relabel(self, renaming):
         return type(self)(relabelled(self.reads_inside, renaming), relabelled(self.owns_inside, renaming))
 
-    def determined(self, unknowns):
-        return type(self)(self.reads_inside, unknowns)
-
 
 class Raw(Vanishes):
     '''Nothing answers for it.'''

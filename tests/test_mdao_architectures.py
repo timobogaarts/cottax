@@ -427,7 +427,7 @@ def test_a_requirement_the_design_does_not_reach_is_refused(sellar):
     assert mdf().absorbing(with_req) == ()
     g = (Plan(with_req) + mdf()).graph
     assert N('req') in g
-    with pytest.raises(ValueError, match='`Determine` it by a variable on its cycle'):
+    with pytest.raises(ValueError, match='determine it by a variable on its cycle'):
         ExecutableGraph(g)
 
 

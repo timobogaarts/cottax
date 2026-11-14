@@ -12,8 +12,8 @@ from collections.abc import Generator, Iterator, Sequence
 from typing import Any, ClassVar
 
 from ...core import (
-    Combine, CutRule, FunctionalNode, Label, NestingGraph, Opened, Place, ToCut, Violation,
-    is_encloser, cuts_per_cycle, requirements, GraphOp, Nest, StagedOp, refusals,
+    Combine, ConditionalNode, CutRule, FunctionalNode, Label, NestingGraph, Opened, Place, ToCut, Violation,
+    is_encloser, cuts_per_cycle, GraphOp, Nest, StagedOp, refusals,
 )
 from ...core.driven import condition_of
 from ...core.frozen import AbstractVar, Frozen, OrderedMap, answer, first
@@ -305,8 +305,9 @@ def reached_requirements[N: Label, V: Place](graph: NestingGraph[N, V], top: N) 
     '''Every requirement whose conditions the design of `top` reaches.'''
     reach  = set(graph.graph.reach(graph[top].owns_inside))
     owners = graph.graph.owners
-    return tuple(r for r in requirements(graph.definitions)
-                 if all(owners.get(c) in reach for c in graph[r].reads_inside))
+    return tuple(r for r, d in graph.definitions.items()
+                 if isinstance(d, ConditionalNode) and not d.owns_inside
+                 and all(owners.get(c) in reach for c in d.reads_inside))
 
 
 class Monolithic[N: Label, V: Place](Architecture[N, V]):

@@ -1,12 +1,58 @@
-'''The rewrite that writes a relation: `FixedPointCut`, cuts closed by a problem on their copies.'''
+'''The rewrites on a relational condition: `Determine` and `Undetermine`, which name and drop
+its unknowns, and `FixedPointCut`, cuts closed by a problem on their copies.'''
 
 from collections.abc import Iterator, Sequence
 
 from ..core import (
-    ComposedOp, Cut, GraphOp, Insert, Label, NestingGraph, Place, Violation,
+    ComposedOp, Cut, GraphOp, Insert, Label, NestingGraph, Place, SetOwnsInside, Violation,
 )
 from ..core.frozen import OrderedMap
+from ..core.maths.plan.ops import stores_owns_inside
 from .relational_condition import Eq, Relation, RelationalCondition
+
+
+# ---------------------------------------------------------------- the unknowns
+
+def check_unknowns(op: 'Determine') -> Iterator[Violation]:
+    """Something is determined."""
+    if not op.owns_inside:
+        yield NoUnknowns()
+
+
+def check_determines_nothing_yet(op: 'Determine', graph: NestingGraph) -> Iterator[Violation]:
+    """The node determines nothing yet: unknowns are set, never added to."""
+    node = graph[op.node]
+    if stores_owns_inside(node) and node.owns_inside:       # else `SetOwnsInside` refuses it
+        yield AlreadyDetermined(op.node, node.owns_inside)
+
+
+def check_determines_something(op: 'Undetermine', graph: NestingGraph) -> Iterator[Violation]:
+    """There is something to drop."""
+    node = graph[op.node]
+    if stores_owns_inside(node) and not node.owns_inside:   # else `SetOwnsInside` refuses it
+        yield AlreadyUndetermined(op.node)
+
+
+class Determine[N: Label, V: Place](SetOwnsInside[N, V]):
+    """Name the unknowns a requirement determines: `SetOwnsInside` in the words of a
+    relation, on a node that determines nothing yet."""
+
+    checks = (check_unknowns,)
+    checks_graph = (check_determines_nothing_yet,)
+
+    def __repr__(self) -> str:
+        return f'determine({self.node} <- {", ".join(str(u) for u in self.owns_inside)})'
+
+
+class Undetermine[N: Label, V: Place](SetOwnsInside[N, V]):
+    """The inverse of `Determine`: the unknowns dropped, the condition node kept."""
+
+    owns_inside : tuple[V, ...] = ()
+
+    checks_graph = (check_determines_something,)
+
+    def __repr__(self) -> str:
+        return f'undetermine({self.node})'
 
 
 # ---------------------------------------------------------------- cut, closed
@@ -49,7 +95,7 @@ class FixedPointCut[N: Label, V: Place](ComposedOp[N, V]):
         return RelationalCondition(
             relations  = tuple(Relation(m, v, Eq) for m, v in zip(self.copies, self.vars)),
             objectives = (),
-            unknowns   = self.copies, parameters=(),
+            owns_inside = self.copies, reads_outside=(),
         )
 
     def composed(self, graph: NestingGraph[N, V]) -> Sequence[GraphOp[N, V]]:
@@ -71,3 +117,22 @@ class CutTwice(Violation):
     error    = ValueError
     template = ('{places!r} is cut twice in one closure -- two copies of one place would '
                 'assume two values for it')
+
+
+class NoUnknowns(Violation):
+    error    = ValueError
+    template = 'determine(): no unknowns -- a condition node that determines nothing is what it already is'
+
+
+class AlreadyDetermined(Violation):
+    requirement : Label
+    unknowns    : tuple[Place, ...]
+    error    = TypeError
+    template = ('{requirement!r} already determines {unknowns!r} -- `Undetermine` it first, so '
+                'the earlier choice is dropped deliberately rather than silently replaced')
+
+
+class AlreadyUndetermined(Violation):
+    problem : Label
+    error    = TypeError
+    template = '{problem!r} already determines nothing, so there is nothing to take off'

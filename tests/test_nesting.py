@@ -16,7 +16,8 @@ from cottax.core import Function
 from cottax.core.maths.plan import Delete, Insert, Nest, Plan, Unnest
 from cottax.core.realisation import ImplementedFunction
 from cottax.relational import Eq, Relation, RelationalCondition
-from cottax.core.maths.plan import Cut, Determine, Undetermine
+from cottax.core.maths.plan import Cut
+from cottax.relational.rewrites import Determine, Undetermine
 from cottax.core import Combine
 from cottax.pytree.path import NodePath, VarPath
 from cottax.core.frozen import OrderedMap, unchecked
