@@ -1,11 +1,13 @@
 """
-Node definition and its checks
+Node definition and its checks, and the attributes a node carries
 """
 
+import dataclasses
 from abc import abstractmethod
 from collections.abc import Iterable, Iterator, Mapping
+from dataclasses import field
 
-from ..frozen import AbstractVar, Frozen, Violation
+from ..frozen import AbstractVar, Frozen, OrderedMap, Violation
 from .places import Place, self_overlaps, is_prefix, overlaps
 
 
@@ -35,6 +37,18 @@ def check_reads_outside_owns(d: 'NodeDefinition') -> Iterator[Violation]:
 
 
 
+def check_attributes_fit(d: 'NodeDefinition') -> Iterator[Violation]:
+    '''Each attribute fits the node carrying it.'''
+    yield from misfits(d, d.attributes)
+
+
+def misfits(node: 'NodeDefinition', attributes: 'Mapping[type[Attribute], object]') -> Iterator[Violation]:
+    '''Each of `attributes` that `node` cannot carry.'''
+    for kind, value in attributes.items():
+        if not kind.fits(value, node):
+            yield AttributeDoesNotFit(kind.__name__, type(node).__name__)
+
+
 type Renaming[V: Place] = Mapping[V, V]
 '''Old place -> new, per node. Keyed by the place, so `fn(x, x)` renames both reads.'''
 
@@ -48,11 +62,43 @@ class NodeDefinition[V: Place](Frozen):
 
     owns   : AbstractVar[tuple[V, ...]]
     reads  : AbstractVar[tuple[V, ...]]
-    checks = (check_owns_are_separate, check_reads_outside_owns)
+    attributes : 'OrderedMap[type[Attribute], object]' = field(default=OrderedMap(), kw_only=True)
+    """Additional Node attributes (e.g. implementation or something else)"""
+    checks = (check_owns_are_separate, check_reads_outside_owns, check_attributes_fit)
 
     @abstractmethod
     def relabel(self, renaming: Renaming[V]) -> 'NodeDefinition[V]':
         """The same definition with its places renamed."""
+
+class Attribute:
+    """
+    An attribute type.
+    """
+
+    @classmethod
+    def fits(cls, value: object, node: NodeDefinition) -> bool:
+        """Whether `node` can carry `value`."""
+        return True
+
+    @classmethod
+    def text(cls, value: object) -> str:
+        """`value`, as its node's `__repr__` shows it."""
+        return f'{cls.__name__}({value!r})'
+
+
+def with_attributes[D: NodeDefinition](node: D, attributes: 'OrderedMap[type[Attribute], object]') -> D:
+    """`node` carrying exactly `attributes`."""
+    return node if node.attributes == attributes else dataclasses.replace(node, attributes=attributes)
+
+
+def without_attribute[D: NodeDefinition](node: D, kind: type[Attribute]) -> D:
+    """`node` without what it carries under `kind`."""
+    return with_attributes(node, OrderedMap((k, a) for k, a in node.attributes.items() if k is not kind))
+
+
+def attributes_text(node: NodeDefinition) -> str:
+    """What a node's `__repr__` says of its attributes: nothing where it carries none."""
+    return ''.join(f' +{kind.text(value)}' for kind, value in node.attributes.items())
 
 
 
@@ -61,6 +107,13 @@ def relabelled[V: Place](places: Iterable[V], renaming: Renaming[V]) -> tuple[V,
     return tuple(renaming.get(v, v) for v in places) # either the new name or the old name (if not in the renaming)
 
 # ---------------------------------------------------------------- violation finals.
+
+class AttributeDoesNotFit(Violation):
+    attribute : str
+    kind      : str
+    error    = TypeError
+    template = ('{attribute} does not fit a {kind} -- take the {attribute} off first, or do '
+                'not set it there')
 
 class OwnsTwice(Violation):
     place : Place

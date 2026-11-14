@@ -11,12 +11,12 @@ import re
 import pytest
 from jax.tree_util import GetAttrKey
 
-from cottax.core import Function
+from cottax.core import FunctionalNode
 from cottax.core.frozen import OrderedMap
 from cottax.core.maths.plan import Cut, Plan
 import purposes
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core.realisation import ImplementedFunction
+from cottax.core.realisation import implemented
 from cottax.consumers.visualization.page import HtmlDoc
 from cottax.consumers.visualization.style import DARK
 from cottax.consumers.visualization.xdsm import render_xdsm_svg, xdsm_struct
@@ -35,7 +35,7 @@ def N(*keys) -> NodePath:
 
 
 def call(reads, owns):
-    return ImplementedFunction(Function(tuple(V(r) for r in reads), tuple(V(o) for o in owns)),
+    return implemented(FunctionalNode(tuple(V(r) for r in reads), tuple(V(o) for o in owns)),
                                lambda *a: None)
 
 

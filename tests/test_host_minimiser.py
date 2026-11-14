@@ -21,10 +21,10 @@ import purposes
 from cottax.assemblies.jax import flat
 from cottax.consumers.execution import CallableGraph, run
 from cottax.consumers.execution.interface_types import Posed
-from cottax.core import Function, GraphWithValues
+from cottax.core import FunctionalNode, GraphWithValues
 from cottax.core.driven import Driven, PerProblem, Role, Start, Steps, role_slots
 from cottax.core.frozen import OrderedMap
-from cottax.core.realisation import ImplementedDriven, ImplementedFunction
+from cottax.core.realisation import implemented
 from cottax.pytree.path import NodePath, VarPath
 from cottax.relational import Eq, Le, Min, Objective, Relation, RelationalCondition, programme
 from cottax.relational.consumers.execution.jax_solvers import (
@@ -52,19 +52,19 @@ def N(name: str) -> NodePath:
 STARTS, LOWER, UPPER = purposes.Start(), purposes.Lower(), purposes.Upper()
 
 
-def call(reads, owns, fn) -> ImplementedFunction:
-    return ImplementedFunction(Function(tuple(V(r) for r in reads), tuple(V(o) for o in owns)), fn)
+def call(reads, owns, fn) -> 'FunctionalNode':
+    return implemented(FunctionalNode(tuple(V(r) for r in reads), tuple(V(o) for o in owns)), fn)
 
 
 def optimise(objective, design, relations, implementation, bounded=False, steps=False,
-             contract=None, reports=None) -> ImplementedDriven:
+             contract=None, reports=None) -> 'Driven':
     unknowns   = tuple(V(d) for d in design)
     parameters = tuple(b(u) for u in unknowns for b in (LOWER, UPPER)) if bounded else ()
     bounds     = tuple(r for u in unknowns for r in (Relation(LOWER(u), u, Le),
                                                      Relation(u, UPPER(u), Le))) if bounded else ()
     condition  = RelationalCondition(tuple(relations) + bounds, (Objective(V(objective), Min),),
                                      unknowns, parameters)
-    return ImplementedDriven(
+    return implemented(
         Driven(condition, contract or ConstrainedMinimisation(steps=steps),
                (tuple(STARTS(u) for u in unknowns),),
                reports if reports is not None else (((V('n'),),) if steps else ())),
@@ -394,7 +394,7 @@ def test_unknowns_under_a_jit_is_in_the_models_units_and_retraces_for_no_scale()
         return (x - 3.0) ** 2
 
     condition = RelationalCondition((), (Objective(V('f'), Min),), (V('x'),), ())
-    implementation = ImplementedDriven(Driven(condition, ConstrainedMinimisation(steps=False, scaled=True),
+    implementation = implemented(Driven(condition, ConstrainedMinimisation(steps=False, scaled=True),
                                               ((STARTS(V('x')),), (V('s'),)), ()), Asks(ask=ask))
     go = eqx.filter_jit(traced_run)
     nodes = {N('m'): call(['x'], ['f'], model), N('opt'): implementation}

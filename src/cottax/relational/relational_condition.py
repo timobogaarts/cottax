@@ -8,6 +8,7 @@ import dataclasses
 from collections.abc import Iterator
 
 from ..core import ConditionalNode, Place, Renaming, Violation, relabelled
+from ..core.maths.definition import attributes_text
 from ..core.frozen import Frozen
 
 
@@ -183,7 +184,7 @@ class RelationalCondition[V: Place](ConditionalNode[V]):
                 if self.unknowns else ' (requirement)')
         fixed = (' fixing ' + ', '.join(str(p) for p in self.parameters)
                  if self.parameters else '')
-        return f'{type(self).__name__}({stated}{over}{fixed})'
+        return f'{type(self).__name__}({stated}{over}{fixed}){attributes_text(self)}'
 
 
 # ----------------------------------------------------------------- violation finals

@@ -14,11 +14,11 @@ from cottax.consumers.surface.interface import Locator
 from cottax.consumers.execution import CallableGraph, Inputs, Running, read_from, slots
 from cottax.consumers.execution.interface import DataStructure
 from cottax.consumers.execution.refusals import ValuedTwice
-from cottax.core import AbstractGraph, Function, NestingGraph, answer_for_places
+from cottax.core import AbstractGraph, FunctionalNode, NestingGraph, answer_for_places
 from cottax.core.frozen.answer import Unanswered
 from cottax.core.maths.dispatch import NothingToAsk
 from cottax.core.driven import Driven
-from cottax.core.realisation import ImplementedDriven
+from cottax.core.realisation import implemented
 from cottax.relational import Eq, Relation, RelationalCondition
 from test_execution import (
     CLOSE, F, Newton, Start, U, W, Word, X, call, definitions, exact_u, flat, nested, newton,
@@ -99,8 +99,7 @@ def test_where_a_datum_is_read_is_the_at_handed_in():
 
 def test_a_datum_the_graph_computes_is_not_read():
     warm = flat().graph.definitions[W('Mesh')]
-    fed  = flat(OrderedMap({W('Warm'): type(warm)(type(warm.node)((X,), (START,)),
-                                                  lambda x: x)}))
+    fed  = flat(OrderedMap({W('Warm'): implemented(type(warm)((X,), (START,)), lambda x: x)}))
     valued = s.valued(fed, BUDGETED, held(OrderedMap({X: 1.0, U: 2.0})))
     assert dict(valued.values) == {X: 1.0, BUDGET: 50}
 
@@ -109,7 +108,7 @@ def test_a_start_shared_by_two_unknowns_is_valued_twice():
     '''Two problems starting from one place, at two unknowns: which value it takes is not
     the state's to say.'''
     v, r_v = W('v'), W('r_v')
-    other  = ImplementedDriven(
+    other  = implemented(
         Driven(RelationalCondition((Relation(r_v, None, Eq),), (), (v,), ()), Newton(),
                ((START,), (W('^budget.Other'),)), ((W('^steps.Other'),),)), newton)
     graph  = CallableGraph(NestingGraph(AbstractGraph(
@@ -218,7 +217,7 @@ class Unindexed(Other):
 
 def over(cls) -> NestingGraph:
     '''A graph whose places are of `cls`.'''
-    return NestingGraph(AbstractGraph(OrderedMap({W('f'): Function((cls('x'),), (cls('y'),))})),
+    return NestingGraph(AbstractGraph(OrderedMap({W('f'): FunctionalNode((cls('x'),), (cls('y'),))})),
                         OrderedMap())
 
 

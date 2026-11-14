@@ -11,8 +11,8 @@ from jax.tree_util import GetAttrKey
 
 from cottax.core.frozen import OrderedMap
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core import Function
-from cottax.core.realisation import ImplementedFunction
+from cottax.core import FunctionalNode
+from cottax.core.realisation import implemented
 from graphs import graph_of
 
 
@@ -25,7 +25,7 @@ def N(*keys) -> NodePath:
 
 
 def call(reads, owns):
-    return ImplementedFunction(Function(tuple(V(r) for r in reads), tuple(V(o) for o in owns)),
+    return implemented(FunctionalNode(tuple(V(r) for r in reads), tuple(V(o) for o in owns)),
                        lambda *a: None)
 
 

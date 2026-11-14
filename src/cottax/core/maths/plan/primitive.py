@@ -9,7 +9,7 @@ from collections.abc import Collection, Iterator, Mapping
 from dataclasses import replace
 from functools import reduce
 
-from ..definition import NodeDefinition
+from ..definition import NodeDefinition, with_attributes
 from ...frozen import Frozen, OrderedMap, Violation, first
 from ..nesting import NestingGraph, NestingLoop
 from ..places import Label, Place
@@ -137,7 +137,12 @@ class Delete[N: Label](Rebind[N, Place]):
 
 class Redefine[N: Label, V: Place](Rebind[N, V]):
     """Replace definitions in place. The names must be bound, which is checked once
-    `redefined` has named them."""
+    `redefined` has named them. What a node carries is carried here: an op says what it
+    reads and owns, and never mentions its attributes."""
+
+    edits_attributes = False
+    """Whether `redefined` itself decides the attributes: `Replace`, `SetAttribute`,
+    `RemoveAttribute`."""
 
     @abstractmethod
     def redefined(self, graph: NestingGraph[N, V]) -> Mapping[N, NodeDefinition[V]]:
@@ -146,6 +151,9 @@ class Redefine[N: Label, V: Place](Rebind[N, V]):
     def rebinding(self, graph: NestingGraph[N, V]) -> Rebinding[N, V]:
         redefined = OrderedMap(self.redefined(graph))
         first(NotBound(name) for name in redefined if name not in graph.definitions)
+        if not self.edits_attributes:
+            redefined = OrderedMap((name, with_attributes(after, graph[name].attributes))
+                                   for name, after in redefined.items())
         return Rebinding(frozenset(), redefined)
 
 
@@ -165,6 +173,13 @@ def check_folds_one_kind(op: 'Combine', graph: NestingGraph) -> Iterator[Violati
     if off:
         found = dict.fromkeys(type(graph[n]).__name__ for n in off)
         yield NotOfKind(off, op.kind.__name__, ', '.join(found))
+
+
+def check_folds_no_attributes(op: 'Combine', graph: NestingGraph) -> Iterator[Violation]:
+    '''No folded node carries an attribute: what two nodes carry has no join yet.'''
+    for name in op.nodes:
+        if name in graph.definitions and (carried := graph[name].attributes):
+            yield CarriesAttributes(name, tuple(k.__name__ for k in carried))
 
 
 def check_lands_on_its_own(op: 'Combine', graph: NestingGraph) -> Iterator[Violation]:
@@ -189,7 +204,8 @@ class Combine[N: Label, V: Place, D: NodeDefinition](Rebind[N, V]):
     '''The class whose `+` folds the nodes; each node must be one.'''
 
     checks = (check_nodes,)
-    checks_graph = (check_folds_one_kind, check_lands_on_its_own, check_fold_keeps_nesting_whole)
+    checks_graph = (check_folds_one_kind, check_folds_no_attributes, check_lands_on_its_own,
+                    check_fold_keeps_nesting_whole)
 
     def definition(self, graph: NestingGraph[N, V]) -> D:
         '''The `+` of the folded nodes.'''
@@ -287,6 +303,13 @@ class NotOfKind(Violation):
     error    = TypeError
     template = ('combine({kind}): {nodes!r} is {found}, and a fold is well-defined over '
                 'one kind only')
+
+class CarriesAttributes(Violation):
+    node       : Label
+    attributes : tuple[str, ...]
+    error    = TypeError
+    template = ('combine(): {node!r} carries {attributes}, and what two nodes carry has no join '
+                '-- take it off first')
 
 class NameTaken(Violation):
     name : Label

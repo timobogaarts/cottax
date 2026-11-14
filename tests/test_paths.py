@@ -11,8 +11,8 @@ import jax
 import pytest
 from jax.tree_util import DictKey, FlattenedIndexKey, GetAttrKey, SequenceKey
 
-from cottax.core import Function
-from cottax.core.realisation import ImplementedFunction
+from cottax.core import FunctionalNode
+from cottax.core.realisation import implemented
 from cottax.pytree.path import NodePath, Path, VarPath
 import cottax.assemblies.jax as cx
 
@@ -124,8 +124,8 @@ def test_a_spelling_labels_but_does_not_identify():
 
 def node(name, reads, owns, **kw):
     # `name` is what a caller would bind this under; the node itself never carries it.
-    return ImplementedFunction(
-        Function(reads=tuple(V(GetAttrKey(r)) for r in reads),
+    return implemented(
+        FunctionalNode(reads=tuple(V(GetAttrKey(r)) for r in reads),
                  owns=tuple(V(GetAttrKey(o)) for o in owns)),
         kw.pop('fn', lambda *a: None),
     )
@@ -166,7 +166,7 @@ def test_every_subclass_is_slotted():
 
 def test_an_error_shows_names_as_they_are_written():
     with pytest.raises(ValueError, match=r'\.s\.x'):
-        Function(
+        FunctionalNode(
             reads=(V(GetAttrKey('s'), GetAttrKey('x')),),
             owns=(V(GetAttrKey('s'), GetAttrKey('x')),),
         )

@@ -20,7 +20,8 @@ from cottax.core.maths.graph import (
 )
 from cottax.core import (
     AbstractGraph, NestingGraph, Combine, ConditionalNode, Cut, FunctionalNode,
-    Rename, SetOwnsInside, refusals,
+    Rename, Replace, SetOwnsInside, refusals,
+    Attribute, RemoveAttribute, SetAttribute, with_attributes,
     Violation, NodeDefinition, Insert, Delete,
     violations, comparables_in, first, prefixes,
     answer_for_labels, answer_for_places, GraphWithValues,
@@ -86,11 +87,8 @@ def places(names):
     return tuple(Word(n) for n in names)
 
 
-class Declared(FunctionalNode):
-    '''A computation with nothing to call.'''
-    reads : tuple = ()
-    owns  : tuple = ()
-    def relabel(self, renaming): return self
+Declared = FunctionalNode
+'''A computation with nothing to call.'''
 
 
 class States(ConditionalNode):
@@ -121,6 +119,30 @@ class Driven(ConditionalNode):
     reads_outside = property(lambda self: tuple(v for vs in self.data for v in vs))
     owns_outside  = property(lambda self: tuple(v for vs in self.reports for v in vs))
     def relabel(self, renaming): return self
+
+
+class Note(Attribute):
+    '''An attribute with no opinion on the node carrying it: a title, a tag.'''
+
+
+class Shaped(Attribute):
+    '''An attribute written for a node's shape: it fits a node reading one place.'''
+    @classmethod
+    def fits(cls, value, node): return len(node.reads) == 1
+
+
+class SetNote(SetAttribute):        kind = Note
+class DropNote(RemoveAttribute):    kind = Note
+class SetShaped(SetAttribute):      kind = Shaped
+
+
+class Forgets(NodeDefinition):
+    '''A kind whose `relabel` builds a fresh node, and so says nothing of what it carried.'''
+    reads : tuple = ()
+    owns  : tuple = ()
+    def relabel(self, renaming):
+        return Forgets(tuple(renaming.get(v, v) for v in self.reads),
+                       tuple(renaming.get(v, v) for v in self.owns))
 
 
 def body(reads, owns):          return declared(reads, owns)   # a body is no edge: the abstract sees a function
@@ -324,6 +346,53 @@ def test_what_a_condition_node_owns_inside_is_set_where_it_is_stored():
     assert repr(SetOwnsInside(a, places(['u']))) == 'set_owns_inside(a <- u)'
 
 
+# ---------------------------------------------------------------- what a node carries
+
+def test_an_attribute_is_set_and_taken_off_and_is_in_equality():
+    a = Word('a')
+    g = G({a: toy([], ['x'])})
+    noted = SetNote(OrderedMap({a: 'n'})).apply(g)
+    assert noted[a].attributes == OrderedMap({Note: 'n'})           # the key, and the value as given
+    assert noted[a] != g[a] and noted != g                  # a node is what it carries too
+    assert DropNote((a,)).apply(noted) == g
+    assert [type(v).__name__ for v in refusals(SetNote(OrderedMap({a: 'm'})), noted)] \
+        == ['AttributeAlreadySet']
+    assert [type(v).__name__ for v in refusals(DropNote((a,)), g)] == ['AttributeNotSet']
+
+
+def test_what_a_node_carries_is_carried_through_an_edit_by_the_op_and_not_the_kind():
+    """`Forgets.relabel` builds a fresh node and says nothing of attributes: `Redefine` puts
+    back what the node carried. `Replace` hands a definition over, attributes and all."""
+    a = Word('a')
+    g = G({a: with_attributes(Forgets(places(['p']), places(['q'])), OrderedMap({Note: 'n'}))})
+    assert g[a].relabel({Word('p'): Word('r')}).attributes == OrderedMap()      # the kind forgets
+    renamed = Rename(a, ((Word('p'), Word('r')),)).apply(g)
+    assert renamed[a].reads == places(['r']) and renamed[a].attributes == g[a].attributes
+    replaced = Replace(a, toy(['p', 's'], ['q'])).apply(g)
+    assert replaced[a].reads == places(['p', 's']) and replaced[a].attributes == OrderedMap()
+
+
+def test_an_attribute_says_which_nodes_it_fits():
+    """Core cannot read an attribute, so it asks its key, of the node: one that does not
+    fit is never built, by hand or by an op -- which says so as data, before the graph is
+    touched -- and a key with no opinion fits every node."""
+    a, b = Word('a'), Word('b')
+    g = G({a: toy(['p'], ['q']), b: toy(['p', 's'], ['t'])})
+    with pytest.raises(TypeError, match='Shaped does not fit'):
+        with_attributes(g[b], OrderedMap({Shaped: 1}))
+    assert [(type(v).__name__, v.attribute) for v in refusals(SetShaped(OrderedMap({b: 1})), g)] \
+        == [('AttributeDoesNotFit', 'Shaped')]
+    shaped = SetShaped(OrderedMap({a: 1})).apply(g)
+    assert Rename(a, ((Word('p'), Word('r')),)).apply(shaped)[a].attributes == OrderedMap({Shaped: 1})
+    assert SetNote(OrderedMap({b: 'n'})).apply(g)[b].attributes == OrderedMap({Note: 'n'})
+
+
+def test_a_join_folds_no_attributes():
+    a, b = Word('a'), Word('b')
+    g = G({a: with_attributes(states(['y'], ['u']), OrderedMap({Note: 'n'})), b: states(['z'], ['v'])})
+    assert [type(v).__name__ for v in refusals(Combine(a, (a, b), States), g)] == ['CarriesAttributes']
+
+
 def test_every_case_a_rule_can_name_has_wording():
     """
     A missing template is a `KeyError` raised at the moment something else went wrong,
@@ -364,6 +433,8 @@ def test_every_case_a_rule_can_name_has_wording():
     seen(violations(Combine, a, (b,), States))                              # fewer than two
     seen(violations(Combine, a, (b, b), States))                            # a node twice
     seen(violations(Combine, a, (a, b), Toy))                               # a kind with no `+`
+    seen(violations(SetNote, OrderedMap()))                                            # names no node
+    seen(violations(Toy, places(['p', 'r']), places(['q']), attributes=OrderedMap({Shaped: 1})))   # does not fit
 
     # `checks_graph`: what an op needs of the graph, asked before it computes anything --
     # and asked for, which is what `refusals` is, so nothing here is built by hand.
@@ -376,6 +447,11 @@ def test_every_case_a_rule_can_name_has_wording():
     seen(refusals(Cut(Word('x'), (a,), onto), g))                       # the minted name is taken
     seen(refusals(Cut(Word('x'), (b,), hat), g))                        # `b` produces it, reads nothing
     seen(refusals(Combine(a, (a, b), States), g))                       # `b` is a `Toy`
+    noted = G({a: with_attributes(states(['y'], ['u']), OrderedMap({Note: 'n'})), b: states(['z'], ['v']),
+               t: with_attributes(toy(['p'], ['q']), OrderedMap({Shaped: 1}))})
+    seen(refusals(SetNote(OrderedMap({a: 'm'})), noted))                # carries one under that key already
+    seen(refusals(DropNote((b,)), noted))                               # carries none to take off
+    seen(refusals(Combine(a, (a, b), States), noted))                   # what two nodes carry has no join
 
     cyc = {a: states(['y'], ['x']), b: states(['x'], ['y']), t: toy(['x'], ['w'])}
     with pytest.raises(KeyError, match='not a node of this graph'):     # `check_nesting_ends_bound`, at construction

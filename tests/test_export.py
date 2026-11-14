@@ -12,7 +12,7 @@ import sys
 import pytest
 from jax.tree_util import DictKey, GetAttrKey, SequenceKey
 
-from cottax.core import Function, answer_for_labels, answer_for_places
+from cottax.core import FunctionalNode, NodeDefinition, answer_for_labels, answer_for_places
 from cottax.core.frozen import answers, violations
 from cottax.core.maths.plan import Plan
 from cottax.relational.contracts import RootFinding
@@ -32,7 +32,7 @@ from cottax.relational.consumers.execution.jax_solvers import Newton
 from cottax.pytree.consumers.json import PytreeCodec, PytreeLabelCodec, spelled
 from cottax.pytree.crossings import key_kind
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core.realisation import ImplementedFunction, is_implemented
+from cottax.core.realisation import implemented, is_implemented
 from cottax.relational import Eq, Le, Max, Min, Objective, Rel, Relation, RelationalCondition
 from cottax.relational.consumers.json import RELS
 from graphs import graph_of
@@ -76,8 +76,8 @@ def test_a_realised_graph_is_proved_picklable_and_loads_back_equal():
 def test_a_structural_graph_needs_no_executability():
     '''A cycle with no problem is no executable graph, and pickles all the same.'''
     x, y = VarPath((DictKey('x'),)), VarPath((DictKey('y'),))
-    g = graph_of({NodePath((DictKey('a'),)): Function((x,), (y,)),
-                  NodePath((DictKey('b'),)): Function((y,), (x,))})
+    g = graph_of({NodePath((DictKey('a'),)): FunctionalNode((x,), (y,)),
+                  NodePath((DictKey('b'),)): FunctionalNode((y,), (x,))})
     write_pickle(g)
 
 
@@ -93,7 +93,7 @@ def test_something_in_main_pickles_here_and_is_refused(monkeypatch):
     body.__module__, body.__qualname__ = '__main__', 'exported_body'
     monkeypatch.setattr(sys.modules['__main__'], 'exported_body', body, raising=False)
     x, y = VarPath((DictKey('x'),)), VarPath((DictKey('y'),))
-    g = graph_of({NodePath((DictKey('a'),)): ImplementedFunction(Function((x,), (y,)), body)})
+    g = graph_of({NodePath((DictKey('a'),)): implemented(FunctionalNode((x,), (y,)), body)})
     pickle.dumps(g)
     assert [type(v) for v in violations(write_pickle, g)] == [DefinedInMain]
 
@@ -146,7 +146,7 @@ def test_a_lambda_is_refused_and_the_structure_is_written_without_it():
 def test_a_dict_key_and_an_index_stay_two_segments():
     '''Both spell `[0]`; the file keeps them apart.'''
     a, b = VarPath((DictKey(0),)), VarPath((SequenceKey(0),))
-    g = graph_of({NodePath((DictKey('f'),)): Function((a,), (b,))})
+    g = graph_of({NodePath((DictKey('f'),)): FunctionalNode((a,), (b,))})
     assert read_json(written(g)) == g
 
 
@@ -163,7 +163,7 @@ spelled(RowKey, 'row', lambda key: key.row)
 def test_a_key_kind_registered_is_a_segment_as_written_and_round_trips():
     place = cx.absolute.place(cx.V[RowKey('a')].x)
     assert place.segments == (RowKey('a'), GetAttrKey('x'))      # not wrapped as a dict key
-    g = graph_of({NodePath((DictKey('f'),)): Function((place,), (VarPath((DictKey('y'),)),))})
+    g = graph_of({NodePath((DictKey('f'),)): FunctionalNode((place,), (VarPath((DictKey('y'),)),))})
     assert '{"row": "a"}' in json.dumps(written(g))
     assert read_json(written(g)) == g
 
@@ -224,12 +224,12 @@ class Word(str):
 
 
 def test_a_place_class_with_no_codec_is_refused_by_name():
-    g = graph_of({NodePath((DictKey('f'),)): Function((Word('x'),), (Word('y'),))})
+    g = graph_of({NodePath((DictKey('f'),)): FunctionalNode((Word('x'),), (Word('y'),))})
     (refused,) = violations(write_json, g)
     assert isinstance(refused, Unanswered) and 'test_export.Word' in refused.message
     assert 'no PlaceCodec' in refused.message
     assert 'import the module that registers one' in refused.message
-    assert [type(v) for v in violations(write_json, graph_of({Word('f'): Function(
+    assert [type(v) for v in violations(write_json, graph_of({Word('f'): FunctionalNode(
         (Word('x'),), (Word('y'),))}))] == [Unanswered, Unanswered]       # the node names too
 
 
@@ -250,7 +250,7 @@ class TermCodec(PlaceCodec):
 
 def test_a_new_place_class_names_its_nodes_by_a_label_class_already_registered():
     '''A place class brings its own `PlaceCodec`; the node names keep `NodePath`'s.'''
-    g    = graph_of({NodePath((DictKey('f'),)): Function((Term('x'),), (Term('y'),))})
+    g    = graph_of({NodePath((DictKey('f'),)): FunctionalNode((Term('x'),), (Term('y'),))})
     data = write_json(g, implementations=False)
     assert (data['places'], data['labels']) == ('test-terms', 'pytree')
     assert read_json(data) == g
@@ -258,14 +258,14 @@ def test_a_new_place_class_names_its_nodes_by_a_label_class_already_registered()
 
 def test_a_registered_codec_writes_and_reads_its_places_and_what_it_refuses_is_unexportable():
     f      = NodePath((DictKey('f'),))
-    spaced = graph_of({f: Function((Term('x y'),), (Term('y'),))})
+    spaced = graph_of({f: FunctionalNode((Term('x y'),), (Term('y'),))})
     assert [type(v) for v in violations(write_json, spaced)] == [Unexportable]
 
 
 def test_a_place_the_codec_found_cannot_write_is_refused_by_name():
     '''A graph is over one place class: the codec is found for one place, and a place of
     another class it cannot write is refused where it is met.'''
-    g = graph_of({NodePath((DictKey('f'),)): Function((V('x'),), (Term('y'),))})
+    g = graph_of({NodePath((DictKey('f'),)): FunctionalNode((V('x'),), (Term('y'),))})
     (refused,) = violations(write_json, g)
     assert isinstance(refused, Unexportable) and refused.what == repr(V('x'))
 
@@ -279,12 +279,12 @@ class Lookalike:
 def test_a_lookalike_of_a_pytree_place_or_node_name_is_refused_by_name():
     '''Written by the pytree codec, it would be read back as a `VarPath` or `NodePath`.'''
     a = Lookalike((DictKey('a'),))
-    (refused,) = violations(write_json, graph_of({NodePath((DictKey('f'),)): Function(
+    (refused,) = violations(write_json, graph_of({NodePath((DictKey('f'),)): FunctionalNode(
         (V('x'), a), (V('a'),))}))
     assert isinstance(refused, Unexportable) and refused.what == repr(a)
     assert 'test_export.Lookalike, not a VarPath' in refused.message
-    (refused,) = violations(write_json, graph_of({NodePath((DictKey('f'),)): Function(
-        (V('x'),), (V('y'),)), a: Function((V('y'),), (V('z'),))}))
+    (refused,) = violations(write_json, graph_of({NodePath((DictKey('f'),)): FunctionalNode(
+        (V('x'),), (V('y'),)), a: FunctionalNode((V('y'),), (V('z'),))}))
     assert refused.what == repr(a) and 'not a NodePath' in refused.message
 
 
@@ -307,8 +307,8 @@ def test_a_tag_coded_twice_is_refused():
 # ---------------------------------------------------------------- extending the format
 # A registration lasts for the session, so each test registers for finals of its own.
 
-class Local(FunctionalNode):
-    """A function: the level of this module's own finals, never instantiated."""
+class Local(NodeDefinition):
+    """A kind of this module's own: the level of its finals, never instantiated."""
 
     reads : tuple
     owns  : tuple
@@ -325,8 +325,8 @@ class BrokenNode(Local):
     """A final spelled by `Broken`."""
 
 
-class Stepped(FunctionalNode):
-    """A kind the shipped spellings do not know: a function with a time step."""
+class Stepped(NodeDefinition):
+    """A kind the shipped spellings do not know: one with a time step."""
 
     reads : tuple
     owns  : tuple
@@ -366,7 +366,7 @@ def test_a_kind_with_no_spelling_is_refused_until_one_is_registered():
         write_json(g)
     entry = {'name': [{'dict': 'step'}], 'definition': file}
     with pytest.raises(ValueError, match="'stepped' is no node kind"):
-        read_json(dict(written(one(Function((X,), (Y,)))), nodes=[entry]))
+        read_json(dict(written(one(FunctionalNode((X,), (Y,)))), nodes=[entry]))
     answers(Stepped)(SteppedSpelling)
     data = written(g)
     assert data['nodes'][0]['definition'] == file
@@ -382,7 +382,7 @@ def test_a_final_with_no_spelling_is_refused_by_name_and_class():
 
 
 def test_a_kind_nobody_registered_is_refused_on_reading():
-    data = written(one(Function((X,), (Y,))))
+    data = written(one(FunctionalNode((X,), (Y,))))
     data['nodes'][0]['definition']['kind'] = 'unspelled'
     with pytest.raises(ValueError) as e:
         read_json(data)
@@ -401,7 +401,7 @@ def test_a_kind_spelled_twice_is_refused():
     assert str(e.value) == SpelledTwice("'function'", 'cottax.consumers.json.format.FunctionSpelling',
                                         f'test_export.{SameWord.__qualname__}').message
     # Nothing of a refused registration is kept.
-    assert written(one(Function((X,), (Y,))))['nodes'][0]['definition']['kind'] == 'function'
+    assert written(one(FunctionalNode((X,), (Y,))))['nodes'][0]['definition']['kind'] == 'function'
     assert [type(v) for v in violations(write_json, one(Unspelled((X,), (Y,))))] == [Unexportable]
 
 
@@ -412,7 +412,7 @@ class Approx(Rel):
 
 def test_a_new_relation_is_one_line_in_rels(monkeypatch):
     u, r = VarPath((DictKey('u'),)), VarPath((DictKey('r'),))
-    g = graph_of({NodePath((DictKey('body'),)): Function((u,), (r,)),
+    g = graph_of({NodePath((DictKey('body'),)): FunctionalNode((u,), (r,)),
                   NodePath((DictKey('near'),)): RelationalCondition((Relation(r, None, Approx),), (), (u,), ())})
     with pytest.raises(TypeError, match='no spelling in `RELS`'):
         write_json(g)
@@ -424,7 +424,7 @@ def test_a_new_relation_is_one_line_in_rels(monkeypatch):
 
 def test_the_file_words_of_relations_and_senses_are_pinned():
     u, v, f, g = (VarPath((DictKey(k),)) for k in 'uvfg')
-    graph = graph_of({NodePath((DictKey('body'),)): Function((u, v), (f, g)),
+    graph = graph_of({NodePath((DictKey('body'),)): FunctionalNode((u, v), (f, g)),
                       NodePath((DictKey('down'),)): RelationalCondition(
                           (Relation(g, None, Le), Relation(g, u, Eq)), (Objective(f, Min),), (u,), ()),
                       NodePath((DictKey('up'),)): RelationalCondition(
@@ -438,7 +438,7 @@ def test_the_file_words_of_relations_and_senses_are_pinned():
 
 def test_a_word_no_table_holds_is_refused_naming_the_table():
     u, v, f, g = (VarPath((DictKey(k),)) for k in 'uvfg')
-    graph = graph_of({NodePath((DictKey('body'),)): Function((u, v), (f, g)),
+    graph = graph_of({NodePath((DictKey('body'),)): FunctionalNode((u, v), (f, g)),
                       NodePath((DictKey('down'),)): RelationalCondition(
                           (Relation(g, u, Eq),), (Objective(f, Min),), (u,), ())})
     for key, field, table in (('relations', 'op', 'RELS'), ('objectives', 'sense', 'SENSES')):
@@ -453,7 +453,7 @@ def test_an_implementation_around_a_condition_is_refused_as_such():
     entry = next(e for e in data['nodes'] if e['definition']['kind'] == 'driven')
     entry['definition'] = {'kind': 'implemented', 'node': entry['definition']['condition'],
                            'implementation': {'ref': 'test_cx:square'}}
-    with pytest.raises(TypeError, match='nothing implements a RelationalCondition'):
+    with pytest.raises(TypeError, match='Implementation does not fit a RelationalCondition'):
         read_json(data)
 
 
@@ -475,6 +475,6 @@ def test_a_bug_in_a_spelling_raises_rather_than_being_refused():
 
 def test_a_place_the_codec_refuses_is_refused_by_name():
     x, y = VarPath((DictKey((1, 2)),)), VarPath((DictKey('y'),))
-    g = graph_of({NodePath((DictKey('f'),)): Function((x,), (y,))})
+    g = graph_of({NodePath((DictKey('f'),)): FunctionalNode((x,), (y,))})
     (refused,) = violations(write_json, g)
     assert isinstance(refused, Unexportable) and 'codec refuses' in refused.reason

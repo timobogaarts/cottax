@@ -8,7 +8,7 @@ Names are built by hand from key entries, as in `test_algebra.py` and `test_rewr
 import pytest
 from jax.tree_util import GetAttrKey
 
-from cottax.core import Function
+from cottax.core import FunctionalNode
 from cottax.core.maths.plan import Cut, Insert, Plan, refusals
 import purposes
 from cottax.core.frozen import OrderedMap
@@ -30,12 +30,12 @@ def N(*keys) -> NodePath:
 X, Z, Y1, Y2, F, C, R, U, GU = (V(s) for s in 'x z y1 y2 f c r u gu'.split())
 
 
-def call(reads, owns) -> Function:
+def call(reads, owns) -> FunctionalNode:
     '''A computation: what it reads and what it owns, which is all an edit ever sees.'''
-    return Function(tuple(reads), tuple(owns))
+    return FunctionalNode(tuple(reads), tuple(owns))
 
 
-def source(var) -> Function:
+def source(var) -> FunctionalNode:
     return call([], [var])
 
 

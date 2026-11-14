@@ -12,9 +12,9 @@ from jax.tree_util import GetAttrKey as G
 from cottax.core.maths.executable import ExecutableGraph, check_nestings_share_a_cycle
 from cottax.relational import Min, Objective
 from cottax.core.driven import Assign, DriverContract
-from cottax.core import Function
+from cottax.core import FunctionalNode
 from cottax.core.maths.plan import Delete, Insert, Nest, Plan, Unnest
-from cottax.core.realisation import ImplementedFunction
+from cottax.core.realisation import implemented
 from cottax.relational import Eq, Relation, RelationalCondition
 from cottax.core.maths.plan import Cut
 from cottax.relational.rewrites import Determine, Undetermine
@@ -57,7 +57,7 @@ def n(*names: str) -> NodePath:
 
 
 def call(reads, owns):
-    return ImplementedFunction(Function(tuple(v(r) for r in reads), tuple(v(o) for o in owns)),
+    return implemented(FunctionalNode(tuple(v(r) for r in reads), tuple(v(o) for o in owns)),
                        lambda *a: tuple(a[:1]) * len(owns))
 
 
@@ -368,7 +368,7 @@ def test_contract_drops_a_pair_with_an_end_in_a_block_and_keeps_the_rest(nested)
     boxed = nested.contract(((n('mda'), n('d')),))
     assert dict(boxed.within) == {}
     assert boxed.nodes == (n('opt'), n('mda'), n('obj'))
-    assert boxed[n('mda')] == Function((v('z'),), (v('hy'), v('y')))
+    assert boxed[n('mda')] == FunctionalNode((v('z'),), (v('hy'), v('y')))
     kept = nested.contract(((n('d'), n('obj')),))
     assert dict(kept.within) == {n('mda'): n('opt')}
     from cottax.core.maths.nesting import NestingGraph

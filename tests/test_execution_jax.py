@@ -18,7 +18,7 @@ import jax.numpy as jnp
 import pytest
 from jax.tree_util import DictKey
 
-from cottax.core import Function, GraphWithValues, Solve
+from cottax.core import FunctionalNode, GraphWithValues, Solve
 from cottax.core.frozen import OrderedMap
 from cottax.core.driven import Driven
 from cottax.relational.contracts import RootFinding
@@ -26,7 +26,7 @@ from cottax.consumers.execution import CallableGraph, run
 from cottax.consumers.execution.run import InteriorConditionMap
 import purposes
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core.realisation import ImplementedDriven, ImplementedFunction
+from cottax.core.realisation import implemented
 from cottax.relational import Eq, Relation, RelationalCondition
 from cottax.relational.consumers.execution.jax_solvers import Newton
 from graphs import graph_of
@@ -53,13 +53,13 @@ newton = Newton(rtol=1e-10, atol=1e-10)
 
 # ---------------------------------------------------------------- the models
 
-def call(reads, owns, fn) -> ImplementedFunction:
-    return ImplementedFunction(Function(tuple(reads), tuple(owns)), fn)
+def call(reads, owns, fn) -> 'FunctionalNode':
+    return implemented(FunctionalNode(tuple(reads), tuple(owns)), fn)
 
 
-def driven(relations, unknowns) -> ImplementedDriven:
+def driven(relations, unknowns) -> 'Driven':
     condition = RelationalCondition(tuple(relations), (), tuple(unknowns), ())
-    return ImplementedDriven(Driven(condition, RootFinding(steps=False),
+    return implemented(Driven(condition, RootFinding(steps=False),
                                     tuple((STARTS(u),) for u in unknowns), ()), newton)
 
 

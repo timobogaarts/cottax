@@ -9,13 +9,13 @@ import re
 import pytest
 from jax.tree_util import GetAttrKey
 
-from cottax.core import Function
+from cottax.core import FunctionalNode
 from cottax.relational import Min, Objective
 from cottax.core.frozen import OrderedMap
 from cottax.core.maths.plan import Cut
 import purposes
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core.realisation import ImplementedFunction
+from cottax.core.realisation import implemented
 from cottax.relational import Eq, Relation, RelationalCondition
 from cottax.relational.consumers.visualization import FIXED_POINT, KINDS, OPTIMISE, ROOT_FIND
 from cottax.consumers.visualization.latex import LatexFormatter, tex
@@ -41,7 +41,7 @@ def N(*keys) -> NodePath:
 
 
 def call(reads, owns):
-    return ImplementedFunction(Function(tuple(V(r) for r in reads), tuple(V(o) for o in owns)),
+    return implemented(FunctionalNode(tuple(V(r) for r in reads), tuple(V(o) for o in owns)),
                                lambda *a: None)
 
 

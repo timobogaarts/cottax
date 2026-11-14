@@ -16,8 +16,8 @@ from jax.tree_util import GetAttrKey, tree_flatten, tree_structure
 
 from cottax.core.frozen import OrderedMap
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core import Function
-from cottax.core.realisation import ImplementedFunction
+from cottax.core import FunctionalNode
+from cottax.core.realisation import implemented
 import purposes
 from graphs import graph_of
 from cottax.core.maths.nesting import NestingGraph
@@ -38,7 +38,7 @@ def body(*args):
 
 
 def call(reads, owns):
-    return ImplementedFunction(Function(tuple(V(r) for r in reads), tuple(V(o) for o in owns)),
+    return implemented(FunctionalNode(tuple(V(r) for r in reads), tuple(V(o) for o in owns)),
                        body)
 
 

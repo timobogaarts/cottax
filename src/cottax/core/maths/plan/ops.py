@@ -1,14 +1,17 @@
 '''
 Ops on `Redefine`: what a node reads and owns renamed (`Rewire`, `Rename`, `Cut`), a
-definition replaced (`Replace`), and what a condition node owns inside set (`SetOwnsInside`).
+definition replaced (`Replace`), what a condition node owns inside set (`SetOwnsInside`), and
+what a node carries set and removed (`SetAttribute`, `RemoveAttribute`).
 '''
 
 from abc import abstractmethod
 import dataclasses
 from collections.abc import Iterator, Mapping
 
-from ..definition import NodeDefinition, Renaming
-from ...frozen import Violation
+from ..definition import (
+    Attribute, NodeDefinition, Renaming, misfits, with_attributes, without_attribute,
+)
+from ...frozen import AbstractClassVar, OrderedMap, Violation, name_of
 from ..nesting import NestingGraph
 from ..places import Label, Place, PlaceToPlace
 from .primitive import Redefine
@@ -42,10 +45,13 @@ class Rewire[N: Label, V: Place](Redefine[N, V]):
                 for name, m in self.renaming(graph).items()}
 
 class Replace[N: Label, V: Place](Redefine[N, V]):
-    """One binding given a definition the caller already holds."""
+    """One binding given a definition the caller already holds, attributes and all: who
+    hands over a new definition says what it carries."""
 
     node       : N
     definition : NodeDefinition[V]
+
+    edits_attributes = True
 
     def redefined(self, graph: NestingGraph[N, V]) -> Mapping[N, NodeDefinition[V]]:
         return {self.node: self.definition}
@@ -156,7 +162,90 @@ class SetOwnsInside[N: Label, V: Place](Redefine[N, V]):
         return f'set_owns_inside({self.node} <- {", ".join(str(p) for p in self.owns_inside)})'
 
 
+# ---------------------------------------------------------------- what a node carries
+
+def check_sets_something(op: 'SetAttribute') -> Iterator[Violation]:
+    if not op.values:
+        yield NoAttributeNamed()
+
+
+def check_settable(op: 'SetAttribute', graph: NestingGraph) -> Iterator[Violation]:
+    """No node carries one under that key already, and each can carry what it is given."""
+    for name, value in op.values.items():
+        if op.kind in (node := graph[name]).attributes:
+            yield AttributeAlreadySet(name, op.kind.__name__)
+        yield from misfits(node, {op.kind: value})
+
+
+class SetAttribute[N: Label, V: Place](Redefine[N, V]):
+    """Each named node carries the value given for it under `kind`; nothing else of it
+    changes. An attribute's own op is this with its `kind` named: `Implement`."""
+
+    kind   : AbstractClassVar[type[Attribute]]
+    values : OrderedMap[N, object]
+
+    edits_attributes = True
+
+    checks = (check_sets_something,)
+    checks_graph = (check_settable,)
+
+    def redefined(self, graph: NestingGraph[N, V]) -> Mapping[N, NodeDefinition[V]]:
+        return {name: with_attributes(node := graph[name], OrderedMap({**node.attributes, self.kind: value}))
+                for name, value in self.values.items()}
+
+    def __repr__(self) -> str:
+        return (f'{type(self).__name__.lower()}('
+                + ', '.join(f'{n} <- {name_of(v)}' for n, v in self.values.items()) + ')')
+
+
+def check_removes_something(op: 'RemoveAttribute') -> Iterator[Violation]:
+    if not op.nodes:
+        yield NoAttributeNamed()
+
+
+def check_removable(op: 'RemoveAttribute', graph: NestingGraph) -> Iterator[Violation]:
+    """Each node carries one to take off."""
+    for name in op.nodes:
+        if op.kind not in graph[name].attributes:
+            yield AttributeNotSet(name, op.kind.__name__)
+
+
+class RemoveAttribute[N: Label, V: Place](Redefine[N, V]):
+    """The inverse of `SetAttribute`: what each node carries under `kind` taken off."""
+
+    kind  : AbstractClassVar[type[Attribute]]
+    nodes : tuple[N, ...]
+
+    edits_attributes = True
+
+    checks = (check_removes_something,)
+    checks_graph = (check_removable,)
+
+    def redefined(self, graph: NestingGraph[N, V]) -> Mapping[N, NodeDefinition[V]]:
+        return {name: without_attribute(graph[name], self.kind) for name in self.nodes}
+
+    def __repr__(self) -> str:
+        return f'{type(self).__name__.lower()}({", ".join(map(str, self.nodes))})'
+
+
 # ----------------------------------------------------------------- violation finals
+
+class NoAttributeNamed(Violation):
+    error    = ValueError
+    template = 'names no node, so there is no attribute to set or take off'
+
+class AttributeAlreadySet(Violation):
+    node      : Label
+    attribute : str
+    error    = TypeError
+    template = ('{node!r} already carries a {attribute} -- replacing one with another in silence '
+                'is not an edit; take it off first')
+
+class AttributeNotSet(Violation):
+    node      : Label
+    attribute : str
+    error    = TypeError
+    template = '{node!r} carries no {attribute}, so there is nothing to take off'
 
 class OwnedInsideTwice(Violation):
     places : tuple[Place, ...]

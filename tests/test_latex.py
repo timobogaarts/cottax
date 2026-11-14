@@ -3,10 +3,10 @@
 import pytest
 from jax.tree_util import GetAttrKey
 
-from cottax.core import Function
+from cottax.core import FunctionalNode
 from cottax.core.frozen import OrderedMap
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core.realisation import ImplementedFunction
+from cottax.core.realisation import implemented
 from graphs import graph_of
 
 cairosvg = pytest.importorskip('cairosvg')
@@ -22,7 +22,7 @@ def N(k):
 
 
 def call(reads, owns):
-    return ImplementedFunction(Function(tuple(map(V, reads)), tuple(map(V, owns))),
+    return implemented(FunctionalNode(tuple(map(V, reads)), tuple(map(V, owns))),
                                lambda *a: None)
 
 

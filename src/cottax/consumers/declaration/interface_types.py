@@ -12,9 +12,9 @@ import inspect
 import sys
 from typing import TYPE_CHECKING, Any, overload
 
-from ...core import ConditionalNode, Function, Label, Mint, NodeDefinition, Place, Violation, minted
+from ...core import ConditionalNode, FunctionalNode, Label, Mint, NodeDefinition, Place, Violation, minted
 from ...core.frozen import AbstractClassVar, AbstractVar, Frozen, OrderedMap, answer, name_of
-from ...core.realisation import ImplementedFunction
+from ...core.realisation import implemented
 from ..surface.interface_types import Given, Key, Named, Surface
 from .refusals import HeldByValue, NoOutputs, NotPositional, ReadsUnlike, Unnamed
 
@@ -209,11 +209,11 @@ class Wrapper[N: Label, V: Place](Declaration[N, V]):
         name = getattr(self.fn, '__name__', None)
         return None if name in (None, '<lambda>') else names.node_in_tree((Key(name),))
 
-    def function_node(self) -> Function[V] | ImplementedFunction[V]:
+    def function_node(self) -> FunctionalNode[V]:
         '''The node running `fn`: reading `function_reads`, owning `function_outputs`; with no
         implementation where `fn` is `Unimplemented`.'''
-        node = Function(self.inputs, self.function_outputs)
-        return node if isinstance(self.fn, Unimplemented) else ImplementedFunction(node, self.fn)
+        node = FunctionalNode(self.inputs, self.function_outputs)
+        return node if isinstance(self.fn, Unimplemented) else implemented(node, self.fn)
 
     def __call__(self, *args, **kwargs):
         return self.fn(*args, **kwargs)

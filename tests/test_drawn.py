@@ -65,10 +65,7 @@ class Tilde(Mint):
     '''The test's own purpose, drawn by no notation: `tilde(·)`.'''
 
 
-class Body(FunctionalNode):
-    reads : tuple
-    owns  : tuple
-    def relabel(self, renaming): return self
+Body = FunctionalNode
 
 
 class Unanswered(ConditionalNode):

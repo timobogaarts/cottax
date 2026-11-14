@@ -14,9 +14,9 @@ from cottax.relational import Min, Objective
 from cottax.core import ExecutableGraph, Plan
 from cottax.consumers.visualization.sequencing import Cycle, Run, Solve, Unresolved, walk, entries
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core import Function
+from cottax.core import FunctionalNode
 from cottax.core.maths.plan import Nest
-from cottax.core.realisation import ImplementedFunction
+from cottax.core.realisation import implemented
 from cottax.relational import Eq, Relation, RelationalCondition
 from cottax.consumers.visualization.sequencing import ordered_graph, sequence
 from cottax.consumers.visualization.xdsm import xdsm_struct
@@ -29,7 +29,7 @@ from cottax.core.maths.nesting import NestingGraph
 def V(k): return VarPath((GetAttrKey(k),))
 def N(k): return NodePath((GetAttrKey(k),))
 def call(reads, owns):
-    return ImplementedFunction(Function(tuple(V(r) for r in reads), tuple(V(o) for o in owns)),
+    return implemented(FunctionalNode(tuple(V(r) for r in reads), tuple(V(o) for o in owns)),
                        lambda *a: 0.0)
 
 

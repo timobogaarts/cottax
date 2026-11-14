@@ -10,7 +10,7 @@ from functools import cached_property
 from ..frozen import Frozen, OrderedMap, Violation, first
 from .definition import NodeDefinition
 from .graph import AbstractGraph
-from .kinds import Function, is_encloser, enclosers
+from .kinds import FunctionalNode, is_encloser, enclosers
 from .places import Label, Place
 
 
@@ -119,9 +119,7 @@ class NestingGraph[N: Label, V: Place](Frozen):
     within : OrderedMap[N, N]
     checks = (check_nesting_ends_bound, check_no_nesting_loops,
               check_nesting_ends_are_enclosers)
-    '''What makes a nesting readable. That each pair shares a cycle
-    (`check_nesting_ends_on_one_cycle`) is not asked here: a pair that does not is inert to
-    every query of this graph, so it is `ExecutableGraph`'s to refuse.'''
+    '''What makes a nesting readable.'''
 
     # ------------------------------------------------------------ the bindings, its own
 
@@ -208,7 +206,7 @@ class NestingGraph[N: Label, V: Place](Frozen):
 
     def contract(self, blocks: tuple[tuple[N, ...], ...]) -> Self:
         '''
-        Each block of at least two nodes contracted into one `Function` at its first
+        Each block of at least two nodes contracted into one `FunctionalNode` at its first
         member's place: reading what the block reads from outside, owning what it owns.
         Every pair with an end in a block is dropped, since a box is no encloser. The
         result is built through the checked constructors: every rule is asked of it.
@@ -227,7 +225,7 @@ class NestingGraph[N: Label, V: Place](Frozen):
             owns  = tuple(dict.fromkeys(v for d in inside for v in d.owns))
             owned = set(owns)
             reads = tuple(dict.fromkeys(v for d in inside for v in d.reads if v not in owned))
-            boxed[order[0]] = Function(reads, owns)
+            boxed[order[0]] = FunctionalNode(reads, owns)
         gone = set(members) - set(boxed)
         definitions = OrderedMap((n, boxed.get(n, d)) for n, d in self.definitions.items() if n not in gone)
         return replace(self, graph=replace(self.graph, definitions=definitions),

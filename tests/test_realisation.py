@@ -16,12 +16,12 @@ from dataclasses import dataclass
 import pytest
 
 from cottax.core import (
-    AbstractGraph, ConditionalNode, Function, NestingGraph, Rename, Replace,
+    AbstractGraph, ConditionalNode, FunctionalNode, NestingGraph, Rename, Replace,
     refusals,
     violations,
 )
 from cottax.core.maths.definition import relabelled
-from cottax.core.refusal_kinds import OwnsInsideNotAChoice
+from cottax.core.refusal_kinds import AttributeDoesNotFit, OwnsInsideNotAChoice
 from cottax.relational.rewrites import Undetermine
 from cottax.core.frozen import OrderedMap
 from cottax.core.driven import (
@@ -35,14 +35,12 @@ from cottax.core.driven.nodes import (
 from cottax.core.driven.ops import NotAConditionalNode, NotDriven
 from cottax.core.driven.proof import Undriven
 from cottax.core.realisation import (
-    Implement, ImplementedDriven, ImplementedFunction, RealisedGraph, Unimplement,
-    is_implemented,
+    Implement, implemented, RealisedGraph, Unimplement,
+    implementation_of, is_implemented,
 )
 from cottax.core.realisation.proof import NoImplementation
-from cottax.core.realisation.implemented import (
-    ImplementedTwice, NoContract, NotAFunction,
-    UndrivenWhileImplemented, NodeNamedTwice, NotImplementable, NotImplementedYet,
-    NothingImplemented,
+from cottax.core.maths.plan.ops import (
+    AttributeAlreadySet, AttributeNotSet, NoAttributeNamed,
 )
 
 
@@ -133,7 +131,7 @@ def placed(unknowns=(u,)) -> tuple:
 
 def graph():
     '''A body owning `r` from `u`, and the problem `r` holds over `u`.'''
-    return NestingGraph(AbstractGraph(OrderedMap({W('body'): Function((u,), (r,)),
+    return NestingGraph(AbstractGraph(OrderedMap({W('body'): FunctionalNode((u,), (r,)),
                                                   W('solve'): Holds((r,), (u,))})), OrderedMap())
 
 
@@ -225,11 +223,12 @@ def test_a_driven_node_hashes_and_pickles():
 
 
 def test_the_predicates_and_the_reprs():
-    body = ImplementedFunction(Function((u,), (r,)), print)
+    body = implemented(FunctionalNode((u,), (r,)), print)
     node = Driven(Holds((r,), (u,)), Bare(), *NONE)
     assert is_implemented(body) and not is_implemented(node)
     assert is_driven(node) and not is_driven(node.condition)
-    assert repr(body).endswith('by print)') and repr(node).endswith('by Bare)')
+    assert repr(body).endswith(') +by print') and repr(node).endswith('by Bare)')
+    assert repr(implemented(node, print)).endswith('by Bare) +by print')
 
 
 # ---------------------------------------------------------------- a rename
@@ -260,9 +259,9 @@ def test_undrive_after_a_rename_takes_every_edge_with_it():
 def driven_graph() -> NestingGraph:
     '''`body` computes `r` from `u`; `solve` determines `u`, driven; `src` is unrelated.'''
     return NestingGraph(AbstractGraph(OrderedMap({
-        W('body') : Function((u, k), (r,)),
+        W('body') : FunctionalNode((u, k), (r,)),
         W('solve'): Driven(Holds((r,), (u,)), Bare(), *NONE),
-        W('src')  : Function((), (W('u0'),)),
+        W('src')  : FunctionalNode((), (W('u0'),)),
     })), OrderedMap())
 
 
@@ -293,7 +292,7 @@ def test_assign_then_undrive_is_the_statement_again():
 def test_implement_then_unimplement_is_the_function_again():
     g0   = graph()
     done = Implement(OrderedMap({W('body'): 'a description, not a callable'})).apply(g0)
-    assert done[W('body')] == ImplementedFunction(g0[W('body')],
+    assert done[W('body')] == implemented(g0[W('body')],
                                                   'a description, not a callable')
     assert Unimplement((W('body'),)).apply(done)[W('body')] == g0[W('body')]
 
@@ -302,8 +301,8 @@ def test_implement_then_unimplement_is_the_function_again():
     (lambda: Assign(W('body'), Bare(), *NONE),           [NotAConditionalNode]),
     (lambda: Assign(W('solve'), Solo(), *NONE),          [SlotsMiscounted, SlotsMiscounted]),
     (lambda: Undrive(W('solve')),                        [NotDriven]),
-    (lambda: Implement(OrderedMap({W('solve'): print})), [NotImplementable]),
-    (lambda: Unimplement((W('body'),)),                  [NotImplementedYet]),
+    (lambda: Implement(OrderedMap({W('solve'): print})), [AttributeDoesNotFit]),
+    (lambda: Unimplement((W('body'),)),                  [AttributeNotSet]),
 ])
 def test_each_edit_refuses_the_wrong_node_as_data(op, found):
     assert kinds(refusals(op(), graph())) == found
@@ -326,8 +325,7 @@ def test_the_wrapper_is_not_put_on_twice():
     with pytest.raises(TypeError, match='already carries an algorithm'):
         solo.apply(solo.apply(graph()))
     body = Implement(OrderedMap({W('body'): print}))
-    assert kinds(refusals(body, body.apply(graph()))) == [ImplementedTwice]
-    assert kinds(violations(Unimplement, (W('body'), W('body')))) == [NodeNamedTwice]
+    assert kinds(refusals(body, body.apply(graph()))) == [AttributeAlreadySet]
 
 
 # ---------------------------------------------------------------- what runs a driver
@@ -338,7 +336,7 @@ def test_a_driven_node_is_implemented_like_a_function():
     driven = Assign(W('solve'), Solo(), *placed()).apply(graph())
     done   = Implement(OrderedMap({W('solve'): print})).apply(driven)
     node   = done[W('solve')]
-    assert node == ImplementedDriven(driven[W('solve')], print)
+    assert node == implemented(driven[W('solve')], print)
     assert is_driven(node) and is_implemented(node)
     assert (node.reads, node.owns, node.owns_inside) == (driven[W('solve')].reads,
                                                       driven[W('solve')].owns, (u,))
@@ -351,37 +349,56 @@ def test_the_outer_layer_comes_off_first():
     driven = Assign(W('solve'), Bare(), *NONE).apply(graph())
     done   = Implement(OrderedMap({W('solve'): print})).apply(driven)
     again  = Implement(OrderedMap({W('solve'): print}))
-    with pytest.raises(TypeError) as caught:
+    with pytest.raises(TypeError, match='take the Implementation off first'):
         Undrive(W('solve')).apply(done)
-    assert UndrivenWhileImplemented.template.split(' {')[0] in str(caught.value)
+    assert kinds(refusals(Undrive(W('solve')), done)) == [AttributeDoesNotFit]
     assert kinds(refusals(Assign(W('solve'), Bare(), *NONE), done)) == [DrivenTwice]
-    assert kinds(refusals(again, done))                              == [ImplementedTwice]
+    assert kinds(refusals(again, done))                              == [AttributeAlreadySet]
     assert kinds(refusals(Undetermine(W('solve')), done)) == [OwnsInsideNotAChoice]
 
 
-def test_a_body_goes_on_a_function_and_nothing_else():
-    '''Built by hand, the wrong level is refused by the node itself.'''
-    assert kinds(violations(ImplementedFunction, Holds((r,), (u,)), print)) == [NotAFunction]
-    assert kinds(violations(ImplementedDriven, Holds((r,), (u,)), print)) == [NoContract]
+def test_an_implementation_goes_on_a_function_or_a_driven_node():
+    '''Built by hand or by the op, a bare condition node is refused: nothing says what
+    would run it until a driver is on.'''
+    with pytest.raises(TypeError, match='Implementation does not fit'):
+        implemented(Holds((r,), (u,)), print)
+    assert kinds(refusals(Implement(OrderedMap({W('solve'): print})), graph())) == [AttributeDoesNotFit]
 
 
-def test_an_implemented_driven_node_relabels_through_both_layers():
-    node  = ImplementedDriven(Driven(Holds((r,), (u,)), Solo(), *placed()), print)
-    moved = node.relabel({W('^start.u'): g})
-    assert isinstance(moved, ImplementedDriven) and moved.data[0] == (g,)
+def test_a_driver_goes_on_a_bare_condition_and_implemented_nodes_are_not_folded():
+    '''Until the driver is the condition's own fields, what a condition carries would sit
+    inside the driven node, where nothing asking the graph's node finds it. And what two
+    nodes carry has no join: an implemented node is folded once its implementation is off.'''
+    from cottax.core import Attribute, Combine, with_attributes
+    class Note(Attribute): ...
+    with pytest.raises(TypeError, match='a driver goes on a bare condition node'):
+        Driven(with_attributes(Holds((r,), (u,)), OrderedMap({Note: 'n'})), Bare(), *NONE)
+    driven = Assign(W('solve'), Bare(), *NONE).apply(graph())
+    done   = Implement(OrderedMap({W('solve'): print})).apply(driven)
+    fold   = Combine(W('solve'), (W('solve'), W('body')), Driven)
+    assert 'CarriesAttributes' in [type(v).__name__ for v in refusals(fold, done)]
+
+
+def test_an_implemented_driven_node_keeps_what_runs_it_through_a_rename():
+    '''`Driven.relabel` builds a fresh node and never mentions what it carries: `Redefine`
+    puts it back, and the implementation holds, the contract being the same.'''
+    driven = Assign(W('solve'), Solo(), *placed()).apply(graph())
+    done   = Implement(OrderedMap({W('solve'): print})).apply(driven)
+    moved  = Rename(W('solve'), ((W('^start.u'), g),)).apply(done)[W('solve')]
+    assert is_implemented(moved) and moved.data[0] == (g,)
 
 
 def test_one_op_implements_several_nodes_and_takes_them_off():
     '''A backend chosen is one decision: one op, one rebuild.'''
     driven = Assign(W('solve'), Solo(), *placed()).apply(graph())
     done   = Implement(OrderedMap({W('body'): len, W('solve'): print})).apply(driven)
-    assert (done[W('body')].implementation, done[W('solve')].implementation) == (len, print)
+    assert (implementation_of(done[W('body')]), implementation_of(done[W('solve')])) == (len, print)
     assert Unimplement((W('body'), W('solve'))).apply(done) == driven
 
 
 def test_an_op_naming_nothing_is_refused():
-    assert kinds(violations(Implement, OrderedMap())) == [NothingImplemented]
-    assert kinds(violations(Unimplement, ())) == [NothingImplemented]
+    assert kinds(violations(Implement, OrderedMap())) == [NoAttributeNamed]
+    assert kinds(violations(Unimplement, ())) == [NoAttributeNamed]
 
 
 # ---------------------------------------------------------------- the proofs

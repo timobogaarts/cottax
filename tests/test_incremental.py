@@ -21,8 +21,8 @@ from cottax.core.maths.plan import Delete, Insert, Redefine
 from cottax.relational import Eq, Relation, RelationalCondition
 from cottax.core.maths.plan import Cut
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core import Function
-from cottax.core.realisation import ImplementedFunction
+from cottax.core import FunctionalNode
+from cottax.core.realisation import implemented
 import purposes
 from cottax.core.frozen import OrderedMap
 from cottax.core import enclosers
@@ -51,11 +51,11 @@ def body(*args):
     and the long way round would never compare equal.'''
 
 
-def call(reads, owns) -> ImplementedFunction:
-    return ImplementedFunction(Function(tuple(reads), tuple(owns)), body)
+def call(reads, owns) -> 'FunctionalNode':
+    return implemented(FunctionalNode(tuple(reads), tuple(owns)), body)
 
 
-def source(*owns) -> ImplementedFunction:
+def source(*owns) -> 'FunctionalNode':
     return call((), owns)
 
 

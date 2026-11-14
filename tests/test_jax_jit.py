@@ -11,7 +11,8 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from cottax.core import GraphWithValues
+from cottax.core import GraphWithValues, without_attribute
+from cottax.core.realisation import Implementation, implementation_of, implemented
 from cottax.core.driven import Start
 from cottax.core.frozen import OrderedMap, violations
 from cottax.core.maths.steps import Solve
@@ -69,8 +70,8 @@ def test_an_array_in_the_graph_is_refused_naming_its_leaves():
 def test_an_array_in_a_solver_setting_is_named_by_its_leaf():
     '''The leaves are found under every field, a solver's settings included.'''
     h     = SQUARE.graph[N('h')]
-    held  = dataclasses.replace(h, implementation=dataclasses.replace(
-        h.implementation, atol=jnp.asarray(1e-8)))
+    held  = implemented(without_attribute(h, Implementation), dataclasses.replace(
+        implementation_of(h), atol=jnp.asarray(1e-8)))
     found = list(violations(JitGraph, graph_of(dict(SQUARE.graph.definitions) | {N('h'): held})))
     assert [type(v) for v in found] == [Unhashable]
     assert found[0].count == 1 and 'Array' in found[0].leaves
