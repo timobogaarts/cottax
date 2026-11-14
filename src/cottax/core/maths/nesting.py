@@ -28,7 +28,7 @@ def check_nesting_ends_bound(g: 'NestingGraph') -> Iterator[Violation]:
 
 def check_nesting_ends_are_enclosers(g: 'NestingGraph') -> Iterator[Violation]:
     '''
-    Nesting can only be between problems.
+    Nesting can only be between enclosers.
 
     W ⊆ N_P × N_P
     '''
@@ -75,7 +75,7 @@ def check_nesting_ends_on_one_cycle(g: 'NestingGraph') -> Iterator[Violation]:
 
     p ~ q  in  N \\ A(q)   ∀ (p, q) ∊ W       i.e.  p ∊ S_q, the cycle of q
 
-    A pair with an end unbound or not a problem is skipped: those are other rules'.
+    A pair with an end unbound or not an encloser is skipped: those are other rules'.
 
     Not a rule of `NestingGraph`: nothing that reads a nesting needs it, so a plan may cut
     a nested pair apart and `Unnest` it after. `ExecutableGraph` asks it.
@@ -155,7 +155,7 @@ class NestingGraph[N: Label, V: Place](Frozen):
         return tuple(s for s in self.enclosers if self.within.get(s) is None)
 
     def enclosing(self, problem: N) -> tuple[N, ...]:
-        '''The problems `problem` is nested in transitively: A(q), every problem with a
+        '''The enclosers `problem` is nested in transitively: A(q), every encloser with a
         path from q in (N_P, W).'''
 
         if problem not in self.definitions:
@@ -172,14 +172,14 @@ class NestingGraph[N: Label, V: Place](Frozen):
 
     @cached_property
     def _levels(self) -> dict[frozenset, AbstractGraph]:
-        '''The graph with each set of enclosing problems taken out, built once per set: the
-        problems nested alike share their level.'''
+        '''The graph with each set of enclosers taken out, built once per set: the
+        enclosers nested alike share their level.'''
         return {}
 
     def cycle_of(self, problem: N) -> tuple[N, ...]:
         '''
         The cycle `problem` is on, and itself: its strongly connected component in the
-        graph with the problems enclosing it taken out, in binding order.
+        graph with the enclosers around it taken out, in binding order.
 
         S_p = {k ∊ N \\ A(p) : k ~ p in N \\ A(p)}   (~ in the induced subgraph, not in G)
         '''
@@ -210,7 +210,7 @@ class NestingGraph[N: Label, V: Place](Frozen):
         '''
         Each block of at least two nodes contracted into one `Function` at its first
         member's place: reading what the block reads from outside, owning what it owns.
-        Every pair with an end in a block is dropped, since a box is no problem. The
+        Every pair with an end in a block is dropped, since a box is no encloser. The
         result is built through the checked constructors: every rule is asked of it.
         '''
         position = self.graph._position

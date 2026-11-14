@@ -1,6 +1,6 @@
 '''
 The proof that a graph is executable: every entry, at every depth, is answered by one
-problem whose edges lie right against its cycle. Typed separately: an ExecutableGraph is
+encloser whose edges lie right against its cycle. Typed separately: an ExecutableGraph is
 *always* executable.
 '''
 
@@ -14,7 +14,7 @@ from ..frozen import Violation
 
 def body_of[G: NestingGraph](g: G) -> G:
     '''
-    The graph without its problems: what is run, never answered.
+    The graph without its enclosers: what is run, never answered.
     '''
     ps = set(g.enclosers)
     return g.subgraph(n for n in g.nodes if n not in ps)
@@ -25,7 +25,7 @@ def body_of[G: NestingGraph](g: G) -> G:
 def check_nestings_share_a_cycle(b: 'ExecutableGraph') -> Iterator[Violation]:
     '''
     Both ends of every nesting are on one cycle (`check_nesting_ends_on_one_cycle`): a pair
-    that is not is inert to the graph, and here it would name a problem answered inside
+    that is not is inert to the graph, and here it would name an encloser answered inside
     an iteration that never re-runs it.
 
     p ~ q  in  N \\ A(q)   ∀ (p, q) ∊ W
@@ -49,7 +49,7 @@ def check_no_requirements(b: 'ExecutableGraph') -> Iterator[Violation]:
 
 def check_body_is_dag(b: 'ExecutableGraph') -> Iterator[Violation]:
     '''
-    With the problems taken out no cycle is left: *functionally acyclic*.
+    With the enclosers taken out no cycle is left: *functionally acyclic*.
 
     |S_k| = 1  ∀ S_k ∊ SCC[G \\ N_P]
     '''
@@ -64,8 +64,8 @@ def check_body_is_dag(b: 'ExecutableGraph') -> Iterator[Violation]:
 
 def check_one_encloser_per_level(b: 'ExecutableGraph') -> Iterator[Violation]:
     '''
-    No two problems nested in the same thing -- both outermost, or both answered
-    inside one problem -- are on one cycle. 
+    No two enclosers nested in the same thing -- both outermost, or both answered
+    inside one encloser -- are on one cycle. 
 
     The mirror of `check_nesting_ends_on_one_cycle`: a nested pair *must* share a
     cycle at the outer's level, siblings *must not*.
@@ -86,12 +86,12 @@ def check_one_encloser_per_level(b: 'ExecutableGraph') -> Iterator[Violation]:
 
 def check_all_conditions_on_cycle(b: 'ExecutableGraph') -> Iterator[Violation]:
     '''
-    Every problem iterates something, and every condition it holds is produced there:
+    Every encloser iterates something, and every condition it holds is produced there:
     on its cycle.
 
     |S_p| > 1   and   C_p ⊆ ⋃_{k ∊ S_p} O_k   ∀ p ∊ N_P
 
-    A condition nothing on the cycle produces is a constant to the problem: no
+    A condition nothing on the cycle produces is a constant to the encloser: no
     unknown can move it. A read nothing produces at all (a boundary input) is one.
     '''
     g = b.graph
@@ -106,7 +106,7 @@ def check_all_conditions_on_cycle(b: 'ExecutableGraph') -> Iterator[Violation]:
 
 def check_other_reads_off_cycle(b: 'ExecutableGraph') -> Iterator[Violation]:
     '''
-    What a problem reads outside is not produced on its cycle.
+    What an encloser reads outside is not produced on its cycle.
 
     I^out_p ∩ O(S_p) = ∅   ∀ p ∊ N_P
     '''
@@ -120,7 +120,7 @@ def check_other_reads_off_cycle(b: 'ExecutableGraph') -> Iterator[Violation]:
 
 def check_other_owns_off_cycle(b: 'ExecutableGraph') -> Iterator[Violation]:
     '''
-    What a problem owns outside is not read on its cycle.
+    What an encloser owns outside is not read on its cycle.
     O^out_p ∩ I(S_p) = ∅   ∀ p ∊ N_P
     '''
     g       = b.graph
@@ -135,8 +135,8 @@ def check_other_owns_off_cycle(b: 'ExecutableGraph') -> Iterator[Violation]:
 
 class ExecutableGraph[N: Label, V: Place](ProvedGraph[N, V]):
     '''
-    A graph proved executable: every nesting on one cycle, one problem per level, its
-    body a DAG, and every problem's edges against its cycle -- conditions on it, everything
+    A graph proved executable: every nesting on one cycle, one encloser per level, its
+    body a DAG, and every encloser's edges against its cycle -- conditions on it, everything
     else off it.
     '''
 
@@ -151,7 +151,7 @@ class ExecutableGraph[N: Label, V: Place](ProvedGraph[N, V]):
 
 def _outline(g: NestingGraph) -> str:
     '''The top level in one line: each component in dependency order, a component
-    answered by an outermost problem as `solve(problem)[members]`, one node bare.'''
+    answered by an outermost encloser as `solve(problem)[members]`, one node bare.'''
     outer = set(g.outermost_enclosers)
     def one(component) -> str:
         members = ', '.join(str(n) for n in component)
