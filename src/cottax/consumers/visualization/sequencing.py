@@ -1,13 +1,15 @@
 '''
-How a graph is read for a drawing: each component as what it is (`entries`), the blocks a
-drawing rings (`walk`), and an order for its diagonal (`sequence`, `problems_first`). A graph
-that cannot be scheduled still has entries, so it is still drawn.
+How a graph is read for a drawing: each strongly connected component as what it is
+(`entries`), the rings a drawing draws (`walk`), and an order for its diagonal (`sequence`).
+A graph that cannot be scheduled still has entries, so it is still drawn, its nestings
+included.
 '''
 
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Iterator, Sequence
+from functools import cached_property
 
-from ...core.frozen import Frozen, OrderedMap
-from ...core import AbstractGraph, ExecutableGraph, Plan, Label, NestingGraph, body_of, problems
+from ...core.frozen import AbstractVar, Frozen, OrderedMap
+from ...core import AbstractGraph, ExecutableGraph, Plan, Label, NestingGraph, body_of
 
 
 def graph_drawn(handed: NestingGraph | ExecutableGraph | Plan) -> NestingGraph:
@@ -25,10 +27,15 @@ def graph_drawn(handed: NestingGraph | ExecutableGraph | Plan) -> NestingGraph:
 
 class Entry(Frozen):
     '''
-    One component of a graph, its kind the final (`Run`, `Cycle`, `Solve`,
-    `Unresolved`). Built by `entries`.
+    One strongly connected component of a graph -- a cycle, or a node on none -- as a
+    drawing reads it, its kind the final (`Run`, `Cycle`, `Solve`, `Unresolved`). Built by
+    `entries`.
     '''
     subgraph : NestingGraph
+    held     : AbstractVar[NestingGraph | None]
+    '''The part of the component drawn inside its ring and read as a graph of its own (its
+    own entries, its own order); the nodes not in it are drawn on the ring itself. `None`
+    where the component is drawn whole.'''
 
     @property
     def nodes(self) -> tuple[Label, ...]:
@@ -38,24 +45,53 @@ class Entry(Frozen):
 
 class Run(Entry):
     '''One node, no problem: it runs.'''
+    held = None
 
 
 class Cycle(Entry):
     '''A cycle with no problem on it: nothing iterates it.'''
+    held = None
 
 
 class Solve(Entry):
     '''
-    One outermost problem, answered at this component's level, and its interior (the
-    component without it, `NestingGraph.interior`), whose own `entries` are the next depth.
+    A component with exactly one outermost problem, which answers it. Inside its ring is
+    its interior, the component without that problem (`NestingGraph.interior`), where the
+    problem's children are the outermost problems.
     '''
     problem  : Label
     interior : NestingGraph
 
+    @property
+    def held(self) -> NestingGraph:
+        return self.interior
+
 
 class Unresolved(Entry):
-    '''Several outermost problems with nothing nested: none is answered at this level.'''
+    '''
+    A cycle with several outermost problems: no single problem answers it, so it is drawn as
+    one grey ring until a `Nest` or a `Combine` decides which does.
+    '''
     problems : tuple[Label, ...]
+
+    @cached_property
+    def held(self) -> NestingGraph | None:
+        '''
+        The rest of the cycle once some of its outermost problems are removed. Those removed
+        are drawn on the grey ring itself, and what they own is an input to the rest, so the
+        cycles through them are broken and the rings inside can be drawn. Removed are the
+        leaves among them (no children), so a problem with children keeps its ring; where
+        none is a leaf, all of them, so their children keep theirs. A parent-child link whose
+        cycle ran only through a removed problem stays, inert: its ends fall into different
+        components of the rest, so nothing rings it. `None` where nothing is nested: the
+        cycle is drawn whole.
+        '''
+        links = self.subgraph.within
+        if not links:
+            return None
+        parents = set(links.values())
+        removed = {p for p in self.problems if p not in parents} or set(self.problems)
+        return self.subgraph.subgraph(n for n in self.nodes if n not in removed)
 
 
 def entries(g: NestingGraph) -> tuple[Entry, ...]:
@@ -81,21 +117,26 @@ def entries(g: NestingGraph) -> tuple[Entry, ...]:
 
 class Block(Frozen):
     '''
-    One entry as a drawing rings it: the `entry`, the problems it sits inside (`within`,
-    outermost first; its length the depth), and `held`, the interior rung inside it: a
-    `Solve`'s interior when that holds a problem, else `None`.
+    One entry as a drawing rings it, the number of rings around it (`depth`; a grey ring
+    counts, so a problem with no parent may sit one ring in), and whether it is `unsettled`:
+    a `Solve` on a cycle whose problem is one of the outermost problems of the grey ring
+    directly around it. Its ring could run as it stands, but its problem's place is part of
+    that ring's open nesting decision, so it is drawn grey with a closed contour.
     '''
-    entry  : Entry
-    within : tuple[Label, ...]
-    held   : NestingGraph | None
-
-    @property
-    def depth(self) -> int:
-        return len(self.within)
+    entry     : Entry
+    depth     : int
+    unsettled : bool
 
     @property
     def nodes(self) -> tuple[Label, ...]:
         return self.entry.nodes
+
+    @property
+    def held(self) -> NestingGraph | None:
+        '''What is ringed inside it: the entry's `held` where that holds a problem, else
+        `None`, so a solve whose interior holds no problem rings nothing inside.'''
+        held = self.entry.held
+        return held if held is not None and held.problems else None
 
     @property
     def problem(self) -> Label | None:
@@ -110,18 +151,19 @@ class Block(Frozen):
 
 def walk(graph: NestingGraph) -> tuple[Block, ...]:
     '''
-    Every block a drawing rings, at every depth: the graph's entries, each followed by its
-    `held` interior's, so an inner ring comes after (paints over) the ring around it.
-    `problems_first` relies on this order.
+    Every block a drawing rings, at every depth: the graph's entries, each followed by the
+    blocks of what it holds, so an inner ring comes after (paints over) the ring around it.
     '''
-    def blocks(g: NestingGraph, within: tuple[Label, ...]) -> Iterator[Block]:
+    def blocks(g: NestingGraph, depth: int, open_: tuple[Label, ...]) -> Iterator[Block]:
+        # `open_`: the outermost problems of the grey ring directly around `g`, if any
         for entry in entries(g):
-            held = (entry.interior if isinstance(entry, Solve)
-                    and problems(entry.interior.definitions) else None)
-            yield Block(entry, within, held)
-            if held is not None:
-                yield from blocks(held, (*within, entry.problem))
-    return tuple(blocks(graph, ()))
+            ringed = isinstance(entry, Solve) and not entry.subgraph.graph.is_acyclic
+            block  = Block(entry, depth, ringed and entry.problem in open_)
+            yield block
+            if block.held is not None:
+                yield from blocks(block.held, depth + 1,
+                                  entry.problems if isinstance(entry, Unresolved) else ())
+    return tuple(blocks(graph, 0, ()))
 
 
 # ---------------------------------------------------------------- the order
@@ -140,25 +182,27 @@ def draws_feedback(order: Sequence[Label], subgraph: NestingGraph) -> bool:
 
 def sequence(graph: NestingGraph) -> tuple[Label, ...]:
     '''
-    The graph's nodes in an order for one diagonal: entry by entry in dependency order; a
-    `Solve` its problem then its interior sequenced the same way; any other entry its
-    problems in binding order, then its body as bound unless that draws feedback, else in
-    `components_order` (defined on a cycle too). So the only edges left above the
-    diagonal run through a problem, or are a cycle no problem closes.
+    The graph's nodes in an order for one diagonal, entry by entry in dependency order. An
+    entry holding something (`Entry.held`): the nodes drawn on its ring first (a `Solve`'s
+    problem, an `Unresolved`'s removed problems), in binding order, then what it holds,
+    sequenced the same way. Any other: its problems in binding order, then its body as bound
+    unless that draws feedback, else in `components_order` (defined on a cycle too). So each
+    ring is one contiguous stretch, and the only edges left above the diagonal run through a
+    problem, or are a cycle no problem closes.
     '''
     out : list[Label] = []
     for entry in entries(graph):
-        if isinstance(entry, Solve):
-            out.append(entry.problem)
-            out.extend(sequence(entry.interior))
+        if entry.held is not None:
+            out.extend(n for n in entry.nodes if n not in entry.held)
+            out.extend(sequence(entry.held))
         else:
-            sub      = entry.subgraph
-            body     = body_of(sub)
-            held_out = [n for n in entry.nodes if n not in body.definitions]
-            order    = [n for n in entry.nodes if n in body.definitions]
+            sub          = entry.subgraph
+            body         = body_of(sub)
+            outside_body = [n for n in entry.nodes if n not in body.definitions]
+            order        = [n for n in entry.nodes if n in body.definitions]
             if order and draws_feedback(order, body):
                 order = list(body.graph.components_order)
-            out.extend((*held_out, *order))
+            out.extend((*outside_body, *order))
     return tuple(out)
 
 
@@ -168,38 +212,3 @@ def ordered_graph(handed: NestingGraph | ExecutableGraph | Plan) -> NestingGraph
     graph = graph_drawn(handed)
     return NestingGraph(AbstractGraph(OrderedMap((n, graph[n]) for n in sequence(graph))),
                         graph.within)
-
-
-# ---------------------------------------------------------------- the levels
-
-_LAST = 1 << 30
-'''A rank past every other; `_LAST - 1` ranks just before it.'''
-
-
-def problems_first(names: Sequence[Label],
-                   tree: Iterable[tuple[Sequence[Label], Label | None]],
-                   is_problem: Callable[[Label], bool]) -> list[Label]:
-    '''
-    `names` permuted so each block's problem leads it: the problem `tree` pairs with the
-    block (`walk`'s blocks, outermost first, each with its `Block.problem`); where that is
-    `None`, every problem in the block ahead of every other member. A block's members are
-    dealt back into the positions it already holds, so every block stays contiguous and no
-    other step moves. `is_problem` says which names are problems. A caller with no rings
-    pairs each component with `None`.
-    '''
-    order = list(names)
-    pos   = {name: i for i, name in enumerate(order)}
-    for block, lead in tree:
-        slots   = sorted(pos[n] for n in block if n in pos)
-        members = [order[i] for i in slots]
-
-        def rank(name: Label, lead=lead) -> float:
-            # the level's problem at the head; with none, every problem ahead of the
-            # rest. A problem answered deeper sorts with the rest.
-            if lead is not None:
-                return 0 if name == lead else _LAST
-            return _LAST - 1 if is_problem(name) else _LAST
-
-        for i, name in zip(slots, sorted(members, key=rank)):
-            order[i] = name
-    return order

@@ -148,7 +148,7 @@ def paint_rings(struct: dict, lay: Layout, sty: Style, cut: float) -> list[str]:
         rx   = min(sty.ring_radius_em * size, gw / 2, gh / 2)
         rect = (f'<rect class="{ring_cls}" x="{gx:.1f}" y="{gy:.1f}" '
                 f'width="{gw:.1f}" height="{gh:.1f}" rx="{rx:.1f}"{drawn_as}')
-        # no driver: the band unedged, the edge as two halves stopping short in the middle
+        # no single problem solves it: the band unedged, the edge as two halves stopping short
         if kind == 'solve' and sty.cuts and not answered(btype):
             parts.append(f'{rect} style="stroke:none"/>')
             parts += [f'<path class="{ring_cls}" d="{d}"{drawn_as} style="fill:none"/>'

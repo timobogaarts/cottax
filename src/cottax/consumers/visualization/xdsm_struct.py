@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable, Sequence
 from itertools import chain
 from ...core import NestingGraph
 from ...core import ExecutableGraph
@@ -17,7 +18,7 @@ from .interface_types import Text
 from .kinds import (answered, block_type, by_name, drawn_of, key_entry, problem_type_of,
                     stated_shape)
 from .naming import PlainFormat, marked, shown
-from .sequencing import Block, graph_drawn, ordered_graph, problems_first, walk
+from .sequencing import Block, graph_drawn, ordered_graph, walk
 from .style import Style
 
 
@@ -52,16 +53,27 @@ def ring_text(kind: str, depth: int) -> str:
 
 def key_entries(struct: dict, sty: Style) -> list[dict]:
     '''
-    The key of one XDSM: each problem type drawn, each depth of solve ring, a block run in
-    order where the style draws one, and a ring no driver answers, each once, as
-    `key_entry` writes one, with the `class` the figure draws it in.
+    The key of one XDSM: each problem type drawn, as `key_entry` writes one, then its rings
+    (`ring_entries`), each once, with the `class` the figure draws it in.
     '''
     shown = set(struct['problem_types'].values())
     out = [{**key_entry(kind, sty), 'class': 'prob'}
            for name, kind in struct['kinds'].items() if name in shown]
     if 'stated' in shown:
         out.append({**key_entry(None, sty), 'class': 'prob prob-stated'})
-    rings = struct.get('blocks', [])
+    return out + ring_entries(struct.get('blocks', []), sty)
+
+
+def ring_entries(rings: Iterable[dict], sty: Style) -> list[dict]:
+    '''
+    The key's entries for rings, each a record with `ring` (`'solve'` or `'run'`), `depth`
+    and `type`: each depth of solve ring, a block run in order where the style draws one, a
+    ring no single problem solves (cut open) and a ring whose nesting is still open (grey, closed:
+    `Block.unsettled`), each once, with the `class` an XDSM draws it in. The N2 keys its
+    boxes with the same entries.
+    '''
+    rings = list(rings)
+    out : list[dict] = []
     for depth in sorted({b['depth'] for b in rings if b['ring'] == 'solve'}):
         out.append({'shape': 'band', 'fill': sty.band(depth) or sty.surface,
                     'stroke': sty.band_stroke, 'text': ring_text('solve', depth),
@@ -71,12 +83,34 @@ def key_entries(struct: dict, sty: Style) -> list[dict]:
                     'text': ring_text('run', 0), 'class': ring_class('run', 0)})
     if any(b['ring'] == 'solve' and not answered(b['type']) for b in rings):
         out.append({'shape': 'open', 'fill': sty.band(0) or sty.surface,
-                    'stroke': sty.unanswered, 'text': 'no driver',
+                    'stroke': sty.unanswered, 'text': 'no/too many drivers',
+                    'class': ring_class('solve', 0)})
+    if any(b['type'] == 'unsettled' for b in rings):
+        out.append({'shape': 'band', 'fill': sty.band(0) or sty.surface,
+                    'stroke': sty.unanswered, 'text': 'nesting still open',
                     'class': ring_class('solve', 0)})
     return out
 
 
 # ============================================================================ builder
+def problems_first(names: Sequence[Label], groups: Iterable[Sequence[Label]],
+                   is_problem: Callable[[Label], bool]) -> list[Label]:
+    '''
+    `names` reordered so that within each group the problems come first: a group's members
+    are put back into the positions the group already holds, so nothing outside it moves.
+    `is_problem` says which names are problems. For a diagonal in binding order, each
+    component a group; one in `sequencing.sequence` order has its problems first already.
+    '''
+    order = list(names)
+    pos   = {name: i for i, name in enumerate(order)}
+    for group in groups:
+        slots   = sorted(pos[n] for n in group if n in pos)
+        members = [order[i] for i in slots]
+        for i, name in zip(slots, sorted(members, key=lambda n: not is_problem(n))):
+            order[i] = name
+    return order
+
+
 def xdsm_struct(
     graph  : NestingGraph | ExecutableGraph | Plan,
     *,
@@ -91,8 +125,9 @@ def xdsm_struct(
     `blocks`: ring every solve and rebind the diagonal into run order
     (`sequencing.ordered_graph`); an `ExecutableGraph` rings as that proof has it.
     `formatter`: how each name is shown (`shown_steps`, `shown_vars`).
-    `problem_first`: a problem at the head of its block (`problems_first`); off keeps the
-    graph's order.
+    `problem_first`: problems first on the diagonal. With `blocks` the run order puts each
+    level's problems first (`ordered_graph`); without, each component's problems are moved to
+    its front (`problems_first`). Off keeps the graph's order either way.
 
     Keys: `steps` (the diagonal), `reads` / `writes` (step to variables), `producer`
     (variable to its step; a read with none is a boundary input), `shown_steps` /
@@ -116,18 +151,16 @@ def xdsm_struct(
         graph, blocks = blocks.graph, True
     ringed : tuple[Block, ...] | None = None
     if blocks:
-        # run order, unless `problem_first` is off: a hand order then stands
+        # the diagonal in run order, each level's problems first, unless `problem_first` is
+        # off: a hand order then stands
         graph  = ordered_graph(graph) if problem_first else graph
         ringed = walk(graph)
-
-    # the diagonal: each block's problem at its head, the blocks the rings when drawn and
-    # the components otherwise
-    names = problems_first(
-        graph.nodes,
-        [(b.nodes, b.problem) for b in ringed] if ringed is not None
-        else [(block, None) for block in graph.graph.components],
-        lambda n: problem_type_of(graph[n]) is not None,
-    ) if problem_first else list(graph.nodes)
+        names  = list(graph.nodes)
+    else:
+        # the diagonal in binding order, each component's problems moved to its front
+        names = problems_first(
+            graph.nodes, graph.graph.components, lambda n: problem_type_of(graph[n]) is not None,
+        ) if problem_first else list(graph.nodes)
 
     def step(name: Label) -> str:
         return spell_plain(name)
@@ -182,4 +215,4 @@ def xdsm_struct(
     return struct
 
 
-__all__ = ['key_entries', 'ring_class', 'ring_text', 'xdsm_struct']
+__all__ = ['key_entries', 'ring_class', 'ring_entries', 'ring_text', 'xdsm_struct']

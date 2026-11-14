@@ -50,19 +50,21 @@ def stated_shape(node: NodeDefinition) -> str | None:
 
 def block_type(block: Block) -> str | None:
     '''
-    The problem type answered at `block`: a `Solve`'s problem's, `'unanswered'` for
-    several problems with nothing nested, `'cycle'` for a bare function cycle, `None` for
-    a block merely run.
+    The problem type answered at `block`: a `Solve`'s problem's, `'unsettled'` for one whose
+    problem's place is still open (`Block.unsettled`), `'unanswered'` for several outermost
+    problems on one cycle, `'cycle'` for a bare function cycle, `None` for a block merely run.
     '''
     entry = block.entry
-    return (problem_type_of(entry.subgraph[entry.problem]) if isinstance(entry, Solve) else
+    return ('unsettled' if block.unsettled else
+            problem_type_of(entry.subgraph[entry.problem]) if isinstance(entry, Solve) else
             'unanswered' if isinstance(entry, Unresolved) else
             'cycle' if isinstance(entry, Cycle) else None)
 
 
 def answered(btype: str | None) -> bool:
-    '''Whether a driver answers a solve ring of type `btype` (`block_type`): neither
-    several problems with nothing nested nor a bare function cycle.'''
+    '''Whether a solve ring of type `btype` (`block_type`) could run as it stands, its
+    contour closed: neither several outermost problems on one cycle nor a bare function
+    cycle.'''
     return btype not in ('unanswered', 'cycle')
 
 
@@ -70,9 +72,9 @@ def ring_stroke(btype: str | None, kinds: Mapping[str, Kind], style: Style) -> s
     '''
     The contour of a solve ring of type `btype`, `kinds` the categories drawn by name:
     the hue of the driver answering it, `stated`'s grey for a problem with no category,
-    `unanswered` where no driver answers it.
+    `unanswered` where no single problem solves it or its problem's place is still open.
     '''
-    if not answered(btype):
+    if not answered(btype) or btype == 'unsettled':
         return style.unanswered
     return style.paint(kinds[btype].colour if btype in kinds else None)[1]
 
