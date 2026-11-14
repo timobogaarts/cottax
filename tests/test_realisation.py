@@ -16,17 +16,20 @@ from dataclasses import dataclass
 import pytest
 
 from cottax.core import (
-    AbstractGraph, ConditionalNode, Function, NestingGraph, Rename, Replace, refusals,
+    AbstractGraph, ConditionalNode, Function, NestingGraph, Rename, Replace,
+    refusals,
     violations,
 )
 from cottax.core.maths.definition import relabelled
+from cottax.core.refusal_kinds import OwnsInsideNotAChoice
+from cottax.relational.rewrites import Undetermine
 from cottax.core.frozen import OrderedMap
 from cottax.core.driven import (
     Assign, Driven, DrivenGraph, DriverContract, PerProblem, PerUnknown, Role, Undrive,
     is_driven,
 )
 from cottax.core.driven.nodes import (
-    DeterminedWhileDriven, DrivenTwice, NotAccepted, RoleMisplaced, RoleTwice, RoleUnsized,
+    DrivenTwice, NotAccepted, RoleMisplaced, RoleTwice, RoleUnsized,
     SlotsMiscounted,
 )
 from cottax.core.driven.ops import NotAConditionalNode, NotDriven
@@ -37,7 +40,7 @@ from cottax.core.realisation import (
 )
 from cottax.core.realisation.proof import NoImplementation
 from cottax.core.realisation.implemented import (
-    DeterminedWhileImplemented, ImplementedTwice, NoContract, NotAFunction,
+    ImplementedTwice, NoContract, NotAFunction,
     UndrivenWhileImplemented, NodeNamedTwice, NotImplementable, NotImplementedYet,
     NothingImplemented,
 )
@@ -60,27 +63,17 @@ def W(s: str) -> Word:
 
 
 class Holds(ConditionalNode):
-    '''A condition node as two bare tuples, no relation anywhere -- and `reads` wider than
-    `conditions`, so a wrapper building its reads off the wrong one is caught.'''
+    '''A condition node as bare tuples, no relation anywhere -- and reading outside too,
+    so a wrapper building its reads off the wrong one is caught.'''
 
-    conditions : tuple
-    unknowns   : tuple
-    extra      : tuple = ()
-
-    @property
-    def reads(self):
-        return self.conditions + self.extra
-
-    @property
-    def owns(self):
-        return self.unknowns
+    reads_inside  : tuple
+    owns_inside   : tuple
+    reads_outside : tuple = ()
+    owns_outside  = ()
 
     def relabel(self, renaming):
-        return Holds(relabelled(self.conditions, renaming),
-                     relabelled(self.unknowns, renaming), relabelled(self.extra, renaming))
-
-    def determined(self, unknowns):
-        return Holds(self.conditions, tuple(unknowns), self.extra)
+        return Holds(relabelled(self.reads_inside, renaming),
+                     relabelled(self.owns_inside, renaming), relabelled(self.reads_outside, renaming))
 
 
 # ---------------------------------------------------------------- toy roles and drivers
@@ -97,7 +90,7 @@ class Steps(PerProblem):
 
 def single(statement) -> bool:
     '''What `Solo` answers: exactly one unknown.'''
-    return len(statement.unknowns) == 1
+    return len(statement.owns_inside) == 1
 
 
 class Solo(DriverContract):
@@ -184,7 +177,7 @@ def test_the_places_are_one_slot_per_role():
 def test_a_driven_node_forwards_what_the_level_declares_only():
     '''`unknowns` and `conditions`, and nothing a final adds.'''
     node = Driven(Holds((r,), (u,)), Bare(), *NONE)
-    assert (node.unknowns, node.conditions) == ((u,), (r,))
+    assert (node.owns_inside, node.reads_inside) == ((u,), (r,))
     assert 'relations' not in vars(Driven) and 'objectives' not in vars(Driven)
     assert (node.reads, node.owns) == ((r,), (u,))
 
@@ -224,12 +217,6 @@ def test_the_refusal_names_the_predicate():
         Driven(Holds((r,), (u, v)), Solo(), *placed((u, v)))
 
 
-def test_a_driven_statement_is_not_redetermined():
-    with pytest.raises(TypeError) as caught:
-        Driven(Holds((r,), (u,)), Bare(), *NONE).determined((g,))
-    assert DeterminedWhileDriven.template.split(' {')[0] in str(caught.value)
-
-
 def test_a_driven_node_hashes_and_pickles():
     '''A node is a jit cache key and a plan pickles.'''
     node = Driven(Holds((r,), (u,)), Solo(), *placed())
@@ -259,7 +246,7 @@ def test_renaming_an_unknown_moves_that_place_and_no_other():
     '''The places are stored, so a rename moves exactly what it names: `^start.u` is a
     place of its own and stays where it was.'''
     moved = Driven(Holds((r,), (u,)), Solo(), *placed()).relabel({u: v})
-    assert moved.unknowns == (v,)
+    assert moved.owns_inside == (v,)
     assert (moved.data, moved.reports) == placed()
 
 
@@ -353,7 +340,7 @@ def test_a_driven_node_is_implemented_like_a_function():
     node   = done[W('solve')]
     assert node == ImplementedDriven(driven[W('solve')], print)
     assert is_driven(node) and is_implemented(node)
-    assert (node.reads, node.owns, node.unknowns) == (driven[W('solve')].reads,
+    assert (node.reads, node.owns, node.owns_inside) == (driven[W('solve')].reads,
                                                       driven[W('solve')].owns, (u,))
     assert Unimplement((W('solve'),)).apply(done)[W('solve')] == driven[W('solve')]
 
@@ -369,9 +356,7 @@ def test_the_outer_layer_comes_off_first():
     assert UndrivenWhileImplemented.template.split(' {')[0] in str(caught.value)
     assert kinds(refusals(Assign(W('solve'), Bare(), *NONE), done)) == [DrivenTwice]
     assert kinds(refusals(again, done))                              == [ImplementedTwice]
-    with pytest.raises(TypeError) as caught:
-        done[W('solve')].determined((g,))
-    assert DeterminedWhileImplemented.template.split(' {')[0] in str(caught.value)
+    assert kinds(refusals(Undetermine(W('solve')), done)) == [OwnsInsideNotAChoice]
 
 
 def test_a_body_goes_on_a_function_and_nothing_else():

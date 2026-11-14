@@ -18,12 +18,13 @@ import pytest
 import cottax.assemblies.jax as cx
 
 from cottax.core import (
-    AbstractGraph, Combine, Determine, ExecutableGraph, Function, GaussSeidel, GraphWithValues,
-    NestingGraph, Rename, Undetermine,
+    AbstractGraph, Combine, ExecutableGraph, Function, GaussSeidel, GraphWithValues,
+    NestingGraph, Rename,
 )
 from cottax.core.maths.definition import OwnsTwice, ReadsOwn
 from cottax.core.maths.executable import SeveralOutermost
-from cottax.core.maths.plan.ops import AlreadyDetermined
+from cottax.core.refusal_kinds import OwnsInsideNotAChoice
+from cottax.relational.rewrites import Determine, Undetermine
 from cottax.core.frozen import OrderedMap, choice, violations
 from cottax.core.maths.plan import Nest, Plan, refusals
 from cottax.core.driven import Assign, DrivenGraph, Start
@@ -41,7 +42,7 @@ from cottax.consumers.architectures import IDF, MDA, MDF, SAND
 from cottax.consumers.architectures.refusals import NotCombinable
 from cottax.ode import Dt, OdeCondition, is_ode
 from cottax.ode.contracts import Integration, Integrator
-from cottax.ode.ode_condition import DeterminesItsStates, SpansDiffer
+from cottax.ode.ode_condition import SpansDiffer
 from cottax.ode.consumers.visualization import INTEGRATE
 import cottax.ode.consumers  # noqa: F401  registers its answers
 from test_core import Word
@@ -124,10 +125,10 @@ def test_the_rate_declares_a_body_and_beside_it_the_ode():
     ode = g[solve_at('decay')]
     assert ode == OdeCondition((Dt(s.place('x'), s.place(cx.rate('x')), s.place(cx.initial('x'))),),
                                span_of('x'))
-    assert ode.conditions == (s.place(cx.rate('x')),)
-    assert ode.reads == (*ode.conditions, *ode.parameters) == (
+    assert ode.reads_inside == (s.place(cx.rate('x')),)
+    assert ode.reads == (*ode.reads_inside, *ode.reads_outside) == (
         s.place(cx.rate('x')), s.place(cx.initial('x')), span_of('x'))
-    assert ode.owns == ode.unknowns == (s.place('x'),)
+    assert ode.owns == ode.owns_inside == (s.place('x'),)
     assert is_ode(ode) and ExecutableGraph(g).graph == g
 
 
@@ -141,20 +142,14 @@ def test_a_state_twice_or_a_state_that_is_a_rate_is_refused_by_core():
 
 
 def test_an_ode_determines_its_states_and_nothing_else():
-    '''Handed its states it is itself; `Undetermine` and a subset are refused by the node,
-    and `Determine` before it, since an ODE is always a problem.'''
+    '''What an ODE owns inside is not a choice: `Determine` and `Undetermine` refuse it.'''
     x, v, r, q = Word('x'), Word('v'), Word('r'), Word('q')
     ode = OdeCondition((Dt(x, r, Word('x0')), Dt(v, q, Word('v0'))), Word('t'))
-    assert ode.determined((x, v)) is ode
-    for unknowns in ((), (x,), (v, x)):
-        with pytest.raises(ValueError, match='an ODE determines its states and nothing else'):
-            ode.determined(unknowns)
     g = NestingGraph(AbstractGraph(OrderedMap({
         Word('body'): Function((x, v), (r, q)), Word('ode'): ode})), OrderedMap())
-    refused = DeterminesItsStates((x, v), ())
-    with pytest.raises(ValueError, match=refused.message.replace('(', r'\(').replace(')', r'\)')):
+    with pytest.raises(TypeError, match='what it owns inside is not a choice'):
         Undetermine(Word('ode')).apply(g)
-    assert [type(v) for v in refusals(Determine(Word('ode'), (x,)), g)] == [AlreadyDetermined]
+    assert [type(v) for v in refusals(Determine(Word('ode'), (x,)), g)] == [OwnsInsideNotAChoice]
 
 
 # ================================================================ generic in the place
@@ -495,7 +490,7 @@ def test_mdf_cuts_nothing_inside_the_odes_loop_and_fits_the_logistic_rate():
                 {'opt': s.optimise(design=('k',), minimise='f')}).graph
     plan = Plan(g) + architecture(MDF)
     assert dict(plan.graph.within) == {solve_at('logistic'): node('opt')}
-    assert plan.graph.problems == g.problems
+    assert plan.graph.enclosers == g.enclosers
     plan += drive(BFGS(rtol=1e-10, atol=1e-10), diffrax_run())
     tree = s.run(CallableGraph(plan.graph), {cx.Inputs: ivp((0.0, 1.0), x=0.1)},
                  read_from=from_state({'k': 0.5, 'target': logistic_at(1.0)}))
@@ -592,7 +587,7 @@ def final_x(rate, wrt: str = 'u'):
 def test_kinks_are_read_as_a_parameter_where_named_or_given_as_a_value():
     ode = declare(pushed(kinks='tk')).graph[solve_at('pushing')]
     assert ode.kinks == (s.place('tk'),)
-    assert ode.parameters[-2:] == (s.place('span'), s.place('tk'))
+    assert ode.reads_outside[-2:] == (s.place('span'), s.place('tk'))
     d = declare(pushed(kinks=KNOTS))
     assert d.graph[solve_at('pushing')].kinks == (s.place(cx.kinks('x')),)
     assert d.given[s.place(cx.kinks('x'))] is KNOTS
@@ -661,8 +656,7 @@ def test_time_is_owned_by_the_ode_given_inside_and_t1_outside():
     rate = s.rate(forced, 'x', initial=0.0, span='span', time='t',
                   record='xs', times='ts')
     ode = declare(rate).graph[solve_at('forced')].condition
-    assert ode.unknowns == ode.owns == (s.place('x'), s.place('t'))
-    assert ode.determined((s.place('x'), s.place('t'))) is ode
+    assert ode.owns_inside == ode.owns == (s.place('x'), s.place('t'))
     ts = jnp.linspace(0.0, 1.5, 4)
     out = s.run(declare(rate) + drive(diffrax_run()),
                 {cx.Inputs: {'span': (0.0, 1.5), 'ts': ts}})

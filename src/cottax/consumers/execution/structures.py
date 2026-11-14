@@ -44,7 +44,7 @@ def slots[N: Label, V: Place](graph: NestingGraph[N, V], at: Callable[[V], V]) -
     '''Every place a run of `graph` takes a value at, by what the caller calls it: each driver
     datum, also one it computes (a warm start), then each boundary input. A place two problems
     take is there twice.'''
-    roles = dict.fromkeys(r for n in graph.problems if is_driven(graph[n])
+    roles = dict.fromkeys(r for n in graph.enclosers if is_driven(graph[n])
                           for r in graph[n].contract.takes)
     return (*(Slot(place, role, problem, unknown, None if unknown is None else at(unknown))
               for role in roles for place, problem, unknown in role_slots(graph, role)),

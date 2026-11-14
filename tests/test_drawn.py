@@ -73,22 +73,20 @@ class Body(FunctionalNode):
 
 class Unanswered(ConditionalNode):
     '''A condition node no language answers for.'''
-    conditions : tuple
-    unknowns   : tuple
-    reads      = property(lambda self: self.conditions)
-    owns       = property(lambda self: self.unknowns)
+    reads_inside  : tuple
+    owns_inside   : tuple
+    reads_outside = ()
+    owns_outside  = ()
     def relabel(self, renaming): return self
-    def determined(self, unknowns): return Unanswered(self.conditions, unknowns)
 
 
 class Answered(ConditionalNode):
     '''One that is: a category of the test's own, and a slot per condition.'''
-    conditions : tuple
-    unknowns   : tuple
-    reads      = property(lambda self: self.conditions)
-    owns       = property(lambda self: self.unknowns)
+    reads_inside  : tuple
+    owns_inside   : tuple
+    reads_outside = ()
+    owns_outside  = ()
     def relabel(self, renaming): return self
-    def determined(self, unknowns): return Answered(self.conditions, unknowns)
 
 
 TOY = Kind('toy', 'toy (r ~ 0)', 'a toy category: r near zero', True, ('#a1b2c3', '#123456'))
@@ -98,9 +96,9 @@ TOY = Kind('toy', 'toy (r ~ 0)', 'a toy category: r near zero', True, ('#a1b2c3'
 @answers(Answered)
 class AnsweredDrawing(NodeDrawing):
     def drawn(self, node):
-        r, s = node.conditions
+        r, s = node.reads_inside
         return Drawn(TOY, (Slot((Text('~ 0', r'\sim 0'),), (r,)),
-                           Slot((Text('= ', '= '), node.unknowns[0]), (s,))))
+                           Slot((Text('= ', '= '), node.owns_inside[0]), (s,))))
 
 
 def hexagon(svg: str, cls: str = 'prob') -> tuple[str, str]:
@@ -171,12 +169,11 @@ def test_a_category_draws_in_its_own_colour_on_a_dark_ground():
 
 class Twin(ConditionalNode):
     '''One answered with another category under `TOY`'s name.'''
-    conditions : tuple
-    unknowns   : tuple
-    reads      = property(lambda self: self.conditions)
-    owns       = property(lambda self: self.unknowns)
+    reads_inside  : tuple
+    owns_inside   : tuple
+    reads_outside = ()
+    owns_outside  = ()
     def relabel(self, renaming): return self
-    def determined(self, unknowns): return Twin(self.conditions, unknowns)
 
 
 TWIN = Kind('toy', 'another toy', 'not the toy category', False, ('#ffffff', '#000000'))

@@ -62,7 +62,7 @@ class SteppedExecutableGraph[N: Label, V: Place](ExecutableGraph[N, V]):
         alone on its cycle -- and several are a cycle, a `Solve` of its one outermost
         problem over the interior.
         '''
-        outer = set(self.outermost_problems)
+        outer = set(self.outermost_enclosers)
         steps : list[Step[N, Self]] = []
         for component in self.graph.graph.components:
             if len(component) == 1:

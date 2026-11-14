@@ -65,5 +65,5 @@ def _rates(t: Any, states: Unknowns, args: tuple[Posed, Context]) -> tuple[Any, 
     the solver's own `t`, exact where a step lands on a jump.'''
     posed, context = args
     unknowns = (*states, t) if posed.condition.time is not None else states
-    return tuple(posed.conditions(unknowns, context)[:len(posed.condition.conditions)])
+    return tuple(posed.conditions(unknowns, context)[:len(posed.condition.rates)])
 

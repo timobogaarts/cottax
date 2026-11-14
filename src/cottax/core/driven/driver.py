@@ -26,7 +26,7 @@ class PerUnknown(Role):
 
     @classmethod
     def arity(cls, node: ConditionalNode) -> int:
-        return len(node.unknowns)
+        return len(node.owns_inside)
 
 
 class PerProblem(Role):

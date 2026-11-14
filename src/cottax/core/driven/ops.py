@@ -64,7 +64,7 @@ class AssignByRule[N: Label, V: Place](ComposedOp[N, V]):
     checks_graph = (check_assignable,)
 
     def composed(self, graph: NestingGraph[N, V]) -> tuple[Assign[N, V]]:
-        unknowns = graph[self.problem].unknowns
+        unknowns = graph[self.problem].owns_inside
         return (Assign(self.problem, self.contract, *self.places(self.problem, unknowns,
                                                                  self.contract)),)
 

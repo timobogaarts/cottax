@@ -1,22 +1,22 @@
 '''
 The proof that a graph is executable: every entry, at every depth, is answered by one
-problem whose edges lie right against its cycle. Typed separately: an ExecutableGraph is
+encloser whose edges lie right against its cycle. Typed separately: an ExecutableGraph is
 *always* executable.
 '''
 
 from collections.abc import Iterator
 
 from .nesting import NestingGraph, ProvedGraph, check_nesting_ends_on_one_cycle
-from .kinds import requirements
+from .kinds import ConditionalNode
 from .places import Label, Place
 from ..frozen import Violation
 
 
 def body_of[G: NestingGraph](g: G) -> G:
     '''
-    The graph without its problems: what is run, never answered.
+    The graph without its enclosers: what is run, never answered.
     '''
-    ps = set(g.problems)
+    ps = set(g.enclosers)
     return g.subgraph(n for n in g.nodes if n not in ps)
 
 
@@ -25,7 +25,7 @@ def body_of[G: NestingGraph](g: G) -> G:
 def check_nestings_share_a_cycle(b: 'ExecutableGraph') -> Iterator[Violation]:
     '''
     Both ends of every nesting are on one cycle (`check_nesting_ends_on_one_cycle`): a pair
-    that is not is inert to the graph, and here it would name a problem answered inside
+    that is not is inert to the graph, and here it would name an encloser answered inside
     an iteration that never re-runs it.
 
     p ~ q  in  N \\ A(q)   ∀ (p, q) ∊ W
@@ -39,33 +39,33 @@ def check_nestings_share_a_cycle(b: 'ExecutableGraph') -> Iterator[Violation]:
 
 def check_no_requirements(b: 'ExecutableGraph') -> Iterator[Violation]:
     '''
-    No requirement is left: every condition is a problem's, held by unknowns.
+    Every condition node owns something inside: no requirement is left.
 
     N_P = N_C
     '''
-    g = b.graph
-    for n in requirements(g.definitions):
-        yield RequirementUnanswered(n, tuple(g.definitions[n].conditions))
+    for n, d in b.graph.definitions.items():
+        if isinstance(d, ConditionalNode) and not d.owns_inside:
+            yield RequirementUnanswered(n, tuple(d.reads_inside))
 
 def check_body_is_dag(b: 'ExecutableGraph') -> Iterator[Violation]:
     '''
-    With the problems taken out no cycle is left: *functionally acyclic*.
+    With the enclosers taken out no cycle is left: *functionally acyclic*.
 
     |S_k| = 1  ∀ S_k ∊ SCC[G \\ N_P]
     '''
     g = b.graph
     for cycle in body_of(g).graph.cycles:
-        held = [p for p in g.problems if set(cycle) <= set(g.cycle_of(p))]
+        held = [p for p in g.enclosers if set(cycle) <= set(g.cycle_of(p))]
         if held:
             yield StillCyclic(max(held, key=lambda p: len(g.enclosing(p))), cycle)
         else:
             yield NoProblem(cycle)
 
 
-def check_one_problem_per_level(b: 'ExecutableGraph') -> Iterator[Violation]:
+def check_one_encloser_per_level(b: 'ExecutableGraph') -> Iterator[Violation]:
     '''
-    No two problems nested in the same thing -- both outermost, or both answered
-    inside one problem -- are on one cycle. 
+    No two enclosers nested in the same thing -- both outermost, or both answered
+    inside one encloser -- are on one cycle. 
 
     The mirror of `check_nesting_ends_on_one_cycle`: a nested pair *must* share a
     cycle at the outer's level, siblings *must not*.
@@ -76,8 +76,8 @@ def check_one_problem_per_level(b: 'ExecutableGraph') -> Iterator[Violation]:
     equal chains.
     '''
     g  = b.graph
-    ps = set(g.problems)
-    for q in g.problems:
+    ps = set(g.enclosers)
+    for q in g.enclosers:
         cycle    = g.cycle_of(q)
         siblings = tuple(p for p in cycle if p in ps and g.within.get(p) == g.within.get(q))
         if len(siblings) > 1 and siblings[0] == q:                  # said once, by the first
@@ -86,64 +86,62 @@ def check_one_problem_per_level(b: 'ExecutableGraph') -> Iterator[Violation]:
 
 def check_all_conditions_on_cycle(b: 'ExecutableGraph') -> Iterator[Violation]:
     '''
-    Every problem iterates something, and every condition it holds is produced there:
+    Every encloser iterates something, and every condition it holds is produced there:
     on its cycle.
 
     |S_p| > 1   and   C_p ⊆ ⋃_{k ∊ S_p} O_k   ∀ p ∊ N_P
 
-    A condition nothing on the cycle produces is a constant to the problem: no
+    A condition nothing on the cycle produces is a constant to the encloser: no
     unknown can move it. A read nothing produces at all (a boundary input) is one.
     '''
     g = b.graph
-    for p in g.problems:
+    for p in g.enclosers:
         cycle = g.cycle_of(p)
         d     = g.definitions[p]
         if len(cycle) == 1:
-            yield OutsideCycle(p, tuple(d.unknowns))
-        elif constant := tuple(v for v in d.conditions if g.graph.owners.get(v) not in cycle):
+            yield OutsideCycle(p, tuple(d.owns_inside))
+        elif constant := tuple(v for v in d.reads_inside if g.graph.owners.get(v) not in cycle):
             yield Constant(p, constant)
 
 
 def check_other_reads_off_cycle(b: 'ExecutableGraph') -> Iterator[Violation]:
     '''
-    What a problem reads beyond its conditions is not produced on its cycle.
+    What an encloser reads outside is not produced on its cycle.
 
-    (I_p \\ C_p) ∩  O(S_p) = ∅   ∀ p ∊ N_P    
+    I^out_p ∩ O(S_p) = ∅   ∀ p ∊ N_P
     '''
     g = b.graph
-    for p in g.problems:
+    for p in g.enclosers:
         d    = g.definitions[p]
         held = set(g.cycle_of(p))
-        conditions = set(d.conditions)
-        if inside := tuple(v for v in d.reads if v not in conditions and g.graph.owners.get(v) in held):
+        if inside := tuple(v for v in d.reads_outside if g.graph.owners.get(v) in held):
             yield ReadInsideCycle(p, inside)
 
 
 def check_other_owns_off_cycle(b: 'ExecutableGraph') -> Iterator[Violation]:
     '''
-    What a problem owns beyond its (iterable) unknowns is not read on its cycle.
-    (O_p \\ U_p) ∩ I(S_p) = ∅   ∀ p ∊ N_P
+    What an encloser owns outside is not read on its cycle.
+    O^out_p ∩ I(S_p) = ∅   ∀ p ∊ N_P
     '''
     g       = b.graph
     readers = g.graph.readers
-    for p in g.problems:
-        d        = g.definitions[p]
-        held     = set(g.cycle_of(p))
-        unknowns = set(d.unknowns)
-        if inside := [(v, r) for v in d.owns if v not in unknowns
+    for p in g.enclosers:
+        d    = g.definitions[p]
+        held = set(g.cycle_of(p))
+        if inside := [(v, r) for v in d.owns_outside
                       for r in readers.get(v, ()) if r in held]:
             yield OwnReadInsideCycle(p, tuple(v for v, _ in inside), tuple(r for _, r in inside))
 
 
 class ExecutableGraph[N: Label, V: Place](ProvedGraph[N, V]):
     '''
-    A graph proved executable: every nesting on one cycle, one problem per level, its
-    body a DAG, and every problem's edges against its cycle -- conditions on it, everything
+    A graph proved executable: every nesting on one cycle, one encloser per level, its
+    body a DAG, and every encloser's edges against its cycle -- conditions on it, everything
     else off it.
     '''
 
     checks = (check_nestings_share_a_cycle,
-              check_no_requirements, check_one_problem_per_level, check_body_is_dag,
+              check_no_requirements, check_one_encloser_per_level, check_body_is_dag,
               check_all_conditions_on_cycle, check_other_reads_off_cycle,
               check_other_owns_off_cycle)
 
@@ -153,8 +151,8 @@ class ExecutableGraph[N: Label, V: Place](ProvedGraph[N, V]):
 
 def _outline(g: NestingGraph) -> str:
     '''The top level in one line: each component in dependency order, a component
-    answered by an outermost problem as `solve(problem)[members]`, one node bare.'''
-    outer = set(g.outermost_problems)
+    answered by an outermost encloser as `solve(problem)[members]`, one node bare.'''
+    outer = set(g.outermost_enclosers)
     def one(component) -> str:
         members = ', '.join(str(n) for n in component)
         if held := [p for p in component if p in outer]:
@@ -170,7 +168,7 @@ class RequirementUnanswered(Violation):
     conditions : tuple[Place, ...]
     error    = ValueError
     template = ('{node!r} holds {conditions} against nothing: it has no unknowns, so no driver '
-                 'can move it -- `Determine` it by a variable on its cycle, or drop it')
+                 'can move it -- determine it by a variable on its cycle, or drop it')
 
 class SeveralOutermost(Violation):
     cycle    : tuple[Label, ...]

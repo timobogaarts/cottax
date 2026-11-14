@@ -23,17 +23,17 @@ class RelationalModel(ModelReading):
         node, owners = graph[problem], graph.graph.owners
         if not is_equalities(condition_of(node)):
             return (NotEqualities(str(problem)),)
-        if off := tuple(c for c in node.conditions
+        if off := tuple(c for c in node.reads_inside
                         if c not in owners or not isinstance(graph[owners[c]], FunctionalNode)):
             return (ConditionOffBody(str(problem), tuple(map(str, off))),)
         read = {v for b in self.body(graph, problem) for v in graph[b].reads}
-        if unread := tuple(u for u in node.unknowns if u not in read):
+        if unread := tuple(u for u in node.owns_inside if u not in read):
             return (UnknownUnread(str(problem), tuple(map(str, unread))),)
         return ()
 
     def body(self, graph, problem):
         owners = graph.graph.owners
-        return tuple(dict.fromkeys(owners[c] for c in graph[problem].conditions if c in owners))
+        return tuple(dict.fromkeys(owners[c] for c in graph[problem].reads_inside if c in owners))
 
     def combines_as(self, condition):
         return RelationalCondition

@@ -2,13 +2,13 @@
 
 from collections.abc import Iterator
 
-from ...core import Label, NodeDefinition, Place, SteppedExecutableGraph, Violation, is_problem
+from ...core import Label, NodeDefinition, Place, SteppedExecutableGraph, Violation, is_encloser
 from .nodes import is_driven
 
 
 def check_driven[N: Label, V: Place](name: N, node: NodeDefinition[V]) -> Iterator[Violation]:
     '''Every problem carries a contract, placed.'''
-    if is_problem(node) and not is_driven(node):
+    if is_encloser(node) and not is_driven(node):
         yield Undriven(name)
 
 

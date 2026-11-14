@@ -36,7 +36,7 @@ from .places import (
 from .mints import Closure, Copy, Mint, Minting, mint_of, minted, unminted
 from .definition import NodeDefinition, Renaming, relabelled
 from .kinds import (
-    ConditionalNode, Function, FunctionalNode, is_requirement, is_problem, requirements, problems,
+    ConditionalNode, Function, FunctionalNode, is_encloser, enclosers,
 )
 from .graph import AbstractGraph
 from .nesting import NestingGraph, ProvedGraph
@@ -44,8 +44,9 @@ from .dispatch import answer_for_labels, answer_for_places
 from .valued import GraphWithValues
 from .plan import (
     Plan, ComposedOp, GraphOp, StagedOp, refusals,
-    Rebind, Rebinding, Combine, Cut, Delete, Determine, Insert, Nest, Redefine, Rename, Replace, Rewire,
-    Undetermine, Unnest,
+    Rebind, Rebinding, Combine, Cut, Delete, Insert, Nest, Redefine, Rename, Replace, Rewire,
+    SetOwnsInside,
+    Unnest,
 )
 from .executable import ExecutableGraph, body_of
 from .steps import Run, Solve, Step, SteppedExecutableGraph

@@ -32,11 +32,6 @@ class Implemented[V: Place](NodeDefinition[V]):
 
     checks = (check_implemented_once,)
 
-    @property
-    def reads(self) -> tuple[V, ...]:                         return self.node.reads
-    @property
-    def owns(self) -> tuple[V, ...]:                          return self.node.owns
-    
     def relabel(self, renaming: Renaming[V]) -> 'Implemented[V]':
         return type(self)(self.node.relabel(renaming), self.implementation)
 
@@ -60,6 +55,11 @@ class ImplementedFunction[V: Place](Implemented[V], FunctionalNode[V]):
     checks   = (check_a_function,)
     __repr__ = Implemented.__repr__
 
+    @property
+    def reads(self) -> tuple[V, ...]:                  return self.node.reads
+    @property
+    def owns(self) -> tuple[V, ...]:                   return self.node.owns
+
 
 def check_a_contract(implemented: 'ImplementedDriven') -> Iterator[Violation]:
     '''What runs a driver goes on a driven node: a bare condition node has no contract for it
@@ -79,9 +79,13 @@ class ImplementedDriven[V: Place](Implemented[V], DrivenNode[V]):
     __repr__ = Implemented.__repr__
 
     @property
-    def unknowns(self) -> tuple[V, ...]:               return self.node.unknowns
+    def owns_inside(self) -> tuple[V, ...]:            return self.node.owns_inside
     @property
-    def conditions(self) -> tuple[V, ...]:             return self.node.conditions
+    def reads_inside(self) -> tuple[V, ...]:           return self.node.reads_inside
+    @property
+    def reads_outside(self) -> tuple[V, ...]:          return self.node.reads_outside
+    @property
+    def owns_outside(self) -> tuple[V, ...]:           return self.node.owns_outside
     @property
     def condition(self) -> ConditionalNode[V]:         return self.node.condition
     @property
@@ -90,10 +94,6 @@ class ImplementedDriven[V: Place](Implemented[V], DrivenNode[V]):
     def data(self) -> tuple[tuple[V, ...], ...]:       return self.node.data
     @property
     def reports(self) -> tuple[tuple[V, ...], ...]:    return self.node.reports
-
-    def determined(self, unknowns: tuple[V, ...]) -> 'ImplementedDriven[V]':
-        '''Refused: take off the outer layer first.'''
-        raise DeterminedWhileImplemented(self.unknowns, tuple(unknowns)).raised
 
     def undriven(self) -> ConditionalNode[V]:
         '''Refused: the implementation runs this driver, so it comes off first.'''
@@ -251,13 +251,6 @@ class NoContract(Violation):
     error    = TypeError
     template = ('{node!r} is a {kind} with no driver, so there is no contract for an '
                 'implementation to answer -- `Assign` one first')
-
-class DeterminedWhileImplemented(Violation):
-    unknowns : tuple
-    asked    : tuple
-    error    = TypeError
-    template = ('this node is implemented over {unknowns!r}, so it cannot be made to determine '
-                '{asked!r} -- `Unimplement` it first')
 
 class UndrivenWhileImplemented(Violation):
     driver : str

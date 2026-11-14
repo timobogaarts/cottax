@@ -7,8 +7,8 @@ relational_condition             (Rel / Eq / Le, Relation, Sense / Min / Max, Ob
  ||                               RelationalCondition, its `+`)
  ||----------------------------
  \/            \/             \/
-rewrites      programme      classification   (rewrites: FixedPointCut, cuts closed by a
-                              ||               problem on their copies;
+rewrites      programme      classification   (rewrites: Determine / Undetermine, and
+                              ||               FixedPointCut, cuts closed by a problem;
                               \/               programme: Programme, a condition read as a
                              contracts         nonlinear programme, places only;
                                                classification: the shapes, as predicates;
@@ -28,7 +28,7 @@ from .classification import (
     is_optimise, is_root_find,
     is_unconstrained_optimise,
 )
-from .rewrites import FixedPointCut
+from .rewrites import Determine, FixedPointCut, Undetermine
 from .programme import Programme, Scaling, programme
 
 __all__ = [
@@ -36,6 +36,6 @@ __all__ = [
     'is_constrained_optimise', 'is_equalities', 'is_feasibility', 'is_fixed_point',
     'is_optimise', 'is_root_find',
     'is_unconstrained_optimise',
-    'FixedPointCut',
+    'Determine', 'Undetermine', 'FixedPointCut',
     'Programme', 'Scaling', 'programme',
 ]

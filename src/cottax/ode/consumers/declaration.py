@@ -79,7 +79,7 @@ class Rate[N: Label, V: Place](Paired[N, V]):
         if not self.record:
             return self.condition
         histories = tuple(self.record.get(x) or minted(mints.Trajectory(), x)
-                          for x in self.condition.unknowns)
+                          for x in self.condition.owns_inside)
         return Driven(self.condition, Integration(trajectory=True), ((self.times.place,),),
                       (histories,))
 

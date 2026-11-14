@@ -16,7 +16,8 @@ from cottax.core import Function
 from cottax.core.maths.plan import Delete, Insert, Nest, Plan, Unnest
 from cottax.core.realisation import ImplementedFunction
 from cottax.relational import Eq, Relation, RelationalCondition
-from cottax.core.maths.plan import Cut, Determine, Undetermine
+from cottax.core.maths.plan import Cut
+from cottax.relational.rewrites import Determine, Undetermine
 from cottax.core import Combine
 from cottax.pytree.path import NodePath, VarPath
 from cottax.core.frozen import OrderedMap, unchecked
@@ -141,7 +142,7 @@ def test_a_nested_pair_shares_a_cycle_at_its_own_level():
     # tree has two levels under opt's block.
     both = (outer + Nest(n('x'), n('opt'))).graph
     interior = both.interior(n('opt'))
-    assert set(interior.outermost_problems) == {n('mda'), n('x')}     # two, side by side
+    assert set(interior.outermost_enclosers) == {n('mda'), n('x')}     # two, side by side
 
 
 def test_a_pair_whose_inner_is_outside_its_outers_component_is_refused(mdf):
@@ -171,8 +172,8 @@ def test_nesting_changes_equality_and_the_hash(mdf, nested):
 
 
 def test_roots_is_what_a_block_answers(nested):
-    assert nested.outermost_problems == (n('opt'),)
-    assert nested.interior(n('opt')).outermost_problems == (n('mda'),)   # the outer gone, the inner leads
+    assert nested.outermost_enclosers == (n('opt'),)
+    assert nested.interior(n('opt')).outermost_enclosers == (n('mda'),)   # the outer gone, the inner leads
 
 
 def test_a_statement_that_determines_nothing_cannot_be_an_end(mdf):
@@ -299,7 +300,7 @@ def test_two_siblings_share_one_outer(mdf):
         n('obj') : call(['y', 'w'],   ['f']),
     }))
     g = (Plan(g) + Nest(n('mda'), n('opt')) + Nest(n('mda2'), n('opt'))).graph
-    assert g.outermost_problems == (n('opt'),)
+    assert g.outermost_enclosers == (n('opt'),)
     assert set(g.within) == {n('mda'), n('mda2')}
 
 
@@ -317,9 +318,9 @@ def test_three_levels_are_two_pairs_in_either_order():
     up   = (Plan(g) + Nest(n('mda2'), n('mda')) + Nest(n('mda'), n('opt'))).graph
     down = (Plan(g) + Nest(n('mda'), n('opt')) + Nest(n('mda2'), n('mda'))).graph
     assert dict(up.within) == dict(down.within) == {n('mda2'): n('mda'), n('mda'): n('opt')}
-    assert up.outermost_problems == (n('opt'),)
-    assert up.interior(n('opt')).outermost_problems == (n('mda'),)
-    assert up.interior(n('opt')).interior(n('mda')).outermost_problems == (n('mda2'),)
+    assert up.outermost_enclosers == (n('opt'),)
+    assert up.interior(n('opt')).outermost_enclosers == (n('mda'),)
+    assert up.interior(n('opt')).interior(n('mda')).outermost_enclosers == (n('mda2'),)
 
 
 # ---------------------------------------------------------------- interior
@@ -353,7 +354,7 @@ def test_interior_of_a_sibling_carries_the_nesting_it_severs():
         n('fi') : call(['hp'], ['i']),
     }))
     g = (Plan(g) + Nest(n('i'), n('o'))).graph
-    assert set(g.outermost_problems) == {n('o'), n('p')}
+    assert set(g.outermost_enclosers) == {n('o'), n('p')}
     assert dict(g.interior(n('o')).within) == {}    # the outer: its pair goes with it
     severed = g.interior(n('p'))                    # the sibling: severs (i, o)
     assert dict(severed.within) == {n('i'): n('o')}

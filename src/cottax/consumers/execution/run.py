@@ -160,7 +160,7 @@ def _solve(node: ImplementedDriven, interior: CallableGraph, env: Env) -> None:
         dict(zip(node.contract.takes, map(env.read, node.data))))
 
     # Add unknowns and reports to data
-    env.write(node.unknowns, values)
+    env.write(node.owns_inside, values)
     for role, slot in zip(node.contract.reports, node.reports):
         env.write(slot, reports[role])
     # Walk interior again for consistent values in non-unknowns.
@@ -186,12 +186,12 @@ class InteriorConditionMap[N: Label, V: Place](ConditionMap):
         '''The map `run` hands `node`'s driver, `interior` its `Solve`'s. Fixed: what the
         interior reads from outside, and what the condition reads that the interior does not
         produce (a parameter); the map answers at every condition read.'''
-        solved   = set(node.unknowns)
+        solved   = set(node.owns_inside)
         produced = set(interior.graph.graph.owned_variables)
         fixed    = tuple(dict.fromkeys(
             p for p in (*interior.graph.graph.boundary_inputs, *node.condition.reads)
             if p not in solved and p not in produced))
-        return cls(interior, node.unknowns, fixed, node.condition.reads)
+        return cls(interior, node.owns_inside, fixed, node.condition.reads)
 
     def __call__(self, unknowns: Unknowns, context: Context) -> ConditionValues:
         env = Env(zip(self.context_places, context, strict=True))

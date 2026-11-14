@@ -147,7 +147,7 @@ def places(problem: Word, unknown: Word, driver: DriverContract) -> tuple:
 
 
 def driven(problem: Word, condition, implementation=newton, driver=Newton()) -> ImplementedDriven:
-    (unknown,) = condition.unknowns
+    (unknown,) = condition.owns_inside
     return ImplementedDriven(Driven(condition, driver, *places(problem, unknown, driver)),
                              implementation)
 
@@ -210,7 +210,7 @@ def test_the_data_arrives_one_tuple_per_role_and_the_conditions_as_values():
     step = next(s for s in graph.steps if isinstance(s, Solve))
     assert InteriorConditionMap.posing(graph[CLOSE], step.interior) == conditions
     assert conditions.unknowns == (U,) and conditions.context_places == (K,) and context == (2.0,)
-    assert conditions.conditions == posed.condition.conditions
+    assert conditions.conditions == posed.condition.reads_inside
     assert conditions((2.0,), context) == (2.0 * 2.0 - 2.0 * 3.0,)
     with pytest.raises(ValueError):
         conditions((2.0, 3.0), context)

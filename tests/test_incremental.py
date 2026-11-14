@@ -25,7 +25,7 @@ from cottax.core import Function
 from cottax.core.realisation import ImplementedFunction
 import purposes
 from cottax.core.frozen import OrderedMap
-from cottax.core import problems
+from cottax.core import enclosers
 from graphs import graph_of
 
 
@@ -393,7 +393,7 @@ def ask_everything(g: NestingGraph) -> None:
     '''Answer every query, so every layer of cache is warm.'''
     for name in QUERIES:
         getattr(g.graph, name)
-    g.graph.components, g.graph.is_acyclic, problems(g.definitions)
+    g.graph.components, g.graph.is_acyclic, enclosers(g.definitions)
 
 
 # ---------------------------------------------------------------- the result itself

@@ -12,7 +12,7 @@ from jax.tree_util import GetAttrKey
 
 from cottax.core.frozen import OrderedMap
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core import Function, body_of, problems
+from cottax.core import Function, body_of, enclosers
 from cottax.core.maths.nesting import BlockTooSmall, NodeInTwoBlocks, check_blocks_partition
 from cottax.core.realisation import ImplementedFunction
 from cottax.relational import Eq, Relation, RelationalCondition
@@ -267,7 +267,7 @@ def test_the_body_drops_the_problem_and_leaves_what_it_owned_unowned():
     # The unknown becomes a boundary input, which is what a residual guess is.
     problem = RelationalCondition((Relation(V('r_u'), None, Eq),), (), (V('u'),), ())
     g = graph_of(OrderedMap({N('a'): call(['u'], ['r_u']), N('close'): problem}))
-    assert names(problems(g.definitions)) == ['.close']
+    assert names(enclosers(g.definitions)) == ['.close']
     assert names(body_of(g).nodes) == ['.a']
     assert body_of(g).graph.boundary_inputs == (V('u'),)
 
