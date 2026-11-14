@@ -282,8 +282,8 @@ def test_an_optimise_absorbs_a_root_find(mdf):
     assert is_optimise(joined)
     assert joined.objectives  == (Objective(F, Min),)
     assert joined.owns        == (X, M)          # design, then the absorbed unknowns
-    assert joined.conditions  == (F, C, Y1)      # objective, then the relations as written
-    assert joined.reads       == joined.conditions          # on a bare condition node, every read is one
+    assert joined.reads_inside  == (F, C, Y1)      # objective, then the relations as written
+    assert joined.reads       == joined.reads_inside          # on a bare condition node, every read is one
     assert [r.op for r in joined.relations] == [Le, Eq]
 
 
@@ -435,7 +435,7 @@ def test_assign_derives_nothing_for_a_driver_requiring_nothing(sellar):
     cut = closure(sellar, Y2)
     g   = assigned(Plan(sellar) + cut, cut.at, SelfStarting()).graph
     assert g[cut.at].data == ()
-    assert g[cut.at].reads == g[cut.at].conditions
+    assert g[cut.at].reads == g[cut.at].reads_inside
 
 
 def test_assign_refuses_a_body_and_a_second_time(sellar):
@@ -468,7 +468,7 @@ def test_assign_keeps_an_optimise_start_apart_from_its_conditions():
 
     assert is_driven(opt) and is_optimise(opt.condition)
     assert opt.data == ((START(V('x')),),)
-    assert opt.conditions == (V('f'),)
+    assert opt.reads_inside == (V('f'),)
 
 
 def test_a_rewire_reaches_the_statement_a_driver_wraps():
@@ -486,7 +486,7 @@ def test_a_rewire_reaches_the_statement_a_driver_wraps():
     after  = (driven + Cut(V('r'), readers=(N('h'),), copy_of=HAT)).graph[N('h')]
 
     assert [p.spelling for p in after.reads] == ['^copy.r', '^start.u']
-    assert [p.spelling for p in after.conditions] == ['^copy.r']     # renamed, still a condition
+    assert [p.spelling for p in after.reads_inside] == ['^copy.r']     # renamed, still a condition
     assert [p.spelling for slot in after.data for p in slot] == ['^start.u']   # untouched
 
 

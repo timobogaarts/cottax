@@ -45,7 +45,7 @@ def check_no_requirements(b: 'ExecutableGraph') -> Iterator[Violation]:
     '''
     g = b.graph
     for n in requirements(g.definitions):
-        yield RequirementUnanswered(n, tuple(g.definitions[n].conditions))
+        yield RequirementUnanswered(n, tuple(g.definitions[n].reads_inside))
 
 def check_body_is_dag(b: 'ExecutableGraph') -> Iterator[Violation]:
     '''
@@ -99,38 +99,36 @@ def check_all_conditions_on_cycle(b: 'ExecutableGraph') -> Iterator[Violation]:
         cycle = g.cycle_of(p)
         d     = g.definitions[p]
         if len(cycle) == 1:
-            yield OutsideCycle(p, tuple(d.unknowns))
-        elif constant := tuple(v for v in d.conditions if g.graph.owners.get(v) not in cycle):
+            yield OutsideCycle(p, tuple(d.owns_inside))
+        elif constant := tuple(v for v in d.reads_inside if g.graph.owners.get(v) not in cycle):
             yield Constant(p, constant)
 
 
 def check_other_reads_off_cycle(b: 'ExecutableGraph') -> Iterator[Violation]:
     '''
-    What a problem reads beyond its conditions is not produced on its cycle.
+    What a problem reads outside is not produced on its cycle.
 
-    (I_p \\ C_p) ∩  O(S_p) = ∅   ∀ p ∊ N_P    
+    I^out_p ∩ O(S_p) = ∅   ∀ p ∊ N_P
     '''
     g = b.graph
     for p in g.problems:
         d    = g.definitions[p]
         held = set(g.cycle_of(p))
-        conditions = set(d.conditions)
-        if inside := tuple(v for v in d.reads if v not in conditions and g.graph.owners.get(v) in held):
+        if inside := tuple(v for v in d.reads_outside if g.graph.owners.get(v) in held):
             yield ReadInsideCycle(p, inside)
 
 
 def check_other_owns_off_cycle(b: 'ExecutableGraph') -> Iterator[Violation]:
     '''
-    What a problem owns beyond its (iterable) unknowns is not read on its cycle.
-    (O_p \\ U_p) ∩ I(S_p) = ∅   ∀ p ∊ N_P
+    What a problem owns outside is not read on its cycle.
+    O^out_p ∩ I(S_p) = ∅   ∀ p ∊ N_P
     '''
     g       = b.graph
     readers = g.graph.readers
     for p in g.problems:
-        d        = g.definitions[p]
-        held     = set(g.cycle_of(p))
-        unknowns = set(d.unknowns)
-        if inside := [(v, r) for v in d.owns if v not in unknowns
+        d    = g.definitions[p]
+        held = set(g.cycle_of(p))
+        if inside := [(v, r) for v in d.owns_outside
                       for r in readers.get(v, ()) if r in held]:
             yield OwnReadInsideCycle(p, tuple(v for v, _ in inside), tuple(r for _, r in inside))
 

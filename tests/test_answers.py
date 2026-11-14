@@ -57,16 +57,16 @@ class Plain:
 
 class Vanishes(ConditionalNode):
     '''A condition node whose conditions vanish: the level of the two finals below.'''
-    conditions : tuple
-    unknowns   : tuple
-    reads      = property(lambda self: self.conditions)
-    owns       = property(lambda self: self.unknowns)
+    reads_inside  : tuple
+    owns_inside   : tuple
+    reads_outside = ()
+    owns_outside  = ()
 
     def relabel(self, renaming):
-        return type(self)(relabelled(self.conditions, renaming), relabelled(self.unknowns, renaming))
+        return type(self)(relabelled(self.reads_inside, renaming), relabelled(self.owns_inside, renaming))
 
     def determined(self, unknowns):
-        return type(self)(self.conditions, unknowns)
+        return type(self)(self.reads_inside, unknowns)
 
 
 class Raw(Vanishes):
@@ -165,7 +165,7 @@ ZERO = Kind('zero', 'zero (r = 0)', 'every condition vanishes', False, ('#abcdef
 @answers(Zero)
 class ZeroDrawing(NodeDrawing):
     def drawn(self, node):
-        return Drawn(ZERO, (Slot(('= 0',), node.conditions),))
+        return Drawn(ZERO, (Slot(('= 0',), node.reads_inside),))
 
 
 def tok_segments(tok, w):
@@ -204,7 +204,7 @@ class ZeroSpelling(Spelling[Zero]):
     kind = 'zero'
 
     def write(self, node, w):
-        return {'conditions': w.places(node.conditions), 'unknowns': w.places(node.unknowns)}
+        return {'conditions': w.places(node.reads_inside), 'unknowns': w.places(node.owns_inside)}
 
     def read(self, data, r):
         return Zero(r.places(data['conditions']), r.places(data['unknowns']))
@@ -353,7 +353,7 @@ class ZeroModel(ModelReading):
 
     def body(self, graph, problem):
         owners = graph.graph.owners
-        return tuple(dict.fromkeys(owners[c] for c in graph[problem].conditions))
+        return tuple(dict.fromkeys(owners[c] for c in graph[problem].reads_inside))
 
 
 class Gap(ComposedOp):

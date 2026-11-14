@@ -32,11 +32,6 @@ class Implemented[V: Place](NodeDefinition[V]):
 
     checks = (check_implemented_once,)
 
-    @property
-    def reads(self) -> tuple[V, ...]:                         return self.node.reads
-    @property
-    def owns(self) -> tuple[V, ...]:                          return self.node.owns
-    
     def relabel(self, renaming: Renaming[V]) -> 'Implemented[V]':
         return type(self)(self.node.relabel(renaming), self.implementation)
 
@@ -60,6 +55,11 @@ class ImplementedFunction[V: Place](Implemented[V], FunctionalNode[V]):
     checks   = (check_a_function,)
     __repr__ = Implemented.__repr__
 
+    @property
+    def reads(self) -> tuple[V, ...]:                  return self.node.reads
+    @property
+    def owns(self) -> tuple[V, ...]:                   return self.node.owns
+
 
 def check_a_contract(implemented: 'ImplementedDriven') -> Iterator[Violation]:
     '''What runs a driver goes on a driven node: a bare condition node has no contract for it
@@ -79,9 +79,13 @@ class ImplementedDriven[V: Place](Implemented[V], DrivenNode[V]):
     __repr__ = Implemented.__repr__
 
     @property
-    def unknowns(self) -> tuple[V, ...]:               return self.node.unknowns
+    def owns_inside(self) -> tuple[V, ...]:            return self.node.owns_inside
     @property
-    def conditions(self) -> tuple[V, ...]:             return self.node.conditions
+    def reads_inside(self) -> tuple[V, ...]:           return self.node.reads_inside
+    @property
+    def reads_outside(self) -> tuple[V, ...]:          return self.node.reads_outside
+    @property
+    def owns_outside(self) -> tuple[V, ...]:           return self.node.owns_outside
     @property
     def condition(self) -> ConditionalNode[V]:         return self.node.condition
     @property
@@ -93,7 +97,7 @@ class ImplementedDriven[V: Place](Implemented[V], DrivenNode[V]):
 
     def determined(self, unknowns: tuple[V, ...]) -> 'ImplementedDriven[V]':
         '''Refused: take off the outer layer first.'''
-        raise DeterminedWhileImplemented(self.unknowns, tuple(unknowns)).raised
+        raise DeterminedWhileImplemented(self.owns_inside, tuple(unknowns)).raised
 
     def undriven(self) -> ConditionalNode[V]:
         '''Refused: the implementation runs this driver, so it comes off first.'''

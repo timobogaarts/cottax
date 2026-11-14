@@ -323,7 +323,7 @@ def test_idf_keeps_the_optimiser_where_it_was_bound(sellar):
     g = (Plan(sellar) + idf()).graph
     assert g.nodes[0] == OPT and is_optimise(g[OPT])
     assert g[OPT].unknowns == (V('z'), HAT(V('y2')))
-    assert g[OPT].conditions == (V('f'), V('g'), V('y2'))
+    assert g[OPT].reads_inside == (V('f'), V('g'), V('y2'))
 
 
 def test_sand_absorbs_a_declared_fixed_point_as_written():

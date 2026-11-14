@@ -303,10 +303,10 @@ def check_top_combinable(op: 'Monolithic', graph: NestingGraph) -> Iterator[Viol
 
 def reached_requirements[N: Label, V: Place](graph: NestingGraph[N, V], top: N) -> tuple[N, ...]:
     '''Every requirement whose conditions the design of `top` reaches.'''
-    reach  = set(graph.graph.reach(graph[top].unknowns))
+    reach  = set(graph.graph.reach(graph[top].owns_inside))
     owners = graph.graph.owners
     return tuple(r for r in requirements(graph.definitions)
-                 if all(owners.get(c) in reach for c in graph[r].conditions))
+                 if all(owners.get(c) in reach for c in graph[r].reads_inside))
 
 
 class Monolithic[N: Label, V: Place](Architecture[N, V]):

@@ -57,27 +57,21 @@ class OdeCondition[V: Place](ConditionalNode[V]):
     def initials(self) -> tuple[V, ...]:
         return tuple(d.initial for d in self.relations)
 
-    @property
-    def parameters(self) -> tuple[V, ...]:
-        '''The initial values, the span, then the kinks and the jumps.'''
-        return (*self.initials, self.span, *self.kinks, *self.jumps)
+    owns_outside = ()
 
     @property
-    def unknowns(self) -> tuple[V, ...]:
+    def owns_inside(self) -> tuple[V, ...]:
         '''The states, then the time where there is one.'''
         return self.states + (() if self.time is None else (self.time,))
 
     @property
-    def conditions(self) -> tuple[V, ...]:
+    def reads_inside(self) -> tuple[V, ...]:
         return self.rates
 
     @property
-    def reads(self) -> tuple[V, ...]:
-        return self.rates + self.parameters
-
-    @property
-    def owns(self) -> tuple[V, ...]:
-        return self.unknowns
+    def reads_outside(self) -> tuple[V, ...]:
+        '''The initial values, the span, then the kinks and the jumps.'''
+        return (*self.initials, self.span, *self.kinks, *self.jumps)
 
     def __add__(self, other: 'OdeCondition[V]') -> 'OdeCondition[V]':
         '''The join: the relations concatenated, this side first, over the one span both
@@ -96,8 +90,8 @@ class OdeCondition[V: Place](ConditionalNode[V]):
 
     def determined(self, unknowns: tuple[V, ...]) -> 'OdeCondition[V]':
         '''Itself, handed exactly its states and time: what it determines is not edited.'''
-        if tuple(unknowns) != self.unknowns:
-            raise DeterminesItsStates(self.unknowns, tuple(unknowns)).raised
+        if tuple(unknowns) != self.owns_inside:
+            raise DeterminesItsStates(self.owns_inside, tuple(unknowns)).raised
         return self
 
     def relabel(self, renaming: Renaming[V]) -> 'OdeCondition[V]':

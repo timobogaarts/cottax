@@ -95,32 +95,32 @@ class Declared(FunctionalNode):
 
 class States(ConditionalNode):
     '''A bare condition node: two bare tuples, and no relation anywhere. **The whole of
-    `ConditionalNode`** -- what it holds against and what it determines -- so every rule
+    `ConditionalNode`** -- what it reads and owns inside -- so every rule
     in the layer runs on a condition node that was never written as `lhs op rhs`.'''
-    conditions : tuple = ()
-    unknowns   : tuple = ()
-    reads      = property(lambda self: self.conditions)
-    owns       = property(lambda self: self.unknowns)
+    reads_inside  : tuple = ()
+    owns_inside   : tuple = ()
+    reads_outside = ()
+    owns_outside  = ()
     def relabel(self, renaming): return self
-    def determined(self, unknowns): return States(self.conditions, unknowns)
+    def determined(self, unknowns): return States(self.reads_inside, unknowns)
     def __add__(self, other):
         '''The whole of what `Combine` asks of a kind -- no relation anywhere.'''
         if not isinstance(other, States):
             return NotImplemented
-        return States(self.conditions + other.conditions, self.unknowns + other.unknowns)
+        return States(self.reads_inside + other.reads_inside, self.owns_inside + other.owns_inside)
 
 
 class Driven(ConditionalNode):
     '''A problem with an algorithm, as the abstract sees it: a condition node
-    reading more than its conditions and owning more than its unknowns. No driver
+    reading and owning outside as well as inside. No driver
     anywhere -- what one *is* is `problem/`'s, and the rules never ask.'''
     problem : States
     data    : tuple = ()
     reports : tuple = ()
-    conditions = property(lambda self: self.problem.conditions)
-    unknowns   = property(lambda self: self.problem.unknowns)
-    reads      = property(lambda self: self.problem.reads + tuple(v for vs in self.data for v in vs))
-    owns       = property(lambda self: self.problem.owns + tuple(v for vs in self.reports for v in vs))
+    reads_inside  = property(lambda self: self.problem.reads_inside)
+    owns_inside   = property(lambda self: self.problem.owns_inside)
+    reads_outside = property(lambda self: tuple(v for vs in self.data for v in vs))
+    owns_outside  = property(lambda self: tuple(v for vs in self.reports for v in vs))
     def relabel(self, renaming): return self
     def determined(self, unknowns): return Driven(self.problem.determined(unknowns),
                                                   self.data, self.reports)
@@ -227,8 +227,8 @@ def test_a_fold_is_generic_in_the_place_and_in_the_kind():
 
     fresh = Combine(Word('both'), (a, b), States).apply(g)
     assert tuple(fresh.definitions) == (t, Word('both'))          # bound at the end
-    assert fresh[Word('both')].conditions == places(['y', 'z'])
-    assert fresh[Word('both')].unknowns == places(['x', 'w'])
+    assert fresh[Word('both')].reads_inside == places(['y', 'z'])
+    assert fresh[Word('both')].owns_inside == places(['x', 'w'])
 
     kept = Combine(a, (a, b), States).apply(g)
     assert tuple(kept.definitions) == (a, t)                      # `a` where it was
@@ -348,6 +348,7 @@ def test_every_case_a_rule_can_name_has_wording():
     seen(violations(Toy, places(['s']), places(['s.u'])))
     seen(violations(Declared, places([]), places([])))                       # owns nothing
     seen(violations(States, (), ()))                                        # an empty condition node
+    seen(violations(Driven, states(['r'], ['u']), (places(['r']),)))        # r read inside and outside
     seen(violations(Insert, OrderedMap({})))                                   # nothing inserted
     seen(violations(Delete, ()))                                            # nothing deleted
     seen(violations(Cut, Word('x'), (), lambda w: w))                       # a copy nothing reads

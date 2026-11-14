@@ -128,13 +128,13 @@ def check_unknowns(op: 'Determine') -> Iterator[Violation]:
 
 def check_determines_nothing_yet(op: 'Determine', graph: NestingGraph) -> Iterator[Violation]:
     '''The node determines nothing yet: unknowns are set, never added to.'''
-    if unknowns := tuple(graph[op.requirement].unknowns):
+    if unknowns := tuple(graph[op.requirement].owns_inside):
         yield AlreadyDetermined(op.requirement, unknowns)
 
 
 def check_determines_something(op: 'Undetermine', graph: NestingGraph) -> Iterator[Violation]:
     '''There is something to drop.'''
-    if not graph[op.problem].unknowns:
+    if not graph[op.problem].owns_inside:
         yield AlreadyUndetermined(op.problem)
 
 

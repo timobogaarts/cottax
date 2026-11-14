@@ -10,7 +10,7 @@ from .maths.executable import (
 from .maths.graph import (
     OwnAroundOwner, OwnedTwice, OwnerInsideRead, OwnInsideOwner, ReadInsideOwner,
 )
-from .maths.kinds import OwnsNothing, StatesNothing
+from .maths.kinds import OwnsNothing, ReadOnBothSides, StatesNothing
 from .maths.nesting import (
     BlockTooSmall, BoxOwnsNothing, NestingLoop, NodeInTwoBlocks, NotAProblem, SelfNested, Unbound,
     Unreachable,
@@ -32,7 +32,7 @@ __all__ = [
     'Constant', 'NoProblem', 'OutsideCycle', 'OwnReadInsideCycle', 'ReadInsideCycle',
     'RequirementUnanswered', 'SeveralOutermost', 'StillCyclic',
     'OwnAroundOwner', 'OwnedTwice', 'OwnerInsideRead', 'OwnInsideOwner', 'ReadInsideOwner',
-    'OwnsNothing', 'StatesNothing',
+    'OwnsNothing', 'ReadOnBothSides', 'StatesNothing',
     'BlockTooSmall', 'BoxOwnsNothing', 'NestingLoop', 'NodeInTwoBlocks', 'NotAProblem',
     'SelfNested', 'Unbound', 'Unreachable',
     'AlreadyCut', 'AlreadyDetermined', 'AlreadyUndetermined', 'DoesNotRead', 'NoReaders',

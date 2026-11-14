@@ -124,10 +124,10 @@ def test_the_rate_declares_a_body_and_beside_it_the_ode():
     ode = g[solve_at('decay')]
     assert ode == OdeCondition((Dt(s.place('x'), s.place(cx.rate('x')), s.place(cx.initial('x'))),),
                                span_of('x'))
-    assert ode.conditions == (s.place(cx.rate('x')),)
-    assert ode.reads == (*ode.conditions, *ode.parameters) == (
+    assert ode.reads_inside == (s.place(cx.rate('x')),)
+    assert ode.reads == (*ode.reads_inside, *ode.reads_outside) == (
         s.place(cx.rate('x')), s.place(cx.initial('x')), span_of('x'))
-    assert ode.owns == ode.unknowns == (s.place('x'),)
+    assert ode.owns == ode.owns_inside == (s.place('x'),)
     assert is_ode(ode) and ExecutableGraph(g).graph == g
 
 
@@ -592,7 +592,7 @@ def final_x(rate, wrt: str = 'u'):
 def test_kinks_are_read_as_a_parameter_where_named_or_given_as_a_value():
     ode = declare(pushed(kinks='tk')).graph[solve_at('pushing')]
     assert ode.kinks == (s.place('tk'),)
-    assert ode.parameters[-2:] == (s.place('span'), s.place('tk'))
+    assert ode.reads_outside[-2:] == (s.place('span'), s.place('tk'))
     d = declare(pushed(kinks=KNOTS))
     assert d.graph[solve_at('pushing')].kinks == (s.place(cx.kinks('x')),)
     assert d.given[s.place(cx.kinks('x'))] is KNOTS
@@ -661,7 +661,7 @@ def test_time_is_owned_by_the_ode_given_inside_and_t1_outside():
     rate = s.rate(forced, 'x', initial=0.0, span='span', time='t',
                   record='xs', times='ts')
     ode = declare(rate).graph[solve_at('forced')].condition
-    assert ode.unknowns == ode.owns == (s.place('x'), s.place('t'))
+    assert ode.owns_inside == ode.owns == (s.place('x'), s.place('t'))
     assert ode.determined((s.place('x'), s.place('t'))) is ode
     ts = jnp.linspace(0.0, 1.5, 4)
     out = s.run(declare(rate) + drive(diffrax_run()),

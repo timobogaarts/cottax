@@ -78,7 +78,7 @@ MIXED = RelationalCondition((Relation(V('u'), V('a'), Eq),
 def test_the_canonical_form_reads_each_side_from_the_unknowns_the_values_or_zero():
     '''`u = a`, `0 <= c`, `b = 0` with objective `f`: equalities and inequalities apart,
     each in written order, an inequality as `<= 0`.'''
-    assert MIXED.conditions == (V('f'), V('a'), V('c'), V('b'))
+    assert MIXED.reads_inside == (V('f'), V('a'), V('c'), V('b'))
     got = canonical(MIXED, (10.0,), (7.0, 1.0, 3.0, 2.0))
     assert got == Canonical(objectives=(7.0,), equalities=(9.0, 2.0), inequalities=(-3.0,))
 

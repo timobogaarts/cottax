@@ -43,7 +43,7 @@ def stated_shape(node: NodeDefinition) -> str | None:
     anything else.
     '''
     found = drawn_of(node)
-    if found is None or node.unknowns or found.kind is None:
+    if found is None or node.owns_inside or found.kind is None:
         return None
     return found.kind.name
 
@@ -83,7 +83,7 @@ def category_of(node: NodeDefinition) -> Kind | None:
     '''The category `node` draws under: `None` for a node that runs and for one drawn
     `'stated'` (`problem_type_of`).'''
     found = drawn_of(node)
-    return found.kind if found is not None and node.unknowns else None
+    return found.kind if found is not None and node.owns_inside else None
 
 
 def problem_type_of(node: NodeDefinition) -> str | None:
@@ -94,7 +94,7 @@ def problem_type_of(node: NodeDefinition) -> str | None:
     found = drawn_of(node)
     if found is None:
         return None
-    return found.kind.name if node.unknowns and found.kind is not None else 'stated'
+    return found.kind.name if node.owns_inside and found.kind is not None else 'stated'
 
 
 def key_entry(kind: Kind | None, style: Style) -> dict:

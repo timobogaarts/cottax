@@ -190,7 +190,7 @@ class Subtract(DriverImplementation[SelfStarting]):
     provides = frozenset()
 
     def __call__(self, posed, context, data):
-        u = (0.0,) * len(posed.condition.unknowns)
+        u = (0.0,) * len(posed.condition.owns_inside)
         for _ in range(64):
             r = posed.conditions(u, context)
             u = tuple(ui - ri for ui, ri in zip(u, r))
@@ -228,7 +228,7 @@ def test_combining_the_problems_is_the_merged_block(two_problems):
 
     solve, run_ = graph.steps
     assert isinstance(solve, stepped.Solve) and isinstance(run_, stepped.Run)
-    assert names(graph[solve.problem].unknowns) == ['.ua', '.ub']
+    assert names(graph[solve.problem].owns_inside) == ['.ua', '.ub']
     assert ran(graph.graph)[V('f')] == pytest.approx(3.0)
 
 
@@ -305,7 +305,7 @@ def test_combining_them_is_how_that_is_said(coupled_problems):
     op    = Combine(PROBLEM(N('mda')), (N('ha'), N('hb')), RelationalCondition)
     graph = CallableGraph(driven(coupled_problems, op, solving(op.at)))
     solve, = graph.steps
-    assert names(graph[solve.problem].unknowns) == ['.ua', '.ub']
+    assert names(graph[solve.problem].owns_inside) == ['.ua', '.ub']
     assert solve.problem == op.at and problem_type_of(graph[solve.problem]) == 'root-find'
 
 

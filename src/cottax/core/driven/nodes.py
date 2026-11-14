@@ -89,18 +89,18 @@ class Driven[V: Place](DrivenNode[V]):
     checks = (check_pairing, check_slots)
 
     @property
-    def unknowns(self) -> tuple[V, ...]:    return self.condition.unknowns
+    def owns_inside(self) -> tuple[V, ...]:    return self.condition.owns_inside
     @property
-    def conditions(self) -> tuple[V, ...]:  return self.condition.conditions
+    def reads_inside(self) -> tuple[V, ...]:   return self.condition.reads_inside
     @property
-    def reads(self) -> tuple[V, ...]:       return self.condition.reads + _joined(self.data)
+    def reads_outside(self) -> tuple[V, ...]:  return self.condition.reads_outside + _joined(self.data)
     @property
-    def owns(self) -> tuple[V, ...]:        return self.condition.owns + _joined(self.reports)
+    def owns_outside(self) -> tuple[V, ...]:   return self.condition.owns_outside + _joined(self.reports)
 
     def determined(self, unknowns: tuple[V, ...]) -> 'Driven[V]':
         '''Refused: an algorithm was chosen for the node as it stands, and its
         per-unknown slots are laid out against the unknowns it had.'''
-        raise DeterminedWhileDriven(type(self.contract).__name__, self.unknowns,
+        raise DeterminedWhileDriven(type(self.contract).__name__, self.owns_inside,
                                     tuple(unknowns)).raised
 
     def undriven(self) -> ConditionalNode[V]:
@@ -118,8 +118,8 @@ class Driven[V: Place](DrivenNode[V]):
         joined = self.condition + other.condition
         def slot(role: type, mine: tuple[V, ...], theirs: tuple[V, ...]) -> tuple[V, ...]:
             if issubclass(role, PerUnknown):
-                at = dict(zip(self.unknowns, mine)) | dict(zip(other.unknowns, theirs))
-                return tuple(at[u] for u in joined.unknowns)
+                at = dict(zip(self.owns_inside, mine)) | dict(zip(other.owns_inside, theirs))
+                return tuple(at[u] for u in joined.owns_inside)
             if mine != theirs:
                 raise RoleAtTwoPlaces(role.__name__, mine, theirs).raised
             return mine
@@ -155,7 +155,7 @@ def role_slots[N: Label, V: Place](graph: NestingGraph[N, V], role: type[Role]
     return tuple((place, name, unknown)
                  for name in graph.problems if is_driven(node := graph[name])
                  and (places := node.places_of(role)) is not None
-                 for place, unknown in (zip(places, node.unknowns) if issubclass(role, PerUnknown)
+                 for place, unknown in (zip(places, node.owns_inside) if issubclass(role, PerUnknown)
                                         else ((places[0], None),)))
 
 

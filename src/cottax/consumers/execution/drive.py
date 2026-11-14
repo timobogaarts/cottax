@@ -31,7 +31,7 @@ class Drive(ComposedOp):
                             if not is_implemented(node := graph[p]))
         def assigned(p, implementation: DriverImplementation) -> Assign:
             driver = self.contract_for(implementation)
-            return Assign(p, driver, *self.places(p, graph[p].unknowns, driver))
+            return Assign(p, driver, *self.places(p, graph[p].owns_inside, driver))
         return (*(assigned(p, i) for p, i in picked.items() if p in undriven),
                 *((Implement(picked),) if picked else ()))
 

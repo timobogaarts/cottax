@@ -122,7 +122,7 @@ def test_a_history_declares_the_ode_driven_its_initial_values_and_span_on_the_co
     ode = g[problem('oscillator')]
     assert ode.contract == RECORDING and ode.condition == declare(s.rate(
         oscillator.fn, 'x', 'v', initial={'x': 'x0', 'v': 'v0'}, span='span')).graph[problem('oscillator')]
-    assert ode.condition.parameters == (s.place('x0'), s.place('v0'), s.place('span'))
+    assert ode.condition.reads_outside == (s.place('x0'), s.place('v0'), s.place('span'))
     assert (ode.contract.takes, ode.contract.reports) == ((Times,), (Trajectory,))
     assert ode.data == ((s.place('times'),),)
     assert ode.reports == ((s.place('xs'), s.place(cx.trajectory('v'))),)
@@ -141,7 +141,7 @@ def test_a_value_written_for_a_place_of_the_driver_is_given_zero_too():
     assert d.given[s.place(cx.initial('x'))] == 0.0
     ode = d.graph[problem('bare')]
     assert ode.data == ((s.place(cx.times('x')),),)
-    assert ode.condition.parameters == (s.place(cx.initial('x')), s.place(cx.span('x')))
+    assert ode.condition.reads_outside == (s.place(cx.initial('x')), s.place(cx.span('x')))
 
 
 def test_a_record_without_times_or_a_place_not_a_state_is_refused_by_its_kind():
@@ -290,7 +290,7 @@ def test_6_the_flagged_contract_handed_to_drive_or_assigned_by_hand():
     by_drive = driven(bare, area_of_bare, implementation=diffrax_run(), contracts=(RECORDING,))
     at, g = problem('bare'), declare(bare, area_of_bare).graph
     by_hand = CallableGraph((Plan(g) + Assign(at, RECORDING, *s.role_places(
-        at, g[at].unknowns, RECORDING)) + Implement(OrderedMap({at: diffrax_run()}))).graph)
+        at, g[at].owns_inside, RECORDING)) + Implement(OrderedMap({at: diffrax_run()}))).graph)
     assert by_drive.graph == by_hand.graph
     out = run(GraphWithValues(by_drive, inputs))
     exact = (1 - math.exp(-1.0)) / 0.5

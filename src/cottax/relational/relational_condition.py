@@ -128,32 +128,29 @@ def check_parameters(node: 'RelationalCondition') -> Iterator[Violation]:
 
 class RelationalCondition[V: Place](ConditionalNode[V]):
     '''A condition node: relations and objectives over places, the unknowns it determines and
-    the parameters it holds fixed. Every other term is a condition. Supports addition.'''
+    the parameters it holds fixed. Every other term is read inside. Supports addition.'''
 
     relations  : tuple[Relation[V], ...]
     objectives : tuple[Objective[V], ...]
     unknowns   : tuple[V, ...]
     parameters : tuple[V, ...]
-    '''Terms read and held fixed while the unknowns move: a bound, a limit. Read, not a
-    condition, so a proof asks them off the problem's cycle.'''
+    '''Terms read and held fixed while the unknowns move: a bound, a limit. Read
+    outside, so a proof asks them off the problem's cycle.'''
+    owns_outside = ()
 
     checks = (check_relates_something, check_parameters)
 
     @property
-    def conditions(self) -> tuple[V, ...]:
+    def owns_inside(self) -> tuple[V, ...]:    return self.unknowns
+    @property
+    def reads_outside(self) -> tuple[V, ...]:  return self.parameters
+    @property
+    def reads_inside(self) -> tuple[V, ...]:
         '''The objectives, then every relation's terms that are neither unknowns nor
         parameters, in order.'''
         return tuple(o.place for o in self.objectives) + tuple(
             t for r in self.relations for t in r.terms
             if t not in self.unknowns and t not in self.parameters)
-    @property
-    def reads(self) -> tuple[V, ...]:
-        '''The conditions, then the parameters.'''
-        return self.conditions + self.parameters
-
-    @property
-    def owns(self) -> tuple[V, ...]:
-        return self.unknowns
 
     def __add__(self, other: 'RelationalCondition[V]') -> 'RelationalCondition[V]':
         '''The join: relations, objectives and unknowns concatenated, this side first; the

@@ -428,7 +428,7 @@ def test_bounds_are_relations_over_parameters():
                                                    'c': ('lo', None)}).condition
     assert o.relations == (cx.Relation(v('lo'), v('a'), cx.Le), cx.Relation(v('a'), v('hi'), cx.Le),
                            cx.Relation(None, v('b'), cx.Le), cx.Relation(v('lo'), v('c'), cx.Le))
-    assert o.parameters == (v('lo'), v('hi')) and o.conditions == (v('f'),)
+    assert o.parameters == (v('lo'), v('hi')) and o.reads_inside == (v('f'),)
     assert flat.satisfy(design={'a': (0, 'hi')}).condition.parameters == (v('hi'),)
 
 

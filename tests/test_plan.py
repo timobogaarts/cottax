@@ -137,5 +137,5 @@ def test_a_definition_that_cannot_rename_itself_cannot_exist():
         outputs : tuple = ()
 
     with pytest.raises(TypeError,
-                       match="'conditions', 'determined', 'owns', 'reads', 'relabel', 'unknowns'"):
+                       match="'determined', 'owns_inside', 'owns_outside', 'reads_inside', 'reads_outside', 'relabel'"):
         Forgetful()
