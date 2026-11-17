@@ -108,7 +108,7 @@ def test_a_realised_graph_reads_back_equal():
 def test_a_problems_parameters_are_written_and_read_back():
     g = cx.absolute.declare({'sum': flat.function(lambda z, x: z + x, 'f'),
                      'opt': flat.optimise(maximise='f', design={'z': ('z_lo', 0)})}).graph
-    assert g[cx.absolute.node('opt')].parameters == (flat.place('z_lo'),)
+    assert g[cx.absolute.node('opt')].condition.parameters == (flat.place('z_lo'),)
     opt = cx.absolute.node('opt')
     assert read_json(written(g, implementations=False))[opt] == g[opt]
 
@@ -453,7 +453,7 @@ def test_an_implementation_around_a_condition_is_refused_as_such():
     entry = next(e for e in data['nodes'] if e['definition']['kind'] == 'driven')
     entry['definition'] = {'kind': 'implemented', 'node': entry['definition']['condition'],
                            'implementation': {'ref': 'test_cx:square'}}
-    with pytest.raises(TypeError, match='Implementation does not fit a RelationalCondition'):
+    with pytest.raises(TypeError, match='Implementation does not fit a ConditionalNode'):
         read_json(data)
 
 

@@ -7,7 +7,7 @@ encloser whose edges lie right against its cycle. Typed separately: an Executabl
 from collections.abc import Iterator
 
 from .nesting import NestingGraph, ProvedGraph, check_nesting_ends_on_one_cycle
-from .kinds import ConditionalNode
+from .kinds import AbstractConditionalNode
 from .places import Label, Place
 from ..frozen import Violation
 
@@ -44,7 +44,7 @@ def check_no_requirements(b: 'ExecutableGraph') -> Iterator[Violation]:
     N_P = N_C
     '''
     for n, d in b.graph.definitions.items():
-        if isinstance(d, ConditionalNode) and not d.owns_inside:
+        if isinstance(d, AbstractConditionalNode) and not d.owns_inside:
             yield RequirementUnanswered(n, tuple(d.reads_inside))
 
 def check_body_is_dag(b: 'ExecutableGraph') -> Iterator[Violation]:

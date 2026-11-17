@@ -20,7 +20,7 @@ from jax.tree_util import DictKey
 
 from cottax.core import FunctionalNode, GraphWithValues, Solve
 from cottax.core.frozen import OrderedMap
-from cottax.core.driven import Driven
+from cottax.core.driven import driven as with_driver
 from cottax.relational.contracts import RootFinding
 from cottax.consumers.execution import CallableGraph, run
 from cottax.consumers.execution.run import InteriorConditionMap
@@ -57,9 +57,9 @@ def call(reads, owns, fn) -> 'FunctionalNode':
     return implemented(FunctionalNode(tuple(reads), tuple(owns)), fn)
 
 
-def driven(relations, unknowns) -> 'Driven':
+def driven(relations, unknowns) -> 'ConditionalNode':
     condition = RelationalCondition(tuple(relations), (), tuple(unknowns), ())
-    return implemented(Driven(condition, RootFinding(steps=False),
+    return implemented(with_driver(condition, RootFinding(steps=False),
                                     tuple((STARTS(u),) for u in unknowns), ()), newton)
 
 

@@ -278,7 +278,7 @@ def test_closures_records_a_rule(sellar):
     assert [len(c.cuts) for c in op.composed(other)]  == [2]
     g = (Plan(sellar) + op).graph
     assert names(g.nodes) == names(sellar.nodes) + ['^closure.D1']
-    assert g[Y2_MDA].unknowns == (HAT(V('y2')),)
+    assert g[Y2_MDA].condition.unknowns == (HAT(V('y2')),)
     assert repr(op) == 'close_functional_cycles(gauss_seidel)'
 
 

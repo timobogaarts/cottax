@@ -2,8 +2,9 @@
 
 from collections.abc import Iterator
 
-from ...core import Label, NodeDefinition, Place, SteppedExecutableGraph, Violation, is_encloser
-from .nodes import is_driven
+from ...core import (
+    Label, NodeDefinition, Place, SteppedExecutableGraph, Violation, is_driven, is_encloser,
+)
 
 
 def check_driven[N: Label, V: Place](name: N, node: NodeDefinition[V]) -> Iterator[Violation]:

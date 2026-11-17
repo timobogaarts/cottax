@@ -1,8 +1,7 @@
 '''`OdeCondition`: each state with its rate and its initial value, `x' = r`, `x(t0) = x0`, over
 one span, the place its time is given at, and the times the rate bends or jumps at.'''
 
-from ..core import ConditionalNode, Place, Renaming, Violation
-from ..core.maths.definition import attributes_text
+from ..core import Condition, Place, Renaming, Violation
 from ..core.frozen import Frozen
 
 
@@ -21,7 +20,7 @@ class Dt[V: Place](Frozen):
         return f"{self.state}' = {self.rate} from {self.initial}"
 
 
-class OdeCondition[V: Place](ConditionalNode[V]):
+class OdeCondition[V: Place](Condition[V]):
     '''`x' = r` from `x0` per relation, over the `span`: an initial-value problem, so one
     solution. It determines exactly its states, so it is always a problem: outside its cycle a
     state is its value at `t1`; inside, the current state. Its time, where it names one, is
@@ -74,7 +73,7 @@ class OdeCondition[V: Place](ConditionalNode[V]):
         '''The initial values, the span, then the kinks and the jumps.'''
         return (*self.initials, self.span, *self.kinks, *self.jumps)
 
-    def __add__(self, other: 'OdeCondition[V]') -> 'OdeCondition[V]':
+    def join(self, other: 'OdeCondition[V]') -> 'OdeCondition[V]':
         '''The join: the relations concatenated, this side first, over the one span both
         read, stepping on the kinks and jumps of both, at the one time either names. Two
         spans, or two times, are refused: one integration runs over one, on one clock.'''
@@ -101,7 +100,7 @@ class OdeCondition[V: Place](ConditionalNode[V]):
         breaks = ''.join(f'; {name} at {", ".join(map(str, at))}'
                          for name, at in (('kinks', self.kinks), ('jumps', self.jumps)) if at)
         return (f'OdeCondition({"; ".join(map(repr, self.relations))}; over '
-                f'{self.span}{time}{breaks}){attributes_text(self)}')
+                f'{self.span}{time}{breaks})')
 
 
 def is_ode(node: object) -> bool:

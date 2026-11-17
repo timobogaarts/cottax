@@ -13,14 +13,14 @@ Closing       __call__(cycle, group)            the op closing a group of cuts o
 ```
 
 A problem is asked by its node name in the graph handed; the answer is found by its
-condition's class, a driven node's through its condition (`condition_of`).
+condition's class, driven or not.
 '''
 
 from abc import abstractmethod
 from collections.abc import Iterable
 from typing import Any
 
-from ...core import ConditionalNode, GraphOp, Label, NestingGraph, Place, ToCut, Violation
+from ...core import AbstractConditionalNode, Condition, GraphOp, Label, NestingGraph, Place, ToCut, Violation
 from ...core.frozen import Answer, Choice, Frozen
 
 # ============================================================================ registered
@@ -34,7 +34,9 @@ class ModelReading(Answer):
     3. How it combines with other problems
     '''
 
-    about = ConditionalNode
+    about = (Condition, AbstractConditionalNode)
+    '''A condition node is answered by its condition's class; a node kind with no
+    condition by its own.'''
 
     @abstractmethod
     def not_implicit[N: Label, V: Place](self, graph: NestingGraph[N, V], problem: N

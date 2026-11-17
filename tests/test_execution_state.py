@@ -17,7 +17,7 @@ from cottax.consumers.execution.refusals import ValuedTwice
 from cottax.core import AbstractGraph, FunctionalNode, NestingGraph, answer_for_places
 from cottax.core.frozen.answer import Unanswered
 from cottax.core.maths.dispatch import NothingToAsk
-from cottax.core.driven import Driven
+from cottax.core.driven import driven
 from cottax.core.realisation import implemented
 from cottax.relational import Eq, Relation, RelationalCondition
 from test_execution import (
@@ -109,7 +109,7 @@ def test_a_start_shared_by_two_unknowns_is_valued_twice():
     the state's to say.'''
     v, r_v = W('v'), W('r_v')
     other  = implemented(
-        Driven(RelationalCondition((Relation(r_v, None, Eq),), (), (v,), ()), Newton(),
+        driven(RelationalCondition((Relation(r_v, None, Eq),), (), (v,), ()), Newton(),
                ((START,), (W('^budget.Other'),)), ((W('^steps.Other'),),)), newton)
     graph  = CallableGraph(NestingGraph(AbstractGraph(
         definitions() | {W('DiscC'): call([v, X], [r_v], lambda v, x: v - x),

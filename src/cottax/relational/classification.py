@@ -1,6 +1,7 @@
 '''
-What makes an answer right, read off the relations. Each predicate answers False for a
-node that is not a `RelationalCondition`.
+What makes an answer right, read off the relations: each predicate asks a condition (a
+condition node's `.condition`), and answers False for one that is not a
+`RelationalCondition`.
 '''
 
 from .relational_condition import Eq, Le, RelationalCondition

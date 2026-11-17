@@ -11,7 +11,7 @@ Of a feature type:
 from abc import abstractmethod
 from typing import Any
 
-from ...core import Label, NodeDefinition, Place
+from ...core import Condition, Label, NodeDefinition, Place
 from ...core.frozen import AbstractClassVar, Answer
 from .interface_types import Json, Reader, Writer
 from .refusals import one_per_kind, one_per_tag
@@ -19,10 +19,11 @@ from .refusals import one_per_kind, one_per_tag
 
 # ============================================================================ registered
 
-class Spelling[T: NodeDefinition](Answer):
-    '''NodeDefinition <-> JSON.'''
+class Spelling[T: NodeDefinition | Condition](Answer):
+    '''NodeDefinition <-> JSON; for a condition node, its condition (the node around it is
+    the format's).'''
 
-    about = NodeDefinition
+    about = (NodeDefinition, Condition)
 
     kind : AbstractClassVar[str]
     '''How it is referred to in the file.'''
@@ -31,11 +32,11 @@ class Spelling[T: NodeDefinition](Answer):
 
     @abstractmethod
     def write[V: Place](self, node: T, w: Writer[Any, V]) -> dict:
-        '''The node's fields; recursive through a wrapped node (Driven)'''
+        '''The node's fields.'''
 
     @abstractmethod
     def read[V: Place](self, data: dict, r: Reader[Any, V]) -> T:
-        '''The node `data` spells: recursive through a wrapped node (Driven)'''
+        '''The node `data` spells.'''
 
 
 class PlaceCodec[V: Place](Answer):

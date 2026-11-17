@@ -204,7 +204,7 @@ def test_the_bare_arrows_are_edges_too(closed):
 def test_a_relation_between_two_unknowns_is_slotted_as_written(closed):
     '''A problem owning a copy and its original holds `ŷ = y` between two of its own
     unknowns: nothing to receive, so the slot says the relation.'''
-    fp = closed[N('fp')]
+    fp = closed[N('fp')].condition
     both = RelationalCondition(fp.relations, (Objective(V('z'), Min),), (HAT(V('y2')), V('y2')), ())
     g = graph_of(OrderedMap({N('z'): call([], ['z']), N('fp'): both}))
     assert xdsm_struct(g)['slots']['.fp'][-1] == ('hat(.y2) = .y2', [])
@@ -214,7 +214,7 @@ def test_every_picture_rings_a_solve_alike(sellar, closed):
     '''A ring's contour, in the XDSM, the N2 and the node-link: its driver's hue, grey
     for a problem with no category, `unanswered` where no single problem solves it.'''
     from cottax.consumers.visualization.matrix import render_matrix_svg
-    fp = closed[N('fp')]
+    fp = closed[N('fp')].condition
     two = RelationalCondition(fp.relations, (Objective(V('y1'), Min), Objective(V('z'), Min)),
                               fp.unknowns, ())
     uncategorised = graph_of(OrderedMap({**closed.definitions, N('fp'): two}))

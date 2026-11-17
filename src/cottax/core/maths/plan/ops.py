@@ -13,6 +13,7 @@ from ..definition import (
 )
 from ...frozen import AbstractClassVar, OrderedMap, Violation, name_of
 from ..nesting import NestingGraph
+from ..conditional import ConditionalNode, is_driven, kind_of
 from ..places import Label, Place, PlaceToPlace
 from .primitive import Redefine
 
@@ -132,22 +133,26 @@ def check_owned_once(op: 'SetOwnsInside') -> Iterator[Violation]:
 
 
 def stores_owns_inside(node: object) -> bool:
-    """`node` stores `owns_inside` as a field: what `SetOwnsInside` can set."""
-    return dataclasses.is_dataclass(node) and 'owns_inside' in {
-        f.name for f in dataclasses.fields(node)}
+    """`node` is a condition node whose condition stores `owns_inside` as a field: what
+    `SetOwnsInside` can set."""
+    return isinstance(node, ConditionalNode) and 'owns_inside' in {
+        f.name for f in dataclasses.fields(node.condition)}
 
 
 def check_owns_inside_is_stored(op: 'SetOwnsInside', graph: NestingGraph) -> Iterator[Violation]:
-    """The node stores `owns_inside`: one that derives it -- from its states, from the
-    node it wraps -- has no choice to set."""
+    """The node's condition stores `owns_inside` and the node carries no driver: a condition
+    that derives it -- from its states -- has no choice to set, and a driver's slots are laid
+    out per unknown."""
     if not stores_owns_inside(node := graph[op.node]):
-        yield OwnsInsideNotAChoice(op.node, type(node).__name__)
+        yield OwnsInsideNotAChoice(op.node, type(kind_of(node)).__name__)
+    elif is_driven(node):
+        yield OwnsInsideDriven(op.node)
 
 
 class SetOwnsInside[N: Label, V: Place](Redefine[N, V]):
     """A condition node owns `owns_inside` inside, and nothing else of it changes: with
-    none it is a requirement, with some an encloser. For a kind that stores `owns_inside`
-    as a field."""
+    none it is a requirement, with some an encloser. For a condition that stores
+    `owns_inside` as a field."""
 
     node        : N
     owns_inside : tuple[V, ...]
@@ -156,7 +161,9 @@ class SetOwnsInside[N: Label, V: Place](Redefine[N, V]):
     checks_graph = (check_owns_inside_is_stored,)
 
     def redefined(self, graph: NestingGraph[N, V]) -> Mapping[N, NodeDefinition[V]]:
-        return {self.node: dataclasses.replace(graph[self.node], owns_inside=self.owns_inside)}
+        node = graph[self.node]
+        return {self.node: dataclasses.replace(
+            node, condition=dataclasses.replace(node.condition, owns_inside=self.owns_inside))}
 
     def __repr__(self) -> str:
         return f'set_owns_inside({self.node} <- {", ".join(str(p) for p in self.owns_inside)})'
@@ -256,8 +263,13 @@ class OwnsInsideNotAChoice(Violation):
     node : Label
     kind : str
     error    = TypeError
-    template = ('{node!r} is a {kind}, and what it owns inside is not a choice -- if it '
-                'carries a driver, `Undrive` it first')
+    template = '{node!r} is a {kind}, and what it owns inside is not a choice'
+
+class OwnsInsideDriven(Violation):
+    node : Label
+    error    = TypeError
+    template = ('{node!r} carries a driver, whose places are laid out per unknown -- '
+                '`Undrive` it first')
 
 class NoReaders(Violation):
     var  : Place

@@ -4,7 +4,8 @@ its unknowns, and `FixedPointCut`, cuts closed by a problem on their copies.'''
 from collections.abc import Iterator, Sequence
 
 from ..core import (
-    ComposedOp, Cut, GraphOp, Insert, Label, NestingGraph, Place, SetOwnsInside, Violation,
+    ComposedOp, ConditionalNode, Cut, GraphOp, Insert, Label, NestingGraph, Place, SetOwnsInside,
+    Violation, is_driven,
 )
 from ..core.frozen import OrderedMap
 from ..core.maths.plan.ops import stores_owns_inside
@@ -22,14 +23,14 @@ def check_unknowns(op: 'Determine') -> Iterator[Violation]:
 def check_determines_nothing_yet(op: 'Determine', graph: NestingGraph) -> Iterator[Violation]:
     """The node determines nothing yet: unknowns are set, never added to."""
     node = graph[op.node]
-    if stores_owns_inside(node) and node.owns_inside:       # else `SetOwnsInside` refuses it
+    if stores_owns_inside(node) and not is_driven(node) and node.owns_inside:   # else `SetOwnsInside` refuses it
         yield AlreadyDetermined(op.node, node.owns_inside)
 
 
 def check_determines_something(op: 'Undetermine', graph: NestingGraph) -> Iterator[Violation]:
     """There is something to drop."""
     node = graph[op.node]
-    if stores_owns_inside(node) and not node.owns_inside:   # else `SetOwnsInside` refuses it
+    if stores_owns_inside(node) and not is_driven(node) and not node.owns_inside:   # else `SetOwnsInside` refuses it
         yield AlreadyUndetermined(op.node)
 
 
@@ -90,13 +91,13 @@ class FixedPointCut[N: Label, V: Place](ComposedOp[N, V]):
         return tuple(c.copy for c in self.cuts)
 
     @property
-    def definition(self) -> RelationalCondition[V]:
+    def definition(self) -> ConditionalNode[V]:
         '''One relation per cut, paired by the order the cuts were given.'''
-        return RelationalCondition(
+        return ConditionalNode(RelationalCondition(
             relations  = tuple(Relation(m, v, Eq) for m, v in zip(self.copies, self.vars)),
             objectives = (),
             owns_inside = self.copies, reads_outside=(),
-        )
+        ))
 
     def composed(self, graph: NestingGraph[N, V]) -> Sequence[GraphOp[N, V]]:
         return (*self.cuts, Insert(OrderedMap({self.at: self.definition})))

@@ -4,7 +4,7 @@ in the place, and no backend's.
 
 Dependency:
 
-driven/                          (DrivenNode: a driven node is implemented by its contract)
+driven/                          (is_driven: a driven node is implemented by what runs its driver)
  ||
  \/
 implemented                      (Implementation, the attribute a node carries; implemented /

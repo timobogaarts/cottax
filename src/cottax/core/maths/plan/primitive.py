@@ -10,6 +10,7 @@ from dataclasses import replace
 from functools import reduce
 
 from ..definition import NodeDefinition, with_attributes
+from ..conditional import ConditionalNode, addable, driver_join_violations, kind_of
 from ...frozen import Frozen, OrderedMap, Violation, first
 from ..nesting import NestingGraph, NestingLoop
 from ..places import Label, Place
@@ -163,15 +164,16 @@ def check_nodes(op: 'Combine') -> Iterator[Violation]:
         yield NothingToCombine()
     if len(set(op.nodes)) != len(op.nodes):
         yield NodeTwice(tuple(op.nodes))
-    if getattr(op.kind, '__add__', None) is None:
+    if not addable(op.kind):
         yield NotAddable(op.kind.__name__)
 
 
 def check_folds_one_kind(op: 'Combine', graph: NestingGraph) -> Iterator[Violation]:
-    '''Every folded node is of the declared kind, so `definition` can use its `+`.'''
-    off = tuple(n for n in op.nodes if not isinstance(graph[n], op.kind))
+    '''Every folded node is of the declared kind -- a condition node by its condition's --
+    so `definition` can use its `+`.'''
+    off = tuple(n for n in op.nodes if not isinstance(kind_of(graph[n]), op.kind))
     if off:
-        found = dict.fromkeys(type(graph[n]).__name__ for n in off)
+        found = dict.fromkeys(type(kind_of(graph[n])).__name__ for n in off)
         yield NotOfKind(off, op.kind.__name__, ', '.join(found))
 
 
@@ -180,6 +182,16 @@ def check_folds_no_attributes(op: 'Combine', graph: NestingGraph) -> Iterator[Vi
     for name in op.nodes:
         if name in graph.definitions and (carried := graph[name].attributes):
             yield CarriesAttributes(name, tuple(k.__name__ for k in carried))
+
+
+def check_folds_drivers_alike(op: 'Combine', graph: NestingGraph) -> Iterator[Violation]:
+    '''Every folded condition node's driver joins the first's: all driven or none, and
+    alike by the driver's own rules -- asked here, so a refusal is data before `+` raises it.'''
+    folded = [graph[n] for n in op.nodes if n in graph.definitions]
+    if not folded or not all(isinstance(d, ConditionalNode) for d in folded):
+        return                                          # `check_folds_one_kind` refuses it
+    for other in folded[1:]:
+        yield from driver_join_violations(folded[0], other)
 
 
 def check_lands_on_its_own(op: 'Combine', graph: NestingGraph) -> Iterator[Violation]:
@@ -200,12 +212,13 @@ class Combine[N: Label, V: Place, D: NodeDefinition](Rebind[N, V]):
 
     nodes : tuple[N, ...]
 
-    kind : type[D]
-    '''The class whose `+` folds the nodes; each node must be one.'''
+    kind : type
+    '''The class whose `+` folds the nodes; each node must be one -- a condition node's
+    condition, for condition nodes.'''
 
     checks = (check_nodes,)
-    checks_graph = (check_folds_one_kind, check_folds_no_attributes, check_lands_on_its_own,
-                    check_fold_keeps_nesting_whole)
+    checks_graph = (check_folds_one_kind, check_folds_no_attributes, check_folds_drivers_alike,
+                    check_lands_on_its_own, check_fold_keeps_nesting_whole)
 
     def definition(self, graph: NestingGraph[N, V]) -> D:
         '''The `+` of the folded nodes.'''

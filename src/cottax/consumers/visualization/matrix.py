@@ -11,7 +11,7 @@ import os
 from collections.abc import Callable, Iterable, Mapping, Sequence
 
 from ...core import NestingGraph, Label
-from ...core.driven import is_driven
+from ...core import is_driven
 from .lookup import minted_from, namespace_of
 from .sequencing import Block, graph_drawn, ordered_graph, walk
 from .style import TERRACOTTA, Style, mix, style_of

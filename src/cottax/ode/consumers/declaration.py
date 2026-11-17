@@ -5,7 +5,7 @@ from typing import Any
 
 from ...core import ConditionalNode, Label, Mint, Place, PlaceToPlace, Violation, minted
 from ...core.frozen import OrderedMap, choice, name_of
-from ...core.driven import Driven
+from ...core.driven import driven
 from ...consumers.declaration.interface import Declaring
 from ...consumers.declaration.interface_types import Keyword, Paired, PlaceWithValue, Solve, declares
 from ...consumers.surface.interface import Part
@@ -77,10 +77,10 @@ class Rate[N: Label, V: Place](Paired[N, V]):
         history where `record` names it, else at `^trajectory.x` -- the time's too, the
         times themselves.'''
         if not self.record:
-            return self.condition
+            return ConditionalNode(self.condition)
         histories = tuple(self.record.get(x) or minted(mints.Trajectory(), x)
                           for x in self.condition.owns_inside)
-        return Driven(self.condition, Integration(trajectory=True), ((self.times.place,),),
+        return driven(ConditionalNode(self.condition), Integration(trajectory=True), ((self.times.place,),),
                       (histories,))
 
     @property

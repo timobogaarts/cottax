@@ -5,7 +5,7 @@ from collections.abc import Iterator, Mapping
 
 from ..frozen import AbstractVar, Violation
 from .definition import NodeDefinition, Renaming, attributes_text, relabelled
-from .places import Label, Place
+from .places import Label, Place, overlaps
 
 # ---------------------------------------------------------------- the two branches
 
@@ -38,40 +38,41 @@ class FunctionalNode[V: Place](NodeDefinition[V]):
                 f'{", ".join(str(v) for v in self.owns)}){attributes_text(self)}')
 
 
-def check_states_something(node: 'ConditionalNode') -> Iterator[Violation]:
-    '''A condition node owns or reads something inside: one with neither has no edges to
-    a cycle, and is in no graph's structure.
+def check_states_something(c: 'AbstractConditionalNode') -> Iterator[Violation]:
+    '''A condition owns or reads something inside: one with neither has no edges to a
+    cycle, and is in no graph's structure. It reads only the four names, so whatever has them
+    may ask it (`conditional.Condition` does).
 
     O^in_n ≠ ∅  or  I^in_n ≠ ∅  ∀ n ∊ N_C
     '''
-    if not node.owns_inside and not node.reads_inside:
-        yield StatesNothing(type(node).__name__)
+    if not c.owns_inside and not c.reads_inside:
+        yield StatesNothing(type(c).__name__)
 
-def check_reads_on_one_side(node: 'ConditionalNode') -> Iterator[Violation]:
+def check_reads_on_one_side(c: 'AbstractConditionalNode') -> Iterator[Violation]:
     '''A read is inside or outside, not both: the one must be produced on the node's
-    cycle and the other must not.
+    cycle and the other must not (incomparable)
 
-    I^in_n ∩ I^out_n = ∅  ∀ n ∊ N_C
+    i || j  ∀ i ∊ I^in_n,  j ∊ I^out_n,  ∀ n ∊ N_C
     '''
-    if both := tuple(dict.fromkeys(v for v in node.reads_inside if v in node.reads_outside)):
-        yield ReadOnBothSides(both)
+    if pairs := tuple(dict.fromkeys(overlaps(c.reads_inside, c.reads_outside))):
+        inside, outside = zip(*pairs)
+        yield ReadOnBothSides(inside, outside)
 
 
-class ConditionalNode[V: Place](NodeDefinition[V]):
+# ---------------------------------------------------------------- the condition node
+
+class AbstractConditionalNode[V: Place](NodeDefinition[V]):
     """
     Conditional Node.
 
-    Technically a higher-order function: it uses a subgraph. 
+    Technically a higher-order function: it uses a subgraph.
     """
 
-    owns_inside   : AbstractVar[tuple[V, ...]]
-    """What it gives to its subgraph (cycle)."""
-    reads_inside  : AbstractVar[tuple[V, ...]]
-    """What it reads back from its subgraph (cycle)"""
-    reads_outside : AbstractVar[tuple[V, ...]]
-    """What it reads that its cycle does not produce"""
-    owns_outside  : AbstractVar[tuple[V, ...]]
-    """What it owns that its cycle does not read"""
+    owns_inside  : AbstractVar[tuple[V, ...]]
+    owns_outside : AbstractVar[tuple[V, ...]]
+
+    reads_inside : AbstractVar[tuple[V, ...]]
+    reads_outside: AbstractVar[tuple[V, ...]]
 
     checks = (check_states_something, check_reads_on_one_side)
 
@@ -85,7 +86,7 @@ class ConditionalNode[V: Place](NodeDefinition[V]):
 def is_encloser(d: object) -> bool:
     """An encloser: a condition node that owns something inside, and so has a cycle around
     it -- a solve, an integration. n ∊ N_P = {n ∊ N_C : O^in_n ≠ ∅}."""
-    return isinstance(d, ConditionalNode) and bool(d.owns_inside)
+    return isinstance(d, AbstractConditionalNode) and bool(d.owns_inside)
 
 
 def enclosers[N: Label](definitions: Mapping[N, NodeDefinition]) -> tuple[N, ...]:
@@ -101,10 +102,13 @@ class StatesNothing(Violation):
     template = '{node}: an empty condition node -- it owns and reads nothing inside, so it is in no structure'
 
 class ReadOnBothSides(Violation):
-    places : tuple
+    inside  : tuple
+    outside : tuple
     error    = ValueError
-    template = ('reads {places!r} both inside and outside: a read inside is produced on the '
-                "node's cycle and a read outside is not, so one place cannot be both")
+    template = ('reads {inside!r} inside and {outside!r} outside, pairwise the same place or '
+                "one inside the other: a read inside is produced on the node's cycle and a "
+                'read outside is not, and a place is produced with what lies inside it, so '
+                'the two sides cannot share any of it')
 
 class OwnsNothing(Violation):
     error    = ValueError

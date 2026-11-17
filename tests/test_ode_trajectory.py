@@ -17,10 +17,10 @@ import pytest
 import cottax.assemblies.jax as cx
 import purposes
 
-from cottax.core import Combine, ExecutableGraph, GaussSeidel, GraphWithValues
+from cottax.core import Combine, ConditionalNode, ExecutableGraph, GaussSeidel, GraphWithValues
 from cottax.core.frozen import OrderedMap, answer, choice, violations
 from cottax.core.maths.plan import Plan, refusals
-from cottax.core.driven import Assign, Driven, DrivenGraph, Start
+from cottax.core.driven import Assign, driven as with_driver, DrivenGraph, Start
 from cottax.core.realisation import Implement
 from cottax.consumers.architectures import IDF, MDF, SAND, AtFirstMember
 from cottax.consumers.architectures.refusals import NotCombinable
@@ -120,16 +120,40 @@ def spin(z, w):
 def test_a_history_declares_the_ode_driven_its_initial_values_and_span_on_the_condition():
     g = declare(oscillator).graph
     ode = g[problem('oscillator')]
-    assert ode.contract == RECORDING and ode.condition == declare(s.rate(
-        oscillator.fn, 'x', 'v', initial={'x': 'x0', 'v': 'v0'}, span='span')).graph[problem('oscillator')]
+    undriven = declare(s.rate(oscillator.fn, 'x', 'v', initial={'x': 'x0', 'v': 'v0'},
+                              span='span')).graph[problem('oscillator')]
+    assert ode.driver.contract == RECORDING and ode.condition == undriven.condition
     assert ode.condition.reads_outside == (s.place('x0'), s.place('v0'), s.place('span'))
-    assert (ode.contract.takes, ode.contract.reports) == ((Times,), (Trajectory,))
-    assert ode.data == ((s.place('times'),),)
-    assert ode.reports == ((s.place('xs'), s.place(cx.trajectory('v'))),)
-    assert declare(s.rate(bare.fn, 'x', span='span')).graph[problem('bare')] == OdeCondition(
-        (Dt(s.place('x'), s.place(cx.rate('x')), s.place(cx.initial('x'))),), s.place('span'))
-    assert declare(bare).graph[problem('bare')] == OdeCondition(
-        (Dt(s.place('x'), s.place(cx.rate('x')), s.place(cx.initial('x'))),), s.place(cx.span('x')))
+    assert (ode.driver.contract.takes, ode.driver.contract.reports) == ((Times,), (Trajectory,))
+    assert ode.driver.data == ((s.place('times'),),)
+    assert ode.driver.reports == ((s.place('xs'), s.place(cx.trajectory('v'))),)
+    assert declare(s.rate(bare.fn, 'x', span='span')).graph[problem('bare')] == ConditionalNode(
+        OdeCondition((Dt(s.place('x'), s.place(cx.rate('x')), s.place(cx.initial('x'))),),
+                     s.place('span')))
+    assert declare(bare).graph[problem('bare')] == ConditionalNode(
+        OdeCondition((Dt(s.place('x'), s.place(cx.rate('x')), s.place(cx.initial('x'))),),
+                     s.place(cx.span('x'))))
+
+
+def test_a_renamed_ode_keeps_its_driver_and_what_it_carries():
+    '''`OdeCondition` rebuilds itself from scratch when relabelled; the driver's places are
+    renamed alike and the attributes stay, since `relabel` is the node's.'''
+    from cottax.core import Attribute, with_attributes
+    class Note(Attribute): ...
+    ode   = with_attributes(declare(oscillator).graph[problem('oscillator')],
+                            OrderedMap({Note: 'n'}))
+    moved = ode.relabel({s.place('times'): s.place('ts'), s.place('x0'): s.place('x_init')})
+    assert moved.driver.data == ((s.place('ts'),),) and moved.attributes == ode.attributes
+    assert moved.condition.reads_outside == (s.place('x_init'), s.place('v0'), s.place('span'))
+    assert moved.reads_outside == moved.condition.reads_outside + (s.place('ts'),)
+
+
+def test_a_driven_ode_does_not_join_a_relational_condition_whatever_drives_it():
+    '''The kinds are asked first: an ODE and a relation have no join, driven or not.'''
+    from cottax.relational import Eq, Relation, RelationalCondition
+    ode = declare(oscillator).graph[problem('oscillator')]
+    with pytest.raises(TypeError, match='unsupported operand'):
+        ode + RelationalCondition((Relation(s.place('q'), None, Eq),), (), (s.place('p'),), ())
 
 
 def test_a_value_written_for_a_place_of_the_driver_is_given_zero_too():
@@ -140,7 +164,7 @@ def test_a_value_written_for_a_place_of_the_driver_is_given_zero_too():
                              s.place(cx.initial('x'))]
     assert d.given[s.place(cx.initial('x'))] == 0.0
     ode = d.graph[problem('bare')]
-    assert ode.data == ((s.place(cx.times('x')),),)
+    assert ode.driver.data == ((s.place(cx.times('x')),),)
     assert ode.condition.reads_outside == (s.place(cx.initial('x')), s.place(cx.span('x')))
 
 
@@ -401,9 +425,9 @@ def test_9_two_odes_recording_alike_join_as_one_driven_problem():
     join is one integration recording both.'''
     at = problem('position')
     g = (Plan(declare(position, velocity).graph)
-         + Combine(at, (at, problem('velocity')), Driven)).graph
-    assert g[at].data == ((s.place('times'),),)
-    assert g[at].reports == ((s.place('xs'), s.place('vs')),)
+         + Combine(at, (at, problem('velocity')), OdeCondition)).graph
+    assert g[at].driver.data == ((s.place('times'),),)
+    assert g[at].driver.reports == ((s.place('xs'), s.place('vs')),)
     ts = jnp.linspace(0.0, 1.5, 7)
     out = run(GraphWithValues(CallableGraph((Plan(g) + drive(diffrax_run())).graph), values(
         w=2.0, x0=1.0, v0=0.0, span=(0.0, 1.5), times=ts)))

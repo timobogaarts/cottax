@@ -10,7 +10,9 @@ from collections.abc import Callable, Collection, Iterable, Mapping
 from typing import Any, NamedTuple
 
 from ...core import GraphWithValues, Label, NestingGraph, Place, ProvedGraph, answer_for_places, comparable
-from ...core.driven import PerUnknown, is_driven, role_slots
+from ...core.driven import role_slots
+from ...core import is_driven
+from ...core.driven import PerUnknown
 from ...core.frozen import Frozen, OrderedMap
 from .interface import DataStructure
 from .refusals import NoneTakes, NoSlotFor, Unvalued, ValuedTwice
@@ -45,7 +47,7 @@ def slots[N: Label, V: Place](graph: NestingGraph[N, V], at: Callable[[V], V]) -
     datum, also one it computes (a warm start), then each boundary input. A place two problems
     take is there twice.'''
     roles = dict.fromkeys(r for n in graph.enclosers if is_driven(graph[n])
-                          for r in graph[n].contract.takes)
+                          for r in graph[n].driver.contract.takes)
     return (*(Slot(place, role, problem, unknown, None if unknown is None else at(unknown))
               for role in roles for place, problem, unknown in role_slots(graph, role)),
             *(Slot(p, Inputs, at=p) for p in graph.graph.boundary_inputs))

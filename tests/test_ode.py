@@ -18,6 +18,7 @@ import pytest
 import cottax.assemblies.jax as cx
 
 from cottax.core import (
+    ConditionalNode,
     AbstractGraph, Combine, ExecutableGraph, FunctionalNode, GaussSeidel, GraphWithValues,
     NestingGraph, Rename,
 )
@@ -122,7 +123,7 @@ def final(graph, values, at='x'):
 def test_the_rate_declares_a_body_and_beside_it_the_ode():
     g = declare(decay).graph
     assert g.nodes == (node('decay'), solve_at('decay'))
-    ode = g[solve_at('decay')]
+    ode = g[solve_at('decay')].condition
     assert ode == OdeCondition((Dt(s.place('x'), s.place(cx.rate('x')), s.place(cx.initial('x'))),),
                                span_of('x'))
     assert ode.reads_inside == (s.place(cx.rate('x')),)
@@ -176,12 +177,12 @@ def test_over_a_toy_place_an_ode_is_proved_rewritten_driven_and_run_on_floats():
     w = Word
     g = NestingGraph(AbstractGraph(OrderedMap({
         w('body'): implemented(FunctionalNode((w('x'), w('k')), (w('r'),)), lambda x, k: -k * x),
-        w('ode') : OdeCondition((Dt(w('x'), w('r'), w('x0')),), w('span')),
+        w('ode') : ConditionalNode(OdeCondition((Dt(w('x'), w('r'), w('x0')),), w('span'))),
     })), OrderedMap())
     assert ExecutableGraph(g).graph == g
     moved = Rename(w('ode'), ((w('r'), w('q')),)).apply(
         Rename(w('body'), ((w('r'), w('q')),)).apply(g))
-    assert moved[w('ode')].rates == (w('q'),)
+    assert moved[w('ode')].condition.rates == (w('q'),)
     solved = (Plan(g) + Assign(w('ode'), Integration(trajectory=False), (), ())
               + Implement(OrderedMap({w('ode'): Euler(10_000)}))).graph
     assert DrivenGraph(solved).graph == solved
@@ -312,7 +313,7 @@ def test_two_odes_on_one_cycle_are_refused_until_combined_and_then_integrate_as_
     at, other = solve_at('position'), solve_at('velocity')
     assert [type(v) for v in violations(ExecutableGraph, g)] == [SeveralOutermost]
     plan = Plan(g) + Combine(at, (at, other), OdeCondition)
-    assert plan.graph[at] == OdeCondition((
+    assert plan.graph[at].condition == OdeCondition((
         Dt(s.place('x'), s.place(cx.rate('x')), s.place(cx.initial('x'))),
         Dt(s.place('v'), s.place(cx.rate('v')), s.place(cx.initial('v')))), s.place('span'))
     graph = CallableGraph((plan + drive(diffrax_run())).graph)
@@ -585,13 +586,13 @@ def final_x(rate, wrt: str = 'u'):
 
 
 def test_kinks_are_read_as_a_parameter_where_named_or_given_as_a_value():
-    ode = declare(pushed(kinks='tk')).graph[solve_at('pushing')]
+    ode = declare(pushed(kinks='tk')).graph[solve_at('pushing')].condition
     assert ode.kinks == (s.place('tk'),)
     assert ode.reads_outside[-2:] == (s.place('span'), s.place('tk'))
     d = declare(pushed(kinks=KNOTS))
-    assert d.graph[solve_at('pushing')].kinks == (s.place(cx.kinks('x')),)
+    assert d.graph[solve_at('pushing')].condition.kinks == (s.place(cx.kinks('x')),)
     assert d.given[s.place(cx.kinks('x'))] is KNOTS
-    assert declare(pushed()).graph[solve_at('pushing')].kinks == ()
+    assert declare(pushed()).graph[solve_at('pushing')].condition.kinks == ()
 
 
 def test_a_join_steps_on_the_kinks_of_both_sides():
@@ -694,7 +695,7 @@ def test_a_held_control_read_at_the_solvers_time_steps_on_its_jumps_exactly():
 
 
 def test_an_ode_with_a_time_and_jumps_is_written_to_json_and_read_back():
-    ode = declare(held(jumps='tk', kinks='tk2')).graph[solve_at('holding')]
+    ode = declare(held(jumps='tk', kinks='tk2')).graph[solve_at('holding')].condition
     assert (ode.time, ode.jumps, ode.kinks) == (s.place('t'), (s.place('tk'),), (s.place('tk2'),))
     g = (declare(held(jumps='tk', kinks='tk2')) + drive(diffrax_run())).graph
     assert read_json(write_json(g)) == g

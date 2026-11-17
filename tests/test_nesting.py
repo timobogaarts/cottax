@@ -11,8 +11,9 @@ from jax.tree_util import GetAttrKey as G
 
 from cottax.core.maths.executable import ExecutableGraph, check_nestings_share_a_cycle
 from cottax.relational import Min, Objective
-from cottax.core.driven import Assign, DriverContract
-from cottax.core import FunctionalNode
+from cottax.core.driven import Assign
+from cottax.core.driven import DriverContract
+from cottax.core import ConditionalNode, FunctionalNode
 from cottax.core.maths.plan import Delete, Insert, Nest, Plan, Unnest
 from cottax.core.realisation import implemented
 from cottax.relational import Eq, Relation, RelationalCondition
@@ -84,7 +85,7 @@ def test_a_redefine_elsewhere_does_not_void_the_nesting(nested):
     # the graph's second component: an unrelated `Determine` once erased `within` whole.
     unrelated = (Plan(nested)
                  + Insert(OrderedMap({n('src'): call([], ['w']),
-                                    n('req'): root_find((v('w'),), ())}))
+                                    n('req'): ConditionalNode(root_find((v('w'),), ()))}))
                  + Determine(n('req'), (v('q'),))).graph
     assert dict(unrelated.within) == {n('mda'): n('opt')}
 
@@ -262,7 +263,7 @@ def test_a_fold_at_the_outer_name_keeps_the_nesting(nested):
     # a requirement folded into `.opt` lands on `Replace`, so the pair `.opt` is the outer
     # end of survives. The same join bound at a name of its own deletes `.opt` and strands
     # the pair -- `Unnest` first, or fold in place.
-    g    = (Plan(nested) + Insert(OrderedMap({n('req'): requirement(v('f'))}))).graph
+    g    = (Plan(nested) + Insert(OrderedMap({n('req'): ConditionalNode(requirement(v('f')))}))).graph
     kept = (Plan(g) + Combine(n('opt'), (n('opt'), n('req')), RelationalCondition)).graph
 
     assert dict(kept.within) == {n('mda'): n('opt')}

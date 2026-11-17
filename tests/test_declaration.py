@@ -13,11 +13,12 @@ import pydoc
 
 import pytest
 
-from cottax.core import GraphWithValues, Mint, minted
+from cottax.core import ConditionalNode, GraphWithValues, Mint, minted
 import purposes
 from cottax.core.frozen import OrderedMap, answer, choice
 from cottax.core.maths.plan import Plan
-from cottax.core.driven import Assign, DriverContract, PerUnknown
+from cottax.core.driven import Assign
+from cottax.core.driven import DriverContract, PerUnknown
 from cottax.core.driven import Start
 from cottax.relational.contracts import CONTRACTS, FixedPointIteration
 from cottax.consumers.execution import CallableGraph, Drive, run
@@ -69,8 +70,8 @@ def test_the_surface_declares_over_a_place_of_its_own():
     d = declare({'body': body, 'balance': balance, 'limit': limit, 'opt': opt})
 
     assert d.graph.nodes == (T('body'), T('balance'), T('^solve.balance'), T('limit'), T('opt'))
-    assert d.graph[T('^solve.balance')].unknowns == (T('u'),)
-    top = d.graph[T('opt')]
+    assert d.graph[T('^solve.balance')].condition.unknowns == (T('u'),)
+    top = d.graph[T('opt')].condition
     assert top.objectives == (Objective(T('u'), Max),)
     assert Relation(T('g'), T('^upper.g'), Le) in top.relations
     assert Relation(None, T('x'), Le) in top.relations
@@ -97,11 +98,11 @@ def test_each_condition_node_writes_the_shape_it_names():
     s = toy()
     residual  = s.residual(lambda u, w: (u, w), 'u', 'w').condition
     iteration = s.fixed_point(lambda u: u, 'u').condition
-    assert problem_type_of(residual)                                               == 'root-find'
-    assert problem_type_of(iteration)                                              == 'fixed-point'
-    assert problem_type_of(s.satisfy(design={'u': (0, None)}).condition)           == 'feasibility'
-    assert problem_type_of(s.optimise(minimise='f', design=['x']).condition)       == 'optimise'
-    assert problem_type_of(s.requirement('h'))                                     == 'stated'
+    assert problem_type_of(ConditionalNode(residual))                                         == 'root-find'
+    assert problem_type_of(ConditionalNode(iteration))                                        == 'fixed-point'
+    assert problem_type_of(ConditionalNode(s.satisfy(design={'u': (0, None)}).condition))     == 'feasibility'
+    assert problem_type_of(ConditionalNode(s.optimise(minimise='f', design=['x']).condition)) == 'optimise'
+    assert problem_type_of(ConditionalNode(s.requirement('h')))                               == 'stated'
     assert iteration.relations == (Relation(T('u'), T('^cond.u'), Eq),)
 
 
@@ -230,7 +231,7 @@ class Bracketed(Paired):
         return tuple(minted(Gap(), u) for u in self.outputs)
 
     def condition_node(self, at):
-        return self.condition
+        return ConditionalNode(self.condition)
 
     @property
     def condition(self):
@@ -305,7 +306,7 @@ def test_a_scope_joins_the_parts_a_study_names():
     assert (x, k) == (place_of(V.plant.x), place_of(V.plant.k))
     assert root.function_reads == (PlaceWithValue(x), PlaceWithValue(k))
     at = s.node(Purpose(Bracket())(node_of('root')))
-    assert declare({'root': root}).graph[at].unknowns == (x,)
+    assert declare({'root': root}).graph[at].condition.unknowns == (x,)
 
 
 def test_a_kind_declared_is_a_method_in_both_forms_minting_by_purpose_and_reading_its_keyword():

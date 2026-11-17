@@ -6,7 +6,6 @@ from ...core import Cut, FunctionalNode, Label, Place, PlaceToPlace, ToCut, Viol
 from ...core.frozen import answers, choice
 from ...consumers.architectures.interface import Closing, ModelReading
 from ...consumers.architectures.interface_types import At
-from ...core.driven import condition_of
 from ..classification import is_equalities
 from ..relational_condition import RelationalCondition
 from ..rewrites import FixedPointCut
@@ -21,7 +20,7 @@ class RelationalModel(ModelReading):
 
     def not_implicit(self, graph, problem):
         node, owners = graph[problem], graph.graph.owners
-        if not is_equalities(condition_of(node)):
+        if not is_equalities(node.condition):
             return (NotEqualities(str(problem)),)
         if off := tuple(c for c in node.reads_inside
                         if c not in owners or not isinstance(graph[owners[c]], FunctionalNode)):

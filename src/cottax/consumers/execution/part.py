@@ -5,7 +5,9 @@ from collections.abc import Callable, Iterator, Mapping
 from typing import Any
 
 from ...core import GraphWithValues, Label, Minting, NestingGraph, Place, PlaceToPlace, ProvedGraph, is_encloser
-from ...core.driven import AssignByRule, DriverContract, Role, is_driven, role_slots
+from ...core.driven import AssignByRule, role_slots
+from ...core import is_driven
+from ...core.driven import DriverContract, Role
 from ...core.frozen import AbstractVar, OrderedMap, answer
 from ..surface.interface import Part
 from ..surface.interface_types import RolePlaces, Surface
@@ -156,7 +158,7 @@ class Running(Part):
         found = [t for t in table if t.key is key and t.problem == at and t.unknown in (unknown, None)]
         if not found:
             why = ('which no driver answers' if not is_driven(node) else
-                   f'whose driver takes {", ".join(r.__name__ for r in node.contract.takes)}')
+                   f'whose driver takes {", ".join(r.__name__ for r in node.driver.contract.takes)}')
             raise NotDriverData(at, key.__name__, why).raised
         if found[0].place not in graph.graph.boundary_inputs:
             raise TakesNoValue(at, key.__name__, found[0].place).raised
