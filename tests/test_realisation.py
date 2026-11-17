@@ -3,7 +3,7 @@
 implemented finals and the edits putting each on, over `core` and nothing else.
 
 Everything runs in a toy place of plain strings, with a condition node that holds no relation,
-so the two legs are shown generic in the place *and* in the condition node: what `Driven` reads is
+so the two legs are shown generic in the place *and* in the condition node: what a driven node reads is
 `ConditionalNode`'s, and nothing here is jax, a path or a `RelationalCondition`. The toy
 place is `test_core`'s written again rather than imported, since that module takes jax.
 '''
@@ -16,23 +16,19 @@ from dataclasses import dataclass
 import pytest
 
 from cottax.core import (
-    AbstractGraph, ConditionalNode, FunctionalNode, NestingGraph, Rename, Replace,
+    AbstractConditionalNode, AbstractGraph, Condition, ConditionalNode, FunctionalNode, NestingGraph, Rename, Replace,
     refusals,
     violations,
 )
 from cottax.core.maths.definition import relabelled
-from cottax.core.refusal_kinds import AttributeDoesNotFit, OwnsInsideNotAChoice
+from cottax.core.refusal_kinds import AttributeDoesNotFit, OwnsInsideDriven
 from cottax.relational.rewrites import Undetermine
 from cottax.core.frozen import OrderedMap
-from cottax.core.driven import (
-    Assign, Driven, DrivenGraph, DriverContract, PerProblem, PerUnknown, Role, Undrive,
-    is_driven,
-)
-from cottax.core.driven.nodes import (
-    DrivenTwice, NotAccepted, RoleMisplaced, RoleTwice, RoleUnsized,
-    SlotsMiscounted,
-)
-from cottax.core.driven.ops import NotAConditionalNode, NotDriven
+from cottax.core.driven import Assign, driven as with_driver, driving_violations, DrivenGraph, Undrive
+from cottax.core import is_driven
+from cottax.core.driven import DriverContract, PerProblem, PerUnknown, Role
+from cottax.core.driven.driver import NotAccepted, RoleMisplaced, RoleTwice, RoleUnsized, SlotsMiscounted
+from cottax.core.driven.ops import DrivenTwice, NotAConditionalNode, NotDriven
 from cottax.core.driven.proof import Undriven
 from cottax.core.realisation import (
     Implement, implemented, RealisedGraph, Unimplement,
@@ -60,9 +56,9 @@ def W(s: str) -> Word:
     return Word(tuple(s.split('.')))
 
 
-class Holds(ConditionalNode):
-    '''A condition node as bare tuples, no relation anywhere -- and reading outside too,
-    so a wrapper building its reads off the wrong one is caught.'''
+class Holding(Condition):
+    '''A condition as bare tuples, no relation anywhere -- and reading outside too, so a
+    node building its reads off the wrong one is caught.'''
 
     reads_inside  : tuple
     owns_inside   : tuple
@@ -70,8 +66,19 @@ class Holds(ConditionalNode):
     owns_outside  = ()
 
     def relabel(self, renaming):
-        return Holds(relabelled(self.reads_inside, renaming),
-                     relabelled(self.owns_inside, renaming), relabelled(self.reads_outside, renaming))
+        return Holding(relabelled(self.reads_inside, renaming),
+                       relabelled(self.owns_inside, renaming), relabelled(self.reads_outside, renaming))
+
+    def join(self, other):
+        if not isinstance(other, Holding):
+            return NotImplemented
+        return Holding(self.reads_inside + other.reads_inside, self.owns_inside + other.owns_inside,
+                       self.reads_outside + other.reads_outside)
+
+
+def Holds(*fields, driver=None, **named) -> ConditionalNode:
+    '''The condition node holding `Holding(*fields, **named)`, and `driver`.'''
+    return ConditionalNode(Holding(*fields, **named), driver=driver)
 
 
 # ---------------------------------------------------------------- toy roles and drivers
@@ -145,8 +152,10 @@ def test_a_condition_node_is_abstract():
     '''The level says what a rule reads -- `unknowns` and `conditions` -- and the finals
     are what carry them.'''
     with pytest.raises(TypeError, match='abstract'):
-        ConditionalNode()
+        AbstractConditionalNode()
     with pytest.raises(TypeError, match='abstract'):
+        Condition()
+    with pytest.raises(TypeError):
         ConditionalNode(reads=(r,), owns=(u,))
 
 
@@ -165,28 +174,32 @@ def test_a_role_is_a_symbol_and_not_a_value():
 def test_the_places_are_one_slot_per_role():
     '''Slot `i` is role `takes[i]`; both flattened after the problem's own reads and
     owns -- `reads`, not `conditions`.'''
-    node = Driven(Holds((r,), (u,), (k,)), Solo(), *placed())
-    assert node.data    == ((W('^start.u'),), (W('^budget.solve'),))
-    assert node.reports == ((W('^steps.solve'),),)
+    node = with_driver(Holds((r,), (u,), (k,)), Solo(), *placed())
+    assert node.driver.data    == ((W('^start.u'),), (W('^budget.solve'),))
+    assert node.driver.reports == ((W('^steps.solve'),),)
     assert node.reads   == (r, k, W('^start.u'), W('^budget.solve'))
     assert node.owns    == (u, W('^steps.solve'))
+    # what every rule reads outside is the condition's and the driver's together
+    assert (node.condition.reads_outside, node.reads_outside) == (
+        (k,), (k, W('^start.u'), W('^budget.solve')))
+    assert (node.condition.owns_outside, node.owns_outside) == ((), (W('^steps.solve'),))
 
 
-def test_a_driven_node_forwards_what_the_level_declares_only():
-    '''`unknowns` and `conditions`, and nothing a final adds.'''
-    node = Driven(Holds((r,), (u,)), Bare(), *NONE)
+def test_a_driven_node_is_its_condition_with_a_driver():
+    '''The node keeps its condition as it was, and a driver with no roles adds no edge.'''
+    node = with_driver(Holds((r,), (u,)), Bare(), *NONE)
+    assert type(node) is ConditionalNode and node.condition == Holding((r,), (u,))
     assert (node.owns_inside, node.reads_inside) == ((u,), (r,))
-    assert 'relations' not in vars(Driven) and 'objectives' not in vars(Driven)
     assert (node.reads, node.owns) == ((r,), (u,))
 
 
 @pytest.mark.parametrize('statement, driver, places, found', [
     (Holds((r,), ()),     Solo(), placed(()),     [NotAccepted]),
     (Holds((r,), (u, v)), Solo(), placed((u, v)), [NotAccepted]),
-    (Driven(Holds((r,), (u,)), Bare(), *NONE), Bare(), NONE, [DrivenTwice]),
+    (with_driver(Holds((r,), (u,)), Bare(), *NONE), Bare(), NONE, [DrivenTwice]),
 ])
 def test_the_pairing_is_refused_by_kind(statement, driver, places, found):
-    assert kinds(violations(Driven, statement, driver, *places))[:1] == found
+    assert kinds(driving_violations(statement, driver, *places))[:1] == found
 
 
 @pytest.mark.parametrize('data, reports, found', [
@@ -196,39 +209,64 @@ def test_the_pairing_is_refused_by_kind(statement, driver, places, found):
     (((W('^start.u'),), (g, k)),        ((W('^steps.solve'),),), [RoleMisplaced]),
 ])
 def test_one_slot_per_role_and_the_right_number_of_places(data, reports, found):
-    assert kinds(violations(Driven, Holds((r,), (u,)), Solo(), data, reports)) == found
+    assert kinds(driving_violations(Holds((r,), (u,)), Solo(), data, reports)) == found
+
+
+def test_a_condition_refused_for_what_it_states_is_refused_for_that_first():
+    '''The driver's rules are asked once the condition passes its own: a condition
+    determining and reading nothing is refused as empty when it is built, before any driver
+    is attached, not as something `Solo` does not accept.'''
+    from cottax.core.driven import Driver
+    from cottax.core.refusal_kinds import StatesNothing
+    solo = Driver(Solo(), *placed(()))
+    with pytest.raises(ValueError, match='an empty condition node'):
+        Holds((), (), driver=solo)
+    assert kinds(violations(Holding, (), ())) == [StatesNothing]
+
+
+def test_what_a_driver_accepts_is_asked_of_the_condition_without_it():
+    '''`accepts` sees the condition alone: neither the driver's places nor its name.'''
+    seen = []
+    class Spying(DriverContract):
+        accepts = staticmethod(lambda node: seen.append(node) or True)
+        takes   = (Start, Budget)
+        reports = (Steps,)
+    with_driver(Holds((r,), (u,)), Spying(), *placed())
+    assert seen and all(type(n) is Holding and n.reads == (r,) for n in seen)
+    with pytest.raises(ValueError) as refused:
+        with_driver(Holds((r,), (u, v)), Solo(), *placed((u, v)))
+    assert ' by ' not in str(refused.value)
 
 
 def test_a_role_says_how_many_places_it_takes():
-    assert kinds(violations(Driven, Holds((r,), (u,)), Unsized(), ((g,),), ())) == [RoleUnsized]
+    assert kinds(driving_violations(Holds((r,), (u,)), Unsized(), ((g,),), ())) == [RoleUnsized]
 
 
 def test_arity_is_asked_of_the_role_class():
     '''A role is a class, so `arity` is a class method, bound by its level.'''
-    node = Holds((r,), (u, v))
+    node = Holding((r,), (u, v))
     assert (PerUnknown.arity(node), Start.arity(node), Budget.arity(node)) == (2, 2, 1)
     assert inspect.isabstract(Role)
 
 
 def test_the_refusal_names_the_predicate():
     with pytest.raises(ValueError, match='its `accepts` is `single`'):
-        Driven(Holds((r,), (u, v)), Solo(), *placed((u, v)))
+        with_driver(Holds((r,), (u, v)), Solo(), *placed((u, v)))
 
 
 def test_a_driven_node_hashes_and_pickles():
     '''A node is a jit cache key and a plan pickles.'''
-    node = Driven(Holds((r,), (u,)), Solo(), *placed())
-    assert hash(node) == hash(Driven(Holds((r,), (u,)), Solo(), *placed()))
+    node = with_driver(Holds((r,), (u,)), Solo(), *placed())
+    assert hash(node) == hash(with_driver(Holds((r,), (u,)), Solo(), *placed()))
     assert pickle.loads(pickle.dumps(node)) == node == copy.deepcopy(node)
 
 
 def test_the_predicates_and_the_reprs():
     body = implemented(FunctionalNode((u,), (r,)), print)
-    node = Driven(Holds((r,), (u,)), Bare(), *NONE)
+    node = with_driver(Holds((r,), (u,)), Bare(), *NONE)
     assert is_implemented(body) and not is_implemented(node)
     assert is_driven(node) and not is_driven(node.condition)
-    assert repr(body).endswith(') +by print') and repr(node).endswith('by Bare)')
-    assert repr(implemented(node, print)).endswith('by Bare) +by print')
+    assert repr(body).endswith(') +by print') and repr(node.driver) == 'Bare'
 
 
 # ---------------------------------------------------------------- a rename
@@ -238,15 +276,15 @@ def test_a_rename_moves_the_place_and_keeps_the_role():
     slot it sits in is still `Start`.'''
     driven = Assign(W('solve'), Solo(), *placed()).apply(graph())
     moved  = Rename(W('solve'), ((W('^start.u'), g),)).apply(driven)[W('solve')]
-    assert moved.data == ((g,), (W('^budget.solve'),))
+    assert moved.driver.data == ((g,), (W('^budget.solve'),))
 
 
 def test_renaming_an_unknown_moves_that_place_and_no_other():
     '''The places are stored, so a rename moves exactly what it names: `^start.u` is a
     place of its own and stays where it was.'''
-    moved = Driven(Holds((r,), (u,)), Solo(), *placed()).relabel({u: v})
+    moved = with_driver(Holds((r,), (u,)), Solo(), *placed()).relabel({u: v})
     assert moved.owns_inside == (v,)
-    assert (moved.data, moved.reports) == placed()
+    assert (moved.driver.data, moved.driver.reports) == placed()
 
 
 def test_undrive_after_a_rename_takes_every_edge_with_it():
@@ -260,14 +298,14 @@ def driven_graph() -> NestingGraph:
     '''`body` computes `r` from `u`; `solve` determines `u`, driven; `src` is unrelated.'''
     return NestingGraph(AbstractGraph(OrderedMap({
         W('body') : FunctionalNode((u, k), (r,)),
-        W('solve'): Driven(Holds((r,), (u,)), Bare(), *NONE),
+        W('solve'): with_driver(Holds((r,), (u,)), Bare(), *NONE),
         W('src')  : FunctionalNode((), (W('u0'),)),
     })), OrderedMap())
 
 
 def test_replace_puts_a_definition_the_caller_already_holds_in_place():
     g     = driven_graph()
-    fresh = Driven(Holds((r,), (u,)), Bare(), *NONE)
+    fresh = with_driver(Holds((r,), (u,)), Bare(), *NONE)
     after = Replace(W('solve'), fresh).apply(g)
     assert after[W('solve')] is fresh
     assert after.nodes == g.nodes                       # in place: the binding did not move
@@ -285,7 +323,7 @@ def test_replace_and_rename_refuse_an_unbound_node():
 def test_assign_then_undrive_is_the_statement_again():
     g0     = graph()
     driven = Assign(W('solve'), Solo(), *placed()).apply(g0)
-    assert driven[W('solve')] == Driven(g0[W('solve')], Solo(), *placed())
+    assert driven[W('solve')] == with_driver(g0[W('solve')], Solo(), *placed())
     assert Undrive(W('solve')).apply(driven)[W('solve')] == g0[W('solve')]
 
 
@@ -309,13 +347,13 @@ def test_each_edit_refuses_the_wrong_node_as_data(op, found):
 
 
 def test_a_requirement_is_refused_by_the_driver_before_the_graph_is_touched():
-    '''What `apply` would raise from `Driven`'s constructor, `refusals` already says --
+    '''What `apply` would raise from the driven node's constructor, `refusals` already says --
     and a node determining nothing is refused by the driver's own `accepts`.'''
     g0 = NestingGraph(AbstractGraph(OrderedMap({W('req'): Holds((r,), ())})), OrderedMap())
     assert kinds(refusals(Assign(W('req'), Solo(), *placed(())), g0)) == [NotAccepted]
 
 
-def test_the_wrapper_is_not_put_on_twice():
+def test_a_driver_is_not_put_on_twice():
     '''The node's own rule, which the op asks before the graph is touched.'''
     driven = Assign(W('solve'), Bare(), *NONE).apply(graph())
     assert kinds(refusals(Assign(W('solve'), Bare(), *NONE), driven)) == [DrivenTwice]
@@ -354,7 +392,7 @@ def test_the_outer_layer_comes_off_first():
     assert kinds(refusals(Undrive(W('solve')), done)) == [AttributeDoesNotFit]
     assert kinds(refusals(Assign(W('solve'), Bare(), *NONE), done)) == [DrivenTwice]
     assert kinds(refusals(again, done))                              == [AttributeAlreadySet]
-    assert kinds(refusals(Undetermine(W('solve')), done)) == [OwnsInsideNotAChoice]
+    assert kinds(refusals(Undetermine(W('solve')), done)) == [OwnsInsideDriven]
 
 
 def test_an_implementation_goes_on_a_function_or_a_driven_node():
@@ -365,27 +403,28 @@ def test_an_implementation_goes_on_a_function_or_a_driven_node():
     assert kinds(refusals(Implement(OrderedMap({W('solve'): print})), graph())) == [AttributeDoesNotFit]
 
 
-def test_a_driver_goes_on_a_bare_condition_and_implemented_nodes_are_not_folded():
-    '''Until the driver is the condition's own fields, what a condition carries would sit
-    inside the driven node, where nothing asking the graph's node finds it. And what two
-    nodes carry has no join: an implemented node is folded once its implementation is off.'''
+def test_a_driver_goes_on_a_node_carrying_attributes_and_implemented_nodes_are_not_folded():
+    '''The driver is the node's own field, so what the node carries stays where asking
+    the graph's node finds it. And what two nodes carry has no join: an implemented node is
+    folded once its implementation is off.'''
     from cottax.core import Attribute, Combine, with_attributes
     class Note(Attribute): ...
-    with pytest.raises(TypeError, match='a driver goes on a bare condition node'):
-        Driven(with_attributes(Holds((r,), (u,)), OrderedMap({Note: 'n'})), Bare(), *NONE)
+    noted = with_driver(with_attributes(Holds((r,), (u,)), OrderedMap({Note: 'n'})), Bare(), *NONE)
+    assert noted.attributes == OrderedMap({Note: 'n'}) and is_driven(noted)
     driven = Assign(W('solve'), Bare(), *NONE).apply(graph())
     done   = Implement(OrderedMap({W('solve'): print})).apply(driven)
-    fold   = Combine(W('solve'), (W('solve'), W('body')), Driven)
+    fold   = Combine(W('solve'), (W('solve'), W('body')), Holding)
     assert 'CarriesAttributes' in [type(v).__name__ for v in refusals(fold, done)]
 
 
 def test_an_implemented_driven_node_keeps_what_runs_it_through_a_rename():
-    '''`Driven.relabel` builds a fresh node and never mentions what it carries: `Redefine`
-    puts it back, and the implementation holds, the contract being the same.'''
+    '''`Holds.relabel` builds a fresh node and never mentions what it carries:
+    `relabel` puts the driver and the attributes back, and the implementation holds, the
+    contract being the same.'''
     driven = Assign(W('solve'), Solo(), *placed()).apply(graph())
     done   = Implement(OrderedMap({W('solve'): print})).apply(driven)
     moved  = Rename(W('solve'), ((W('^start.u'), g),)).apply(done)[W('solve')]
-    assert is_implemented(moved) and moved.data[0] == (g,)
+    assert is_implemented(moved) and moved.driver.data[0] == (g,)
 
 
 def test_one_op_implements_several_nodes_and_takes_them_off():
@@ -415,4 +454,4 @@ def test_driven_then_realised():
 
 
 def test_a_role_is_one_slot():
-    assert kinds(violations(Driven, Holds((r,), (u,)), Twice(), ((g,), (k,)), ())) == [RoleTwice]
+    assert kinds(driving_violations(Holds((r,), (u,)), Twice(), ((g,), (k,)), ())) == [RoleTwice]

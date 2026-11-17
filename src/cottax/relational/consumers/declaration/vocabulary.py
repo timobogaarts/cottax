@@ -7,7 +7,7 @@ the constraints and the condition nodes; and the readings of its arguments (`wit
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-from ....core import NodeDefinition, Place, PlaceToPlace
+from ....core import Condition, NodeDefinition, Place, PlaceToPlace
 from ....core.frozen import OrderedMap, choice
 from ... import Eq, Max, Min, Objective, Rel, Relation, RelationalCondition, Scaling
 from ....consumers.declaration.interface import Declaring
@@ -126,7 +126,7 @@ class RelationalDeclaring(Declaring):
 def _problem(surface: Declaring, objectives: tuple[Objective, ...], design: Design,
              subject_to: SubjectTo) -> Problem:
     unknowns, bounds = design_of(surface, design)
-    one = isinstance(subject_to, (Declaration, NodeDefinition))
+    one = isinstance(subject_to, (Declaration, NodeDefinition, Condition))
     return Problem(unknowns, bounds, objectives, (subject_to,) if one else tuple(subject_to))
 
 

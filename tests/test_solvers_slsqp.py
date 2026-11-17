@@ -14,7 +14,7 @@ import equinox as eqx
 from cottax.core import FunctionalNode, GraphWithValues
 from cottax.relational import Min, Objective
 from cottax.core.frozen import OrderedMap
-from cottax.core.driven import Driven
+from cottax.core.driven import driven
 from cottax.core.driven import Start, Steps
 from cottax.relational.contracts import ConstrainedMinimisation
 from cottax.consumers.execution import CallableGraph, run
@@ -58,7 +58,7 @@ def counted(calls, name, fn):
 
 
 def optimise(objective, design, relations, implementation, bounded=False, steps=False
-             ) -> 'Driven':
+             ) -> 'ConditionalNode':
     '''One objective over the design, a start per unknown, and when asked a step count at
     `.n` and bounds `^lower.x <= x <= ^upper.x`: relations over parameters.'''
     unknowns   = tuple(V(d) for d in design)
@@ -68,7 +68,7 @@ def optimise(objective, design, relations, implementation, bounded=False, steps=
     condition  = RelationalCondition(tuple(relations) + bounds, (Objective(V(objective), Min),), unknowns,
                                      parameters)
     return implemented(
-        Driven(condition, ConstrainedMinimisation(steps=steps),
+        driven(condition, ConstrainedMinimisation(steps=steps),
                (tuple(STARTS(u) for u in unknowns),), ((V('n'),),) if steps else ()),
         implementation)
 
@@ -182,7 +182,7 @@ def test_a_limit_held_fixed_is_read_as_a_parameter():
                                     (V('g_max'),))
     out = solve({
         N('m')  : call(['x'], ['f', 'g'], lambda x: ((x - 5.0) ** 2, x)),
-        N('opt'): implemented(Driven(condition, ConstrainedMinimisation(steps=False),
+        N('opt'): implemented(driven(condition, ConstrainedMinimisation(steps=False),
                                            ((STARTS(V('x')),),), ()), ScipyMinimize()),
     }, {STARTS(V('x')): 0.0, V('g_max'): 2.0})
     assert float(out[V('x')]) == pytest.approx(2.0, abs=1e-6)

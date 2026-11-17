@@ -1,5 +1,5 @@
 '''
-The condition node written as relations: a `Rel` marker, a `Relation` between two places,
+The condition written as relations: a `Rel` marker, a `Relation` between two places,
 and `RelationalCondition`, relations and objectives over places with the unknowns they
 determine and the parameters they hold fixed, and `+` the join.
 '''
@@ -7,8 +7,7 @@ determine and the parameters they hold fixed, and `+` the join.
 import dataclasses
 from collections.abc import Iterator
 
-from ..core import ConditionalNode, Place, Renaming, Violation, relabelled
-from ..core.maths.definition import attributes_text
+from ..core import Condition, Place, Renaming, Violation, relabelled
 from ..core.frozen import Frozen
 
 
@@ -127,8 +126,8 @@ def check_parameters(node: 'RelationalCondition') -> Iterator[Violation]:
                       if r.terms and all(t in node.parameters for t in r.terms)):
         yield FixedRelation(fixed)
 
-class RelationalCondition[V: Place](ConditionalNode[V]):
-    '''A condition node: relations and objectives over places, the unknowns it determines and
+class RelationalCondition[V: Place](Condition[V]):
+    '''A condition: relations and objectives over places, the unknowns it determines and
     the parameters it holds fixed. Every other term is read inside. Supports addition.'''
 
     relations  : tuple[Relation[V], ...]
@@ -154,7 +153,7 @@ class RelationalCondition[V: Place](ConditionalNode[V]):
             t for r in self.relations for t in r.terms
             if t not in self.unknowns and t not in self.parameters)
 
-    def __add__(self, other: 'RelationalCondition[V]') -> 'RelationalCondition[V]':
+    def join(self, other: 'RelationalCondition[V]') -> 'RelationalCondition[V]':
         '''The join: relations, objectives and unknowns concatenated, this side first; the
         parameters too, a place both hold fixed once.'''
         if not isinstance(other, RelationalCondition):
@@ -184,7 +183,7 @@ class RelationalCondition[V: Place](ConditionalNode[V]):
                 if self.unknowns else ' (requirement)')
         fixed = (' fixing ' + ', '.join(str(p) for p in self.parameters)
                  if self.parameters else '')
-        return f'{type(self).__name__}({stated}{over}{fixed}){attributes_text(self)}'
+        return f'{type(self).__name__}({stated}{over}{fixed})'
 
 
 # ----------------------------------------------------------------- violation finals

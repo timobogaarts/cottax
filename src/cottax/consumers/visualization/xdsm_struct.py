@@ -7,7 +7,7 @@ from itertools import chain
 from ...core import NestingGraph
 from ...core import ExecutableGraph
 from ...core import Plan
-from ...core.driven import is_driven
+from ...core import is_driven
 from ...core import Label, Place
 
 from .interface import Formatter

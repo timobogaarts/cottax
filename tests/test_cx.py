@@ -18,6 +18,7 @@ import pytest
 
 import cottax.assemblies.jax as cx
 from cottax.consumers.declaration import declare
+from cottax.core import ConditionalNode
 from cottax.core.frozen import OrderedMap, violations
 from cottax.core.maths.plan import Insert, Nest, Plan, Rename
 from cottax.relational.contracts import (
@@ -373,7 +374,8 @@ def test_one_name_decorates_or_wraps_by_what_comes_first():
         decorated = getattr(plasma, kind)('ip')(relax)
         assert decorated == getattr(plasma, kind)(relax, 'ip')
         if shape is not None:
-            problem = cx.absolute.declare(decorated).graph[cx.absolute.node(cx.solve(N['relax']))]
+            at      = cx.absolute.node(cx.solve(N['relax']))
+            problem = cx.absolute.declare(decorated).graph[at].condition
             assert shape(problem) and problem.unknowns == (cx.absolute.place(V.plasma.ip),)
 
 
@@ -524,7 +526,7 @@ def test_a_loose_wrapper_is_named_by_its_function_and_a_lambda_or_a_callable_val
 
 def test_a_node_definition_is_named_by_its_slot_only():
     requirement = cx.absolute.requirement(v('g'))
-    assert cx.absolute.declare({'held': requirement}).graph[n('held')] == requirement
+    assert cx.absolute.declare({'held': requirement}).graph[n('held')] == ConditionalNode(requirement)
     with pytest.raises(TypeError, match='has no name'):
         cx.absolute.declare(requirement).graph
 
@@ -607,7 +609,7 @@ def test_a_fixed_point_cut_closes_every_cut_at_one_problem():
     op  = flat.fixed_point_cut({'y1': 'disc2', 'y2': 'disc1'}, at=N.mda)
     out = (Plan(explicit) + op).graph
     assert op.at == cx.absolute.node(N.mda)
-    assert out[op.at].unknowns == (cx.absolute.place(cx.copy(V['y1'])), cx.absolute.place(cx.copy(V['y2'])))
+    assert out[op.at].condition.unknowns == (cx.absolute.place(cx.copy(V['y1'])), cx.absolute.place(cx.copy(V['y2'])))
     assert out.graph.is_acyclic is False and out[n('disc2')].reads[-1] == cx.absolute.place(cx.copy(V['y1']))
 
 
@@ -751,7 +753,7 @@ def test_a_problem_handed_over_loose_is_named_after_its_objective_and_a_satisfy_
     opt = flat.optimise(minimise='f', design=('z1', 'z2', 'x1'))
     g   = cx.absolute.declare(flat.residual(disc1, 'y1'), disc2, objective, opt).graph
     at  = cx.absolute.node(cx.solve(N['f']))
-    assert g.nodes[-1] == at and g[at] == opt.condition
+    assert g.nodes[-1] == at and g[at].condition == opt.condition
     assert cx.absolute.node(opt) == at and cx.absolute.node(cx.solve(disc2)) == cx.absolute.node(cx.solve(N['disc2']))
     with pytest.raises(TypeError, match='has no name of its own: put it in a slot'):
         cx.absolute.declare(objective, flat.satisfy(design={'f': (0, 1)})).graph
@@ -883,10 +885,10 @@ def test_a_constraint_is_its_body_and_a_requirement_beside_it():
         g = cx.absolute.declare(call(margin, 'g')).graph
         assert g.nodes == (n('margin'), cx.absolute.node(cx.require(N['margin'])))
         assert g[n('margin')].owns == (v('g'),)
-        assert g[cx.absolute.node(cx.require(N['margin']))] == cx.RelationalCondition(
+        assert g[cx.absolute.node(cx.require(N['margin']))].condition == cx.RelationalCondition(
             (cx.Relation(v('g'), None, op),), (), (), ())
         limited = call(margin, 'g', **{limit: wrote})
-        assert cx.absolute.declare(limited).graph[cx.absolute.node(cx.require(N['margin']))].parameters == (v('g_max'),)
+        assert cx.absolute.declare(limited).graph[cx.absolute.node(cx.require(N['margin']))].condition.parameters == (v('g_max'),)
         assert call('g', **{limit: wrote})(lambda y: y).condition == limited.condition
         assert call(margin, 'g', **{limit: {'g': wrote}}) == limited
 
@@ -970,7 +972,7 @@ def test_a_problem_subject_to_a_constraint_holds_it_without_an_architecture(x64)
     square = flat.function(lambda z: (z - 5.0) ** 2, 'f')
     opt    = flat.optimise(minimise='f', design=('z',), subject_to=(margin,))
     model  = cx.absolute.declare({'f': square, 'margin': margin, 'opt': opt}) + cx.flat.drive(ScipyMinimize())
-    assert cx.Relation(v('g'), v('g_max'), cx.Le) in model.graph[n('opt')].condition.relations
+    assert cx.Relation(v('g'), v('g_max'), cx.Le) in (model.graph[n('opt')]).condition.relations
     assert cx.absolute.node(cx.require(N['margin'])) not in model.graph
     tree = flat.run(model, {cx.Inputs: {'g_max': 2.0}, cx.Start: {'z': 0.0}})
     assert tree['z'] == pytest.approx(2.0, abs=1e-6)
@@ -985,8 +987,8 @@ def test_a_root_find_is_a_satisfy_over_equalities_held_bare():
     held = [flat.requirement(c) for c in ('r1', 'r2')]
     g    = cx.absolute.declare({'b': flat.function(lambda u, w: (u, w), 'r1', 'r2'),
                         'top': flat.satisfy(design=('u', 'w'), subject_to=held)}).graph
-    assert is_root_find(g[n('top')])
-    assert g[n('top')].relations == (cx.Relation(v('r1'), None, cx.Eq), cx.Relation(v('r2'), None, cx.Eq))
+    assert is_root_find(g[n('top')].condition)
+    assert g[n('top')].condition.relations == (cx.Relation(v('r1'), None, cx.Eq), cx.Relation(v('r2'), None, cx.Eq))
     assert g.nodes == (n('b'), n('top'))
 
 
@@ -1041,8 +1043,8 @@ def test_a_feasibility_of_constraints_alone_is_their_join_over_its_unknowns():
     find = flat.satisfy(design=('a',), subject_to=(c,))
     g = cx.absolute.declare({'r': c, 'find': find}).graph
     assert g.nodes == (n('r'), n('find'))                    # the requirement is held, not bound
-    assert g[n('find')] == cx.RelationalCondition((cx.Relation(v('r'), None, cx.Eq),), (),
-                                                  (v('a'),), ())
+    assert g[n('find')].condition == cx.RelationalCondition(
+        (cx.Relation(v('r'), None, cx.Eq),), (), (v('a'),), ())
     with pytest.raises(ValueError, match='relates nothing'):
         flat.satisfy(design=('a',))
     boxed = flat.satisfy(design={'a': (0, 1.0)}, subject_to=(c,))
@@ -1182,7 +1184,7 @@ def test_a_tag_on_a_bound_a_target_or_a_design_bound_is_on_a_name_or_on_a_value(
     assert valued.given == OrderedMap({target: 3.0}) and valued.tags[target] == (Unit(None, 'm'),)
 
     d = cx.absolute.declare({'o': flat.optimise(minimise='f', design={'x': (None, Unit('xmax', 'm'))})})
-    assert d.graph[n('o')].parameters == (v('xmax'),) and d.given == OrderedMap()
+    assert d.graph[n('o')].condition.parameters == (v('xmax'),) and d.given == OrderedMap()
     assert cx.tags_of(d, v('xmax'), Unit) == (Unit(None, 'm'),)
     d = cx.absolute.declare({'o': flat.optimise(minimise='f', design={'x': (None, Unit(4.0, 'm'))})})
     assert d.given == OrderedMap({x_hi: 4.0}) and cx.tags_of(d, x_hi, Unit) == (Unit(None, 'm'),)

@@ -8,11 +8,16 @@ places      frozen/          (places: Place, Label, PlaceToPlace, the prefix ord
  ||-------> mints            (Mint, a purpose a name is derived for; Minting, how a
  ||          ||               class of names wears one)
  \/          \/
-definition <-'
+definition <-'               (NodeDefinition; Attribute, what a node carries opaquely)
  ||-----------
  \/          \/
-kinds       graph            (graph: the bindings and the theory over them; no kind named)
- ||          ||
+kinds       graph            (kinds: FunctionalNode; AbstractConditionalNode, what every rule
+ ||          ||               reads of a condition node: its four names;
+ ||          ||               graph: the bindings and the theory over them; no kind named)
+ \/          ||
+conditional  ||              (Condition, the value a condition node states; Attachment, places
+ ||          ||               attached to it -- a driver; ConditionalNode, holding both, the
+ ||          ||               attachment's places joining the outside names; the join of two)
  \/          \/
 nesting <----'               (has a graph, and the nesting over it; `contract`, which builds
                               a `FunctionalNode` per block; ProvedGraph, a proof's base)
@@ -38,9 +43,8 @@ from .definition import (
     Attribute, NodeDefinition, Renaming, relabelled, misfits, with_attributes,
     without_attribute,
 )
-from .kinds import (
-    ConditionalNode, FunctionalNode, is_encloser, enclosers,
-)
+from .kinds import AbstractConditionalNode, FunctionalNode, is_encloser, enclosers
+from .conditional import Attachment, Condition, ConditionalNode, is_driven, kind_of
 from .graph import AbstractGraph
 from .nesting import NestingGraph, ProvedGraph
 from .dispatch import answer_for_labels, answer_for_places

@@ -292,12 +292,12 @@ def test_the_three_on_implicit_disciplines(implicit):
     assert dict(m.within) == {Y2_MDA: OPT, N('h1'): Y2_MDA, N('h2'): Y2_MDA}
     i = (Plan(implicit) + idf()).graph
     assert dict(i.within) == {N('h1'): OPT, N('h2'): OPT}
-    assert i[OPT].relations == (Relation(V('g'), None, Le),
+    assert i[OPT].condition.relations == (Relation(V('g'), None, Le),
                                 Relation(HAT(V('y2')), V('y2'), Eq))
     s = (Plan(implicit) + sand()).graph
     assert not s.within and N('h1') not in s and N('h2') not in s
-    assert s[OPT].unknowns == (V('z'), V('y1'), V('y2'))
-    assert s[OPT].relations == (Relation(V('g'), None, Le),
+    assert s[OPT].condition.unknowns == (V('z'), V('y1'), V('y2'))
+    assert s[OPT].condition.relations == (Relation(V('g'), None, Le),
                                 Relation(V('r1'), None, Eq),
                                 Relation(V('r2'), None, Eq))
     assert HAT(V('y2')) not in s.graph.variables
@@ -321,8 +321,8 @@ def test_two_cycles_are_two_solves_under_mdf(two_cycles):
 
 def test_idf_keeps_the_optimiser_where_it_was_bound(sellar):
     g = (Plan(sellar) + idf()).graph
-    assert g.nodes[0] == OPT and is_optimise(g[OPT])
-    assert g[OPT].unknowns == (V('z'), HAT(V('y2')))
+    assert g.nodes[0] == OPT and is_optimise(g[OPT].condition)
+    assert g[OPT].condition.unknowns == (V('z'), HAT(V('y2')))
     assert g[OPT].reads_inside == (V('f'), V('g'), V('y2'))
 
 
@@ -334,8 +334,8 @@ def test_sand_absorbs_a_declared_fixed_point_as_written():
         N('obj'): call(['z', 'u'], ['f']),
     }))
     s = (Plan(g) + sand()).graph
-    assert s[OPT].relations == (Relation(V('u'), V('v'), Eq),)
-    assert s[OPT].unknowns  == (V('z'), V('u'))
+    assert s[OPT].condition.relations == (Relation(V('u'), V('v'), Eq),)
+    assert s[OPT].condition.unknowns  == (V('z'), V('u'))
     ExecutableGraph(s)
 
 
@@ -360,8 +360,8 @@ def test_mdf_with_the_models_absorbed_into_the_mda(implicit):
     g = (Plan(implicit) + AbsorbedMDF(GaussSeidel(), CLOSING, OPT)).graph
     assert dict(g.within) == {Y2_MDA: OPT}
     assert N('h1') not in g and N('h2') not in g
-    assert g[Y2_MDA].unknowns  == (HAT(V('y2')), V('y1'), V('y2'))
-    assert g[Y2_MDA].relations == (Relation(HAT(V('y2')), V('y2'), Eq),
+    assert g[Y2_MDA].condition.unknowns  == (HAT(V('y2')), V('y1'), V('y2'))
+    assert g[Y2_MDA].condition.relations == (Relation(HAT(V('y2')), V('y2'), Eq),
                                    Relation(V('r1'), None, Eq),
                                    Relation(V('r2'), None, Eq))
     ExecutableGraph(g)
@@ -390,8 +390,8 @@ def test_a_study_keeps_one_solve_and_absorbs_the_rest(implicit, sellar):
     g = (Plan(implicit) + KeepSolves(GaussSeidel(), CLOSING, OPT, (N('h1'),))).graph
     assert dict(g.within) == {N('h1'): OPT}
     assert N('h2') not in g
-    assert g[OPT].unknowns == (V('z'), V('y2'))
-    assert Relation(V('r2'), None, Eq) in g[OPT].relations
+    assert g[OPT].condition.unknowns == (V('z'), V('y2'))
+    assert Relation(V('r2'), None, Eq) in g[OPT].condition.relations
     ExecutableGraph(g)
     # a declared fixed point beside sellar's disciplines, kept while the coupling is
     # absorbed
@@ -401,7 +401,7 @@ def test_a_study_keeps_one_solve_and_absorbs_the_rest(implicit, sellar):
                                 own: fixed_point((V('v'),), (V('u'),))}))
     k = (Plan(with_fp) + KeepSolves(GaussSeidel(), CLOSING, OPT, (own,))).graph
     assert dict(k.within) == {own: OPT}
-    assert HAT(V('y2')) in k[OPT].unknowns and V('u') not in k[OPT].unknowns
+    assert HAT(V('y2')) in k[OPT].condition.unknowns and V('u') not in k[OPT].condition.unknowns
     ExecutableGraph(k)
 
 
@@ -414,7 +414,7 @@ def test_a_requirement_the_design_reaches_is_absorbed(sellar):
     assert mdf().absorbing(with_req) == (Combine(OPT, (OPT, N('req')), RelationalCondition),)
     g = (Plan(with_req) + mdf()).graph
     assert N('req') not in g
-    assert Relation(V('m'), None, Le) in g[OPT].relations
+    assert Relation(V('m'), None, Le) in g[OPT].condition.relations
     ExecutableGraph(g)
 
 
@@ -443,7 +443,7 @@ def test_a_problem_reached_only_through_a_requirement_is_combined():
     assert per_functional_cycle_boxed(g.interior(OPT), Disciplines(), GaussSeidel()) == ()      # off the optimiser's cycle
     out = (Plan(g) + mdf()).graph
     assert N('req') not in out
-    assert Relation(V('c'), None, Le) in out[OPT].relations
+    assert Relation(V('c'), None, Le) in out[OPT].condition.relations
     assert dict(out.within) == {Y2_MDA: OPT}
     ExecutableGraph(out)
 
@@ -466,7 +466,7 @@ def test_a_problem_the_declaration_surface_minted_is_declared(sellar):
                           own: fixed_point((V('v'),), (V('u'),))}))
     i = (Plan(g) + idf()).graph
     assert dict(i.within) == {own: OPT}
-    assert V('u') not in i[OPT].unknowns
+    assert V('u') not in i[OPT].condition.unknowns
 
 
 def test_a_combining_the_graph_cannot_answer_is_refused_by_the_proof(implicit):
@@ -516,10 +516,10 @@ def test_two_closures_on_one_cycle_are_one_mda_under_mdf(implicit):
     m = (Plan(implicit) + MDF(OnePerVariable(), apart, OPT)).graph
     mda, = [p for p in m.enclosers if p not in implicit.enclosers]
     assert dict(m.within) == {mda: OPT, N('h1'): mda, N('h2'): mda}
-    assert set(m[mda].unknowns) == {HAT(V('y1')), HAT(V('y2'))}
+    assert set(m[mda].condition.unknowns) == {HAT(V('y1')), HAT(V('y2'))}
     ExecutableGraph(m)
     i = (Plan(implicit) + IDF(OnePerVariable(), apart, OPT)).graph
-    assert HAT(V('y1')) in i[OPT].unknowns and HAT(V('y2')) in i[OPT].unknowns
+    assert HAT(V('y1')) in i[OPT].condition.unknowns and HAT(V('y2')) in i[OPT].condition.unknowns
     ExecutableGraph(i)
 
 
@@ -574,7 +574,7 @@ def test_a_cycle_off_the_top_is_resolved_by_an_mda(sellar):
         ExecutableGraph((Plan(g) + arch).graph)
     assert mdf().resolution(sellar).outside == ()
     named = MDF(GaussSeidel(), CLOSING, OPT, analysis=AbsorbedMDA(GaussSeidel(), CLOSING)).resolution(g)
-    assert named.graph[N('h1')].unknowns == (V('y1'), V('y2')) and not named.graph.within
+    assert named.graph[N('h1')].condition.unknowns == (V('y1'), V('y2')) and not named.graph.within
     ExecutableGraph(named.graph)
 
 
@@ -628,7 +628,7 @@ def test_an_absorbed_mda_needs_no_copy(implicit):
     r = AbsorbedMDA(GaussSeidel(), CLOSING).resolution(without_top(implicit))
     assert r.closures == ()
     assert r.graph.enclosers == (N('h1'),) and N('h2') not in r.graph
-    assert r.graph[N('h1')].unknowns == (V('y1'), V('y2'))
+    assert r.graph[N('h1')].condition.unknowns == (V('y1'), V('y2'))
     assert HAT(V('y2')) not in r.graph.graph.variables
     ExecutableGraph(r.graph)
 

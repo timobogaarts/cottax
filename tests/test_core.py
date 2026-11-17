@@ -7,6 +7,7 @@ to show the rules never learn what a real name is made of, and then holds the re
 to the laws the vocabulary states.
 '''
 
+import dataclasses
 import itertools
 import random
 from dataclasses import dataclass
@@ -19,7 +20,7 @@ from cottax.core.maths.graph import (
     OwnAroundOwner, OwnInsideOwner, OwnedTwice, OwnerInsideRead, ReadInsideOwner,
 )
 from cottax.core import (
-    AbstractGraph, NestingGraph, Combine, ConditionalNode, Cut, FunctionalNode,
+    AbstractGraph, NestingGraph, Combine, Condition, ConditionalNode, Cut, FunctionalNode,
     Rename, Replace, SetOwnsInside, refusals,
     Attribute, RemoveAttribute, SetAttribute, with_attributes,
     Violation, NodeDefinition, Insert, Delete,
@@ -29,13 +30,13 @@ from cottax.core import (
 from cottax.core.maths.plan.primitive import (
     Nest, Unnest, check_delete_keeps_nesting_whole, check_nesting, check_unnesting,
 )
-from cottax.core.refusal_kinds import DoesNotRead
+from cottax.core.refusal_kinds import DoesNotRead, ReadOnBothSides
 from cottax.core.maths.executable import ExecutableGraph
 from cottax.core.frozen import Answer, OrderedMap, answers
 from cottax.core.maths.nesting import (BoxOwnsNothing, NotAnEncloser, Unbound, check_blocks_own_something,
                                       check_blocks_partition)
 from cottax.pytree.path import VarPath
-from cottax.core import Mint, Minting
+from cottax.core import Attachment, Mint, Minting, relabelled
 import purposes
 
 
@@ -91,24 +92,24 @@ Declared = FunctionalNode
 '''A computation with nothing to call.'''
 
 
-class States(ConditionalNode):
-    '''A bare condition node: two bare tuples, and no relation anywhere. **The whole of
-    `ConditionalNode`** -- what it reads and owns inside -- so every rule
-    in the layer runs on a condition node that was never written as `lhs op rhs`.'''
+class States(Condition):
+    '''A bare condition: two bare tuples, and no relation anywhere. **The whole of a
+    `Condition`** -- what it reads and owns inside -- so every rule in the layer runs on a
+    condition node whose condition was never written as `lhs op rhs`.'''
     reads_inside  : tuple = ()
     owns_inside   : tuple = ()
     reads_outside = ()
     owns_outside  = ()
     def relabel(self, renaming): return self
-    def __add__(self, other):
+    def join(self, other):
         '''The whole of what `Combine` asks of a kind -- no relation anywhere.'''
         if not isinstance(other, States):
             return NotImplemented
         return States(self.reads_inside + other.reads_inside, self.owns_inside + other.owns_inside)
 
 
-class Driven(ConditionalNode):
-    '''A problem with an algorithm, as the abstract sees it: a condition node
+class Driven(Condition):
+    '''A problem with an algorithm, as the abstract sees it: a condition
     reading and owning outside as well as inside. No driver
     anywhere -- what one *is* is `problem/`'s, and the rules never ask.'''
     problem : States
@@ -119,6 +120,19 @@ class Driven(ConditionalNode):
     reads_outside = property(lambda self: tuple(v for vs in self.data for v in vs))
     owns_outside  = property(lambda self: tuple(v for vs in self.reports for v in vs))
     def relabel(self, renaming): return self
+
+
+class Ports(Attachment):
+    '''An attachment as the maths sees it: places in and out, and no rule of its own --
+    what a driver is (a contract, its roles) is `driven/`'s, and the rules never ask.'''
+    reads : tuple = ()
+    owns  : tuple = ()
+    def relabel(self, renaming):
+        return Ports(relabelled(self.reads, renaming), relabelled(self.owns, renaming))
+    def violations_on(self, node):                          return iter(())
+    def join_violations(self, other, node, other_node):     return iter(())
+    def joined(self, other, node, other_node, joined):
+        return Ports(self.reads + other.reads, self.owns + other.owns)
 
 
 class Note(Attribute):
@@ -147,10 +161,11 @@ class Forgets(NodeDefinition):
 
 def body(reads, owns):          return declared(reads, owns)   # a body is no edge: the abstract sees a function
 def declared(reads, owns):      return Declared(places(reads), places(owns))
-def states(reads, owns):        return States(places(reads), places(owns))
+def condition(reads, owns):     return States(places(reads), places(owns))
+def states(reads, owns):        return ConditionalNode(condition(reads, owns))
 def driven(reads, owns, data=(), reports=()):
-    return Driven(states(reads, owns),
-                  ((places(data),) if data else ()), ((places(reports),) if reports else ()))
+    return ConditionalNode(Driven(condition(reads, owns), ((places(data),) if data else ()),
+                                  ((places(reports),) if reports else ())))
 
 
 def G(definitions, within=None):
@@ -233,6 +248,22 @@ def test_a_rule_yields_data_and_never_a_sentence():
     assert found[0].where == {'place': Word('s'), 'node': Word('b'), 'other': Word('a')}
     with pytest.raises(ValueError, match='owned by both'):
         first(iter(found))
+
+
+@pytest.mark.parametrize('inside, outside', [(['r'], ['r']), (['r'], ['r.a']), (['r.a'], ['r'])])
+def test_a_read_inside_is_apart_from_every_read_outside_in_the_prefix_order(inside, outside):
+    """A read inside is produced on the cycle, and with it every place inside it and every
+    place it lies inside: so reading `r` inside and `r.a` outside reads part of what the
+    cycle produces as if it were not -- the same place, in the order that matters. Asked of
+    the condition's own sides, and of a driver's place against the condition."""
+    refused = [ReadOnBothSides(places(inside), places(outside))]
+    assert list(violations(Driven, condition(inside, ['u']), (places(outside),))) == refused
+    assert list(violations(ConditionalNode, condition(inside, ['u']),
+                           driver=Ports(places(outside)))) == refused
+
+
+def test_reads_apart_in_the_prefix_order_may_be_on_either_side():
+    assert not list(violations(Driven, condition(['r.a'], ['u']), (places(['r.b']),)))
 
 
 def test_a_fold_is_generic_in_the_place_and_in_the_kind():
@@ -425,7 +456,7 @@ def test_every_case_a_rule_can_name_has_wording():
     seen(violations(Toy, places(['s']), places(['s.u'])))
     seen(violations(Declared, places([]), places([])))                       # owns nothing
     seen(violations(States, (), ()))                                        # an empty condition node
-    seen(violations(Driven, states(['r'], ['u']), (places(['r']),)))        # r read inside and outside
+    seen(violations(Driven, condition(['r'], ['u']), (places(['r']),)))     # r read inside and outside
     seen(violations(Insert, OrderedMap({})))                                   # nothing inserted
     seen(violations(Delete, ()))                                            # nothing deleted
     seen(violations(Cut, Word('x'), (), lambda w: w))                       # a copy nothing reads
@@ -442,6 +473,9 @@ def test_every_case_a_rule_can_name_has_wording():
     onto = lambda w: Word('y')
     g = G({a: states(['y'], ['u']), b: toy([], ['x'])})
     seen(refusals(SetOwnsInside(a, ()), G({a: driven(['y'], ['u'])})))  # a driven node derives it: not a choice
+    attached = dataclasses.replace(states(['y'], ['u']), driver=Ports())
+    seen(refusals(SetOwnsInside(a, ()), G({a: attached})))                   # it carries a driver
+    seen(refusals(Combine(a, (a, b), States), G({a: attached, b: states(['z'], ['w'])})))  # driven with bare
     seen(refusals(Rename(b, ((Word('nope'), Word('q')),)), g))          # a place it has not got
     seen(refusals(Cut(Word('free'), (b,), hat), g))                     # nothing produces it
     seen(refusals(Cut(Word('x'), (a,), onto), g))                       # the minted name is taken

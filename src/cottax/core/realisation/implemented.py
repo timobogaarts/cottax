@@ -12,7 +12,8 @@ from ...core import (
     RemoveAttribute, SetAttribute, with_attributes,
 )
 from ...core.frozen import OrderedMap, name_of
-from ..driven import DrivenNode, DriverContract, entry_for
+from ...core import is_driven
+from ...core.driven import DriverContract, entry_for
 
 
 class Implementation(Attribute):
@@ -26,7 +27,7 @@ class Implementation(Attribute):
     def fits(cls, value: object, node: NodeDefinition) -> bool:
         '''Something runs a function, or a condition node with a driver; a bare condition
         node takes a driver first (`Assign`).'''
-        return isinstance(node, (FunctionalNode, DrivenNode))
+        return isinstance(node, FunctionalNode) or is_driven(node)
 
     @classmethod
     def text(cls, value: object) -> str:
@@ -76,9 +77,9 @@ class ImplementDrivers[N: Label, V: Place](ComposedOp[N, V]):
     implementations : OrderedMap[type[DriverContract], object]
 
     def composed(self, graph: NestingGraph[N, V]) -> Sequence[GraphOp[N, V]]:
-        chosen = ((name, entry_for(self.implementations, node.contract, _NONE))
+        chosen = ((name, entry_for(self.implementations, node.driver.contract, _NONE))
                   for name in graph.nodes
-                  if isinstance(node := graph[name], DrivenNode) and not is_implemented(node))
+                  if is_driven(node := graph[name]) and not is_implemented(node))
         return (Implement(OrderedMap((name, i) for name, i in chosen if i is not _NONE)),)
 
     def __repr__(self) -> str:

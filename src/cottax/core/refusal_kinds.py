@@ -13,6 +13,7 @@ from .maths.executable import (
 from .maths.graph import (
     OwnAroundOwner, OwnedTwice, OwnerInsideRead, OwnInsideOwner, ReadInsideOwner,
 )
+from .maths.conditional import DrivenOnOneSide
 from .maths.kinds import OwnsNothing, ReadOnBothSides, StatesNothing
 from .maths.nesting import (
     BlockTooSmall, BoxOwnsNothing, NestingLoop, NodeInTwoBlocks, NotAnEncloser, SelfNested, Unbound,
@@ -20,7 +21,7 @@ from .maths.nesting import (
 )
 from .maths.plan.ops import (
     AlreadyCut, AttributeAlreadySet, AttributeNotSet, DoesNotRead, NoAttributeNamed,
-    NoReaders, NotProduced, NotRenamed, OwnedInsideTwice, OwnsInsideNotAChoice,
+    NoReaders, NotProduced, NotRenamed, OwnedInsideTwice, OwnsInsideDriven, OwnsInsideNotAChoice,
 )
 from .maths.plan.primitive import (
     AlreadyNested, CarriesAttributes, NameTaken, NodeTwice, NotAddable, NotBound,
@@ -36,11 +37,11 @@ __all__ = [
     'Constant', 'NoProblem', 'OutsideCycle', 'OwnReadInsideCycle', 'ReadInsideCycle',
     'RequirementUnanswered', 'SeveralOutermost', 'StillCyclic',
     'OwnAroundOwner', 'OwnedTwice', 'OwnerInsideRead', 'OwnInsideOwner', 'ReadInsideOwner',
-    'OwnsNothing', 'ReadOnBothSides', 'StatesNothing',
+    'DrivenOnOneSide', 'OwnsNothing', 'ReadOnBothSides', 'StatesNothing',
     'BlockTooSmall', 'BoxOwnsNothing', 'NestingLoop', 'NodeInTwoBlocks', 'NotAnEncloser',
     'SelfNested', 'Unbound', 'Unreachable',
     'AlreadyCut', 'DoesNotRead', 'NoReaders', 'NotProduced', 'NotRenamed', 'OwnedInsideTwice',
-    'OwnsInsideNotAChoice',
+    'OwnsInsideDriven', 'OwnsInsideNotAChoice',
     'AttributeAlreadySet', 'AttributeNotSet', 'NoAttributeNamed',
     'CarriesAttributes',
     'AlreadyNested', 'NameTaken', 'NodeTwice', 'NotAddable', 'NotBound', 'NotNested',

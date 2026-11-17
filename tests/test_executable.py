@@ -11,7 +11,8 @@ from cottax.core.maths import steps as stepped
 from cottax.relational import Min, Objective
 from cottax.core.maths.executable import ExecutableGraph
 from cottax.core.maths.steps import SteppedExecutableGraph
-from cottax.core.driven import Assign, DriverContract
+from cottax.core.driven import Assign
+from cottax.core.driven import DriverContract
 from cottax.consumers.execution import CallableGraph, run
 from cottax.consumers.execution.interface import DriverImplementation
 from cottax.core.realisation import Implement, ImplementDrivers, implemented, is_implemented
@@ -336,7 +337,7 @@ def test_a_driven_block_still_says_what_makes_its_answer_right(two_problems):
     blocking = ExecutableGraph(graph)
     assert problem_type_of(blocking[N('ha')]) == 'root-find'
     assert [e.problem for e in entries(ExecutableGraph(graph.subgraph([N('fa'), N('ha')])).graph)] == [N('ha')]
-    assert is_root_find(graph[N('ha')].condition)
+    assert is_root_find((graph[N('ha')]).condition)
 
 
 def test_a_blocking_is_executable_by_construction(uncut):

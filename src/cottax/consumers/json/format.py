@@ -10,8 +10,8 @@ from ...core import (
     answer_for_labels, answer_for_places,
 )
 from ...core.frozen import Frozen, OrderedMap, answer, answered, answers, checked, dotted, violations
-from ...core import with_attributes
-from ...core.driven import Driven
+from ...core import Condition, ConditionalNode, is_driven, kind_of, with_attributes
+from ...core.driven import Driver
 from ...core.realisation import Implementation, implementation_of, implemented
 
 
@@ -26,6 +26,10 @@ FORMAT, VERSION = 'cottax.graph', 1
 
 IMPLEMENTED = 'implemented'
 '''The kind a node carrying what runs it is written as: the bare node, and the implementation.'''
+
+DRIVEN = 'driven'
+'''The kind a condition node carrying a driver is written as: the condition without it, the
+contract as a value, and each slot with its role's name.'''
 
 def loaded(name: str) -> object:
     '''What `module:qualname` names, among the modules already imported: a file imports
@@ -153,12 +157,26 @@ class NodeWriter[N: Label, V: Place](Frozen):
                 return bare
             return {'kind': IMPLEMENTED, 'node': bare,
                     'implementation': self.implementation(implementation_of(node))}
-        if (spelling := answer(Spelling, node, None)) is None:
-            raise self.refuse(dotted(type(node)),
+        if is_driven(node):
+            return {'kind': DRIVEN, **self.driver(node)}
+        subject = kind_of(node)                 # a condition node is spelled by its condition
+        if (spelling := answer(Spelling, subject, None)) is None:
+            raise self.refuse(dotted(type(subject)),
                               'no spelling is registered for its class: import the module that '
                               'registers one (a feature registers its own when its `consumers` '
                               'is imported)')
-        return {'kind': spelling.kind, **spelling.write(node, self)}
+        return {'kind': spelling.kind, **spelling.write(subject, self)}
+
+    def driver(self, node: NodeDefinition[V]) -> dict:
+        '''A driven node: the condition without its driver, then the driver.'''
+        driver = node.driver
+        def slots(roles: tuple[type, ...], slotted: tuple[tuple[V, ...], ...]) -> list:
+            return [{'role': role.__qualname__, 'places': self.places(ps)}
+                    for role, ps in zip(roles, slotted)]
+        return {'condition': self.node(dataclasses.replace(node, driver=None)),
+                'contract': self.value(driver.contract),
+                'data': slots(driver.contract.takes, driver.data),
+                'reports': slots(driver.contract.reports, driver.reports)}
 
     def implementation(self, obj: object) -> dict:
         '''By name, or a dataclass as a value.'''
@@ -199,9 +217,21 @@ class NodeReader[N: Label, V: Place](Frozen):
     def node(self, data: dict) -> NodeDefinition[V]:
         if data['kind'] == IMPLEMENTED:
             return implemented(self.node(data['node']), self.implementation(data['implementation']))
+        if data['kind'] == DRIVEN:
+            return self.driven(data)
         if (spelling := by_word(Spelling, 'kind').get(data['kind'])) is None:
             raise UnknownKind(self.name, data['kind']).raised
-        return spelling.read(data, self)
+        read = spelling.read(data, self)
+        return ConditionalNode(read) if isinstance(read, Condition) else read
+
+    def driven(self, data: dict) -> NodeDefinition[V]:
+        contract = self.value(data['contract'])
+        for which, roles in (('data', contract.takes), ('reports', contract.reports)):
+            if [s['role'] for s in data[which]] != [role.__qualname__ for role in roles]:
+                raise Inconsistent(self.name, which).raised
+        return dataclasses.replace(self.node(data['condition']), driver=Driver(
+            contract, tuple(self.places(s['places']) for s in data['data']),
+            tuple(self.places(s['places']) for s in data['reports'])))
 
     def implementation(self, data: dict) -> object:
         return self.resolve(data['ref']) if 'ref' in data else self.value(data)
@@ -246,24 +276,3 @@ class FunctionSpelling(Spelling[FunctionalNode]):
         return FunctionalNode(r.places(data['reads']), r.places(data['owns']))
 
 
-@answers(Driven)
-class DrivenSpelling(Spelling[Driven]):
-    '''The condition, the driver as a value, and each slot with its role's name.'''
-
-    kind = 'driven'
-
-    def write[V: Place](self, node: Driven[V], w: Writer[Any, V]) -> dict:
-        def slots(roles: tuple[type, ...], slotted: tuple[tuple[V, ...], ...]) -> list:
-            return [{'role': role.__qualname__, 'places': w.places(ps)} for role, ps in zip(roles, slotted)]
-        return {'condition': w.node(node.condition), 'contract': w.value(node.contract),
-                'data': slots(node.contract.takes, node.data),
-                'reports': slots(node.contract.reports, node.reports)}
-
-    def read[V: Place](self, data: dict, r: Reader[Any, V]) -> Driven[V]:
-        driver = r.value(data['contract'])
-        for which, roles in (('data', driver.takes), ('reports', driver.reports)):
-            if [s['role'] for s in data[which]] != [role.__qualname__ for role in roles]:
-                raise Inconsistent(r.name, which).raised
-        return Driven(r.node(data['condition']), driver,
-                      tuple(r.places(s['places']) for s in data['data']),
-                      tuple(r.places(s['places']) for s in data['reports']))

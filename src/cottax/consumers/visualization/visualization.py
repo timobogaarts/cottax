@@ -8,7 +8,7 @@ from __future__ import annotations
 import networkx as nx
 
 from ...core import ExecutableGraph, NestingGraph, Plan
-from ...core.driven import is_driven
+from ...core import is_driven
 from ...core.realisation import is_implemented
 from .lookup import spelling
 from .sequencing import Block, graph_drawn, walk

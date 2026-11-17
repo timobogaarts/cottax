@@ -9,7 +9,7 @@ from abc import abstractmethod
 from typing import Any
 
 from ...core.frozen import AbstractVar, Answer, Choice
-from ...core import ConditionalNode, Label, Mint, Place
+from ...core import AbstractConditionalNode, Condition, Label, Mint, Place
 from .interface_types import Drawn, Notation, Text
 
 
@@ -18,7 +18,9 @@ from .interface_types import Drawn, Notation, Text
 class NodeDrawing(Answer):
     '''How a condition node is drawn.'''
 
-    about = ConditionalNode
+    about = (Condition, AbstractConditionalNode)
+    '''A condition node is answered by its condition's class; a node kind with no
+    condition by its own.'''
 
     @abstractmethod
     def drawn(self, node: Any) -> Drawn:

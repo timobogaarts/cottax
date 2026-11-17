@@ -22,11 +22,11 @@ from cottax.relational.relational_condition import (
     FixedAndMoved, FixedRelation, NotARel, ParameterUnrelated, RelatesNothing,
 )
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core import FunctionalNode, enclosers, violations
+from cottax.core import ConditionalNode, FunctionalNode, enclosers, violations
 from cottax.core.maths.definition import ReadsOwn
 from cottax.core.maths.kinds import ReadOnBothSides
 from cottax.core.realisation import implemented
-from cottax.core.driven import Driven
+from cottax.core.driven import driven as with_driver
 from cottax.relational.contracts import RootFinding, is_iteration
 from cottax.assemblies.jax import absolute
 
@@ -121,7 +121,7 @@ def test_zero_on_the_left_is_a_root_find_like_zero_on_the_right():
     # side -- an artefact of that test, and a word the paper keeps for an inequality.
     c = RelationalCondition((Relation(None, v('r'), Eq),), (), (v('u'),), ())
     assert is_root_find(c) and not is_fixed_point(c) and not is_feasibility(c)
-    assert problem_type_of(c) == 'root-find'
+    assert problem_type_of(ConditionalNode(c)) == 'root-find'
 
 
 def test_an_operator_is_a_marker_and_never_a_value():
@@ -235,7 +235,7 @@ def test_a_statement_relabels_relations_objectives_and_unknowns():
     (RelationalCondition((Relation(v('g1'), None, Le),), (), (v('u'),), ()), 'feasibility'),
 ])
 def test_a_shape_is_read_off_the_relations(statement, shape):
-    assert problem_type_of(statement) == shape
+    assert problem_type_of(ConditionalNode(statement)) == shape
 
 
 def test_each_predicate_says_what_it_says():
@@ -265,7 +265,7 @@ def test_a_statement_with_no_unknowns_has_no_shape_yet():
     req = stated(Relation(v('r'), None, Eq))
     assert not any(p(req) for p in (is_root_find, is_fixed_point, is_optimise,
                                     is_feasibility, is_unconstrained_optimise))
-    assert problem_type_of(req) == 'stated'
+    assert problem_type_of(ConditionalNode(req)) == 'stated'
 
 
 def test_a_statement_matching_no_shape_is_declared():
@@ -341,30 +341,29 @@ def test_a_shape_reads_the_operators_and_the_sides_and_counts_nothing():
     # nothing about the system being square -- that is a fact about the values, and the
     # driver that inverts them refuses it per solve.
     two = root_find((v('r'), v('s')), (v('u'),))
-    assert is_root_find(two) and is_equalities(two) and problem_type_of(two) == 'root-find'
+    assert is_root_find(two) and is_equalities(two) and problem_type_of(ConditionalNode(two)) == 'root-find'
 
 
 def test_a_shape_predicate_answers_false_off_a_relational_condition():
     """
-    A function, or a driven node, has no relations to read: every predicate answers
-    False, and a drawing gives it no category.
+    A function has no relations to read: every predicate answers False, and a drawing
+    gives it no category. (A driven node is its condition, so it answers as that does.)
     """
     body = implemented(FunctionalNode((v('u'),), (v('r'),)), lambda u: u)
-    driven = Driven(root_find((v('r'),), (v('u'),)), RootFinding(steps=False),
-                    ((purposes.Start()(v('u')),),), ())
-    for node in (body, driven):
+    for node in (body,):
         for p in (is_root_find, is_fixed_point, is_optimise, is_feasibility, is_equalities,
                   is_unconstrained_optimise, is_constrained_optimise, is_iteration):
             assert p(node) is False
     assert problem_type_of(body) is None
 
 
-def test_a_shape_predicate_reads_through_a_driven_node():
-    """A driven node's shape is its condition's, so it is the same before and after
-    `Assign`; a drawing reads through, a predicate is asked of the condition."""
-    driven = Driven(root_find((v('r'),), (v('u'),)), RootFinding(steps=False),
-                    ((purposes.Start()(v('u')),),), ())
-    assert is_root_find(driven.condition) and problem_type_of(driven) == 'root-find'
+def test_a_driven_nodes_shape_is_its_conditions():
+    """A shape is read off a condition, and a driven node keeps its condition as it was, so
+    its shape is the same before and after `Assign`: a drawing asks the node's condition."""
+    driven = with_driver(root_find((v('r'),), (v('u'),)), RootFinding(steps=False),
+                         ((purposes.Start()(v('u')),),), ())
+    assert is_root_find(driven.condition)
+    assert problem_type_of(driven) == 'root-find'
 
 
 # ---------------------------------------------------------------- the join
@@ -386,36 +385,42 @@ def test_the_join_refuses_anything_but_a_relational_condition_on_either_side():
     should answer the join cannot be read off the two (two driven alike join, in
     `test_driven_join`). A node with no `__add__` already raises, so a function says so by
     not implementing it."""
-    plain  = root_find((v('r'),), (v('u'),))
-    driven = Driven(root_find((v('r2'),), (v('x'),)), RootFinding(steps=False),
-                    ((purposes.Start()(v('x')),),), ())
+    plain  = ConditionalNode(root_find((v('r'),), (v('u'),)))
+    driven = with_driver(root_find((v('r2'),), (v('x'),)), RootFinding(steps=False),
+                         ((purposes.Start()(v('x')),),), ())
     body   = implemented(FunctionalNode((v('u'),), (v('r'),)), lambda u: u)
-    for a, b in ((plain, driven), (driven, plain), (body, body),
-                 (optimise(v('f'), (v('x'),)), driven)):
-        with pytest.raises(TypeError, match='unsupported operand'):
+    with pytest.raises(TypeError, match='unsupported operand'):
+        body + body
+    for a, b in ((plain, driven), (driven, plain), (ConditionalNode(optimise(v('f'), (v('y'),))), driven)):
+        with pytest.raises(ValueError, match='one is driven and one is not'):
             a + b
 
 
 def test_driven_join():
     """Two problems driven alike join under that contract: the conditions by their own `+`,
     a per-unknown role at each unknown's place, a per-problem one at the one place both take.
-    Two contracts, or a per-problem role at two places, are refused."""
-    from cottax.core.driven.nodes import DriversDiffer, RoleAtTwoPlaces
+    Two contracts, a per-problem role at two places, or a driven node and a bare one are
+    refused."""
+    from cottax.core.refusal_kinds import DrivenOnOneSide
+    from cottax.core.driven.driver import DriversDiffer, RoleAtTwoPlaces
     start = purposes.Start()
     def driven(r, u, steps=None):
         contract = RootFinding(steps=steps is not None)
-        return Driven(root_find((v(r),), (v(u),)), contract, ((start(v(u)),),),
-                      ((v(steps),),) if steps else ())
+        return with_driver(root_find((v(r),), (v(u),)), contract, ((start(v(u)),),),
+                           ((v(steps),),) if steps else ())
     joined = driven('r1', 'u1') + driven('r2', 'u2')
-    assert joined == Driven(root_find((v('r1'), v('r2')), (v('u1'), v('u2'))),
-                            RootFinding(steps=False), ((start(v('u1')), start(v('u2'))),), ())
-    assert (driven('r1', 'u1', 'n') + driven('r2', 'u2', 'n')).reports == ((v('n'),),)
+    assert joined == with_driver(root_find((v('r1'), v('r2')), (v('u1'), v('u2'))),
+                                 RootFinding(steps=False), ((start(v('u1')), start(v('u2'))),), ())
+    assert (driven('r1', 'u1', 'n') + driven('r2', 'u2', 'n')).driver.reports == ((v('n'),),)
     with pytest.raises(ValueError) as refused:
         driven('r1', 'u1') + driven('r2', 'u2', 'n')
     assert refused.value.violation == DriversDiffer(RootFinding(steps=False), RootFinding(steps=True))
     with pytest.raises(ValueError) as refused:
         driven('r1', 'u1', 'n') + driven('r2', 'u2', 'm')
     assert refused.value.violation == RoleAtTwoPlaces('Steps', (v('n'),), (v('m'),))
+    with pytest.raises(ValueError) as refused:
+        driven('r1', 'u1') + ConditionalNode(root_find((v('r2'),), (v('u2'),)))
+    assert type(refused.value.violation) is DrivenOnOneSide
 
 
 # ---------------------------------------------------------------- running is refused

@@ -22,7 +22,8 @@ from cottax.assemblies.jax import flat
 from cottax.consumers.execution import CallableGraph, run
 from cottax.consumers.execution.interface_types import Posed
 from cottax.core import FunctionalNode, GraphWithValues
-from cottax.core.driven import Driven, PerProblem, Role, Start, Steps, role_slots
+from cottax.core.driven import driven, Start, Steps, role_slots
+from cottax.core.driven import PerProblem, Role
 from cottax.core.frozen import OrderedMap
 from cottax.core.realisation import implemented
 from cottax.pytree.path import NodePath, VarPath
@@ -57,7 +58,7 @@ def call(reads, owns, fn) -> 'FunctionalNode':
 
 
 def optimise(objective, design, relations, implementation, bounded=False, steps=False,
-             contract=None, reports=None) -> 'Driven':
+             contract=None, reports=None) -> 'ConditionalNode':
     unknowns   = tuple(V(d) for d in design)
     parameters = tuple(b(u) for u in unknowns for b in (LOWER, UPPER)) if bounded else ()
     bounds     = tuple(r for u in unknowns for r in (Relation(LOWER(u), u, Le),
@@ -65,7 +66,7 @@ def optimise(objective, design, relations, implementation, bounded=False, steps=
     condition  = RelationalCondition(tuple(relations) + bounds, (Objective(V(objective), Min),),
                                      unknowns, parameters)
     return implemented(
-        Driven(condition, contract or ConstrainedMinimisation(steps=steps),
+        driven(condition, contract or ConstrainedMinimisation(steps=steps),
                (tuple(STARTS(u) for u in unknowns),),
                reports if reports is not None else (((V('n'),),) if steps else ())),
         implementation)
@@ -394,7 +395,7 @@ def test_unknowns_under_a_jit_is_in_the_models_units_and_retraces_for_no_scale()
         return (x - 3.0) ** 2
 
     condition = RelationalCondition((), (Objective(V('f'), Min),), (V('x'),), ())
-    implementation = implemented(Driven(condition, ConstrainedMinimisation(steps=False, scaled=True),
+    implementation = implemented(driven(condition, ConstrainedMinimisation(steps=False, scaled=True),
                                               ((STARTS(V('x')),), (V('s'),)), ()), Asks(ask=ask))
     go = eqx.filter_jit(traced_run)
     nodes = {N('m'): call(['x'], ['f'], model), N('opt'): implementation}
@@ -605,7 +606,7 @@ def idf(driver, M):
 def idf_scaling(ran, M):
     '''An unknown and its coupling each in units of `M`.'''
     (_, problem, _), = role_slots(ran.graph, cx.Scales)
-    condition = ran.graph[problem].condition
+    condition = (ran.graph[problem]).condition
     column = {u: jnp.asarray(M if 'y2' in str(u) else 1.0) for u in condition.unknowns}
     rows = OrderedMap((r, column[s]) for r in programme(condition).equalities
                       for s in (r.lhs, r.rhs) if s in condition.unknowns)

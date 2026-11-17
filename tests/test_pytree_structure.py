@@ -13,7 +13,7 @@ from jax.tree_util import DictKey
 
 from cottax.core import FunctionalNode
 from cottax.core.frozen import OrderedMap
-from cottax.core.driven import Driven
+from cottax.core.driven import driven
 from cottax.relational.contracts import RootFinding
 from cottax.core.driven import Start
 import cottax.assemblies.jax as cx
@@ -53,7 +53,7 @@ def square(start=START(V('u'))) -> CallableGraph:
     return CallableGraph(graph_of({
         N('res'): implemented(FunctionalNode((V('u'), V('z')), (V('r'),)),
                                       lambda u, z: u * u - z),
-        N('h')  : implemented(Driven(condition, RootFinding(steps=False),
+        N('h')  : implemented(driven(condition, RootFinding(steps=False),
                                            ((start,),), ()),
                                     Newton(rtol=1e-10, atol=1e-10)),
     }))

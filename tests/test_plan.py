@@ -130,9 +130,9 @@ def test_a_definition_that_cannot_rename_itself_cannot_exist():
     -- a wrong answer rather than an error. That bug shipped once here, for a field
     holding a tuple of definitions. Asked as an abstract method, it is unrepresentable.
     """
-    from cottax.core import ConditionalNode
+    from cottax.core import Condition
 
-    class Forgetful(ConditionalNode):
+    class Forgetful(Condition):
         inputs  : tuple = ()
         outputs : tuple = ()
 

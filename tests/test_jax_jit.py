@@ -94,7 +94,7 @@ def test_what_a_solver_is_posed_hashes_at_every_depth():
         assert isinstance(step.interior, JitGraph)
         node = holder[step.problem]
         conditions = InteriorConditionMap.posing(node, step.interior)
-        hash(Posed(node.condition, node.contract.reports, conditions,
+        hash(Posed(node.condition, node.driver.contract.reports, conditions,
                    conditions.context_places))
 
 
