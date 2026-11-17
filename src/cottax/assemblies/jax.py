@@ -1,5 +1,5 @@
 '''
-The shipped assembly: pytree places, the relational and ode languages, the jax solvers and the
+The shipped assembly: pytree places, the relational, ode and doe languages, the jax solvers and the
 drawings; its surface, its defaults and the joins between consumers.
 '''
 
@@ -36,8 +36,13 @@ from ..ode.contracts import (
     CONTRACTS as _ODE_CONTRACTS, Integration, Integrator, Times, Trajectory,
 )
 from ..ode.consumers.declaration import OdeDeclaring, Rate
+from ..doe import DoeCondition, Recorded, Varied
+from ..doe.contracts import CONTRACTS as _DOE_CONTRACTS, Sampler, Sampling
+from ..doe.consumers.declaration import DoeDeclaring, Sample
+from ..doe.consumers.execution import JaxDoe
 # The answers the shipped place and language register.
 from ..ode import consumers as _ode_answers  # noqa: F401
+from ..doe import consumers as _doe_answers  # noqa: F401
 from ..pytree import consumers as _pytree_answers  # noqa: F401
 from ..relational import consumers as _relational_answers  # noqa: F401
 from ..relational.consumers.architectures import FixedPointClosing
@@ -62,6 +67,7 @@ from ..consumers.surface import interface_types as _surface_mints
 from ..consumers.declaration.interface_types import Solve as _Solve
 from ..relational import mints as _relational_mints
 from ..ode import mints as _ode_mints
+from ..doe import mints as _doe_mints
 from ..consumers.surface.interface import Editing, Locator, Part
 from ..consumers.visualization import (
     DARK, PYXDSM, STYLES, TERRACOTTA, PlainFormat, Style, by_namespace, draw as _draw,
@@ -71,7 +77,7 @@ from ..consumers.visualization import (
 from ..consumers.visualization.latex import LatexFormatter
 
 
-CONTRACTS = (*_RELATIONAL_CONTRACTS, *_ODE_CONTRACTS)
+CONTRACTS = (*_RELATIONAL_CONTRACTS, *_ODE_CONTRACTS, *_DOE_CONTRACTS)
 '''The default contracts, every shipped language's: an implementation answers a problem by the
 first one it implements.'''
 
@@ -80,7 +86,7 @@ SCALED = (ConstrainedMinimisation(steps=False, scaled=True), *CONTRACTS)
 its `Scaling` a value like a start's, `flat.run(model, {Scales: {'z': flat.scaling(...)}})`.'''
 
 @choice(Part)
-class ShippedSurface(RelationalDeclaring, OdeDeclaring, RelationalEditing, Architecting,
+class ShippedSurface(RelationalDeclaring, OdeDeclaring, DoeDeclaring, RelationalEditing, Architecting,
                      Driving, Running):
     '''The surface a study writes through: every shipped part, at the pair's defaults.'''
 
@@ -124,6 +130,7 @@ rate, initial, span, kinks, jumps, times, trajectory = (
     Purpose(m) for m in (_ode_mints.Rate(), _ode_mints.Initial(), _ode_mints.Span(),
                          _ode_mints.Kinks(), _ode_mints.Jumps(), _ode_mints.Times(),
                          _ode_mints.Trajectory()))
+points, record = (Purpose(m) for m in (_doe_mints.Points(), _doe_mints.Record()))
 '''Each shipped purpose, called on a name as written for the name derived from it:
 `cx.copy('y_2')` is `^copy['y_2']`, `cx.solve('f')` the problem named after `f`,
 `cx.given.beside('y', 'k')` a read written as a value.'''
@@ -183,6 +190,7 @@ __all__ = [
     'Mint', 'Copy', 'Closure', 'Purpose',
     'copy', 'closure', 'given', 'start', 'steps', 'solve', 'cond', 'require', 'lower', 'upper',
     'target', 'scales', 'rate', 'initial', 'span', 'kinks', 'jumps', 'times', 'trajectory',
+    'points', 'record',
     'Locator', 'Conventions', 'Shipped', 'PytreeLocator', 'Under', 'InFull',
     'Scope', 'flat', 'absolute', 'Declared', 'tags_of',
     'Static', 'DictKey', 'GetAttrKey', 'SequenceKey',
@@ -197,6 +205,7 @@ __all__ = [
     'SCALED', 'Scales', 'Scaling', 'scaled', 'scaled_unknowns', 'unscaled_unknowns',
     'OdeDeclaring', 'Rate', 'Dt', 'OdeCondition', 'Integration', 'Integrator',
     'Times', 'Trajectory',
+    'DoeDeclaring', 'Sample', 'DoeCondition', 'Varied', 'Recorded', 'Sampler', 'Sampling', 'JaxDoe',
     'Newton', 'Picard', 'BFGS', 'ScipyMinimize', 'HostMinimiser', 'HostProblem',
     'canonical', 'box', 'Box', 'NotSquare', 'JitGraph',
     'Running', 'Results', 'Inputs', 'Traced', 'Start', 'Driven', 'CallableGraph', 'completed',
