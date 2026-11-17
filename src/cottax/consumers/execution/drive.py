@@ -6,7 +6,7 @@ from collections.abc import Callable
 from ...core import Graph, ComposedOp, GraphOp
 from ...core.frozen import OrderedMap
 from ...core.driven import Assign
-from ...core import is_driven, kind_of
+from ...core import conditions, is_driven, kind_of
 from ...core.driven import DriverContract
 from ...core.realisation import Implement, is_implemented
 from .interface import DriverImplementation
@@ -26,10 +26,10 @@ class Drive(ComposedOp):
     places          : Callable[[object, tuple, DriverContract], tuple[tuple, tuple]]
 
     def composed(self, graph: Graph) -> tuple[GraphOp, ...]:
-        undriven = {p for p in graph.enclosers if not is_driven(graph[p])}
+        undriven = {p for p in conditions(graph.definitions) if not is_driven(graph[p])}
         picked = OrderedMap((p, self.chosen(p, node) if p in undriven
                              else self.covering(p, node.driver.contract))
-                            for p in graph.enclosers
+                            for p in conditions(graph.definitions)
                             if not is_implemented(node := graph[p]))
         def assigned(p, implementation: DriverImplementation) -> Assign:
             driver = self.contract_for(implementation)

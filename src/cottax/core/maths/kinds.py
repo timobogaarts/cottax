@@ -82,15 +82,15 @@ class AbstractConditionalNode[V: Place](NodeDefinition[V]):
 
 
 # ---------------------------------------------------------------- the predicates
-def is_encloser(d: object) -> bool:
-    """An encloser: a condition node that owns something inside, and so has a cycle around
-    it -- a solve, an integration. n ∊ N_P = {n ∊ N_C : O^in_n ≠ ∅}."""
-    return isinstance(d, AbstractConditionalNode) and bool(d.owns_inside)
+def owns_inside[V: Place](d: object) -> tuple[V, ...]:
+    """What a node hands to the cycle around it (if a AbstractConditionalNode)
+    n ∊ N_P = {n ∊ N_C : O^in_n ≠ ∅}."""
+    return d.owns_inside if isinstance(d, AbstractConditionalNode) else ()
 
 
-def enclosers[N: Label](definitions: Mapping[N, NodeDefinition]) -> tuple[N, ...]:
-    """The enclosers among `definitions`, in the order given."""
-    return tuple(n for n, d in definitions.items() if is_encloser(d))
+def conditions[N: Label](definitions: Mapping[N, NodeDefinition]) -> tuple[N, ...]:
+    """The condition nodes among `definitions`, in the order given."""
+    return tuple(n for n, d in definitions.items() if isinstance(d, AbstractConditionalNode))
 
 
 # ----------------------------------------------------------------- violation finals

@@ -4,7 +4,8 @@
 Names are built by hand from key entries, as everywhere below the declaration surface.
 '''
 
-from cottax.core import NodeRules, Rules, is_proved, prove, steps, unproved, dependencies
+from cottax.core import nesting
+from cottax.core import Rules, each_node, is_proved, prove, steps, unproved, dependencies
 
 import pytest
 from jax.tree_util import GetAttrKey
@@ -26,7 +27,7 @@ from cottax.relational import (
 )
 from cottax.consumers.architectures import Combine
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core import FunctionalNode, enclosers
+from cottax.core import FunctionalNode, conditions
 import purposes
 from graphs import graph_of
 from cottax.core.maths.graph import Graph
@@ -152,9 +153,13 @@ def test_every_interior_at_every_depth_is_proved_executable_and_holds_nothing_el
     '''Every interior is proved executable. Nothing else proved of the whole is copied to
     it: an interior is a value of its own, and what holds of each node of the whole is asked
     of it -- and holds -- where it is needed.'''
-    each = NodeRules('Each')
-    stronger = Rules('Stronger', implies=(ExecutableGraph, each))
-    mda, = [n for n in enclosers(mdf.definitions) if n != N('opt')]
+    class Each(Rules):
+        rules = (each_node(lambda name, node: iter(())),)
+
+    class Stronger(ExecutableGraph, Each):
+        pass
+    each, stronger = Each, Stronger
+    mda, = [n for n in conditions(mdf.definitions) if n != N('opt')]
     for graph in (sellar, two_solves, (Plan(mdf) + Nest(mda, N('opt'))).graph,
                   (Plan(mdf) + Nest(N('opt'), mda)).graph):
         prove(graph, stronger)
@@ -214,7 +219,7 @@ def driven(graph, *ops, implementations=OrderedMap({SelfStarting: Subtract()})) 
     plan = Plan(graph)
     for op in ops:
         plan = plan + op
-    if any(not is_implemented(plan.graph[n]) for n in enclosers(plan.graph.definitions)):
+    if any(not is_implemented(plan.graph[n]) for n in conditions(plan.graph.definitions)):
         plan = plan + ImplementDrivers(implementations)
     return plan.graph
 
@@ -415,7 +420,7 @@ def mdf():
 def test_either_problem_may_be_the_outer_one(mdf):
     '''Both orderings are structurally legal, which is why nesting is *stated* -- on the
     graph, by `Nest`, and read from there.'''
-    mda, = [n for n in enclosers(mdf.definitions) if n != N('opt')]
+    mda, = [n for n in conditions(mdf.definitions) if n != N('opt')]
 
     outer_opt = (Plan(mdf) + Nest(mda, N('opt'))).graph
     prove(outer_opt, ExecutableGraph)
@@ -442,11 +447,11 @@ def test_a_problem_in_no_cycle_of_its_block_cannot_be_answered_there():
 
 def test_enclosing_walks_up_the_forest(mdf):
     '''`enclosing(q)` is every problem `q` is nested in, empty before anything is nested.'''
-    assert mdf.enclosing(N('opt')) == () and mdf.enclosing(MDA) == ()
+    assert nesting(mdf).enclosing(N('opt')) == () and nesting(mdf).enclosing(MDA) == ()
     nested = (Plan(mdf) + Nest(MDA, N('opt'))).graph
-    assert nested.enclosing(MDA) == (N('opt'),) and nested.enclosing(N('opt')) == ()
-    with pytest.raises(ValueError, match='not a problem'):
-        nested.enclosing(N('D1'))
+    assert nesting(nested).enclosing(MDA) == (N('opt'),) and nesting(nested).enclosing(N('opt')) == ()
+    with pytest.raises(ValueError, match='owns nothing inside'):
+        nesting(nested).enclosing(N('D1'))
 
 
 def test_a_level_exists_only_where_a_statement_encloses_another(mdf):
@@ -465,7 +470,7 @@ def test_a_level_exists_only_where_a_statement_encloses_another(mdf):
 def test_a_level_answers_one_problem(mdf):
     # A problem has one enclosing iteration, so `within` cannot key it twice.
     nested = (Plan(mdf) + Nest(MDA, N('opt'))).graph
-    mda, = [n for n in enclosers(nested.definitions) if n != N('opt')]
+    mda, = [n for n in conditions(nested.definitions) if n != N('opt')]
     with pytest.raises(ValueError, match='already answered inside'):
         Plan(nested) + Nest(mda, N('opt'))
 

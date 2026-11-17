@@ -10,9 +10,9 @@ from functools import cached_property
 from typing import Callable
 
 from ..frozen import Frozen, PerLevel, Violation, first
-from ..maths.dependencies import WellFormed
+from ..maths.wellformed import WellFormed
 from ..maths.graph import Graph
-from ..maths.rules import Group, prove
+from ..maths.rules import Rules, prove
 from ..maths.places import Label, Place
 
 
@@ -35,7 +35,7 @@ class GraphOp[N: Label, V: Place](Frozen):
     checks_graph : PerLevel[tuple[Callable, ...]] = ()
     '''`(op, graph) -> Iterator[Violation]`: collected by `refusals`, raised by `apply`.'''
 
-    def apply[G: Graph[N, V]](self, graph: G, keeps: 'Group | None' = WellFormed) -> G:
+    def apply[G: Graph[N, V]](self, graph: G, keeps: type[Rules] | None = WellFormed) -> G:
         '''Refuse, or return the graph with this op applied. `keeps` is proved of the graph
         and of the result, so an op that breaks it is refused here, and not wherever the
         graph is next read; remembered, so a graph an op left costs the next op nothing.

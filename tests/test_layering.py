@@ -147,7 +147,6 @@ def test_core_refusals_holds_every_kind_the_maths_defines():
 
 
 REMEMBERED = {
-    ('cottax.core.maths.rules', 'closure'),
     ('cottax.core.maths.rules', 'proofs'),
     ('cottax.core.maths.dependencies', 'dependencies'),
     ('cottax.core.maths.nesting', 'nesting'),

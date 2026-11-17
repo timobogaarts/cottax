@@ -24,7 +24,7 @@ from cottax.relational.relational_condition import (
     FixedAndMoved, FixedRelation, NotARel, ParameterUnrelated, RelatesNothing,
 )
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core import ConditionalNode, FunctionalNode, enclosers, violations
+from cottax.core import ConditionalNode, FunctionalNode, owns_inside, violations
 from cottax.core.maths.definition import ReadsOwn
 from cottax.core.maths.kinds import ReadOnBothSides
 from cottax.core.realisation import implemented
@@ -400,7 +400,7 @@ def test_combine_folds_relational_conditions_by_their_join_and_no_driven_one():
 
 def test_a_proof_refuses_a_statement_that_determines_nothing():
     g = graph_with(stated(Relation(v('r'), None, Eq)))
-    assert enclosers(g.definitions) == ()
+    assert not any(owns_inside(d) for d in g.definitions.values())     # a requirement only
     with pytest.raises(ValueError, match='holds .* against nothing'):
         prove(g, ExecutableGraph)
 

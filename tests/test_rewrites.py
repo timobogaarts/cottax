@@ -14,7 +14,7 @@ from jax.tree_util import GetAttrKey
 from cottax.core.frozen import OrderedMap
 from cottax.relational import Min, Objective
 from cottax.core.plan import Cut, Insert, Plan, refusals
-from cottax.core import Condition, ConditionalNode, FunctionalNode, body_of, enclosers, dependencies
+from cottax.core import Condition, ConditionalNode, FunctionalNode, body_of, conditions, dependencies
 from cottax.core.driven import Assign, driven as with_driver
 from cottax.core import is_driven
 from cottax.core.driven import DriverContract
@@ -134,7 +134,7 @@ def test_a_fixed_point_cut_is_one_node_and_stays_cyclic(looped):
     g = o(looped)
     assert names(g) == ['.d1', '.d2', '.obj', '^solve.y1']
     assert not dependencies(g).is_acyclic
-    assert enclosers(g.definitions) == (o.at,)
+    assert conditions(g.definitions) == (o.at,)
     assert is_fixed_point(g[o.at].condition)
     assert g[o.at].condition.relations == (Relation(o.copies[0], Y1, Eq),)   # `^copy.y1 = y1`
     assert g[o.at].owns == o.copies and g[o.at].reads == o.vars
@@ -521,7 +521,7 @@ def test_determine_names_the_unknowns_and_keeps_the_binding():
     assert p.graph.nodes == (N('m'), N('c'))            # in place: the binding did not move
     assert problem_type_of(p.graph[N('c')]) == 'root-find'
     assert p.graph[N('c')].condition.unknowns == (U,)
-    assert enclosers(p.graph.definitions) == (N('c'),)
+    assert conditions(p.graph.definitions) == (N('c'),)
 
 
 def test_determine_takes_no_target_type_because_the_shape_follows():

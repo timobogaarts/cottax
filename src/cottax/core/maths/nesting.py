@@ -12,7 +12,7 @@ from ..frozen import Frozen, OrderedMap, Violation, first, remembered
 from .definition import NodeDefinition
 from .dependencies import WellFormed, dependencies
 from .graph import Graph
-from .kinds import FunctionalNode, is_encloser
+from .kinds import FunctionalNode, owns_inside
 from .places import Label, Place
 from .rules import prove, proved
 
@@ -28,14 +28,10 @@ def check_nesting_ends_on_one_cycle(g: 'Graph') -> Iterator[Violation]:
 
     p ~ q  in  N \\ A(q)   ∀ (p, q) ∊ W       i.e.  p ∊ S_q, the cycle of q
 
-    A pair with an end unbound or not an encloser is skipped: those are other rules'.
-
-    Not a rule of `Graph`: nothing that reads a nesting needs it, so a plan may cut
+    Not a rule of `WellFormed`: nothing that reads a nesting needs it, so a plan may cut
     a nested pair apart and `Unnest` it after. `ExecutableGraph` asks it.
     '''
     for inner, outer in g.within.items():
-        if not all(e in g.definitions and is_encloser(g.definitions[e]) for e in (inner, outer)):
-            continue
         if inner not in nesting(g).cycle_of(outer):
             yield Unreachable(inner, outer)
 
@@ -74,19 +70,42 @@ class Nesting[N: Label, V: Place](Frozen):
     checks = (proved(WellFormed, at='graph'),)
 
     @cached_property
+    def outermost(self) -> tuple[N, ...]:
+        '''The nodes that iterate a cycle (own something inside) and are nested in none, in
+        binding order: what the whole graph answers by a solve of its own.'''
+        within = self.graph.within
+        return tuple(n for n, d in self.graph.definitions.items()
+                     if owns_inside(d) and n not in within)
+
+    def enclosing(self, problem: N) -> tuple[N, ...]:
+        '''What `problem` is nested in, transitively, innermost first: A(q), every node with
+        a path from q in (N_P, W). A forest (`WellFormed`), so the walk ends.'''
+        if problem not in self.graph.definitions:
+            raise KeyError(f'not a node of this graph: {problem!r}')
+        if not owns_inside(self.graph.definitions[problem]):
+            raise ValueError(f'{problem!r} owns nothing inside, so it is nested in nothing and '
+                             f'iterates nothing -- enclosing, cycle_of and interior are a problem\'s')
+        chain : list[N] = []
+        at = self.graph.within.get(problem)
+        while at is not None:
+            chain.append(at)
+            at = self.graph.within.get(at)
+        return tuple(chain)
+
+    @cached_property
     def _levels(self) -> dict[frozenset, Graph[N, V]]:
-        '''The graph with each set of enclosers taken out, built once per set: the enclosers
+        '''The graph with each set of problems taken out, built once per set: the problems
         nested alike share their level, and its dependencies.'''
         return {}
 
     def cycle_of(self, problem: N) -> tuple[N, ...]:
         '''
         The cycle `problem` is on, and itself: its strongly connected component in the
-        graph with the enclosers around it taken out, in binding order.
+        graph with what it is nested in taken out, in binding order.
 
         S_p = {k ∊ N \\ A(p) : k ~ p in N \\ A(p)}   (~ in the induced subgraph, not in G)
         '''
-        out = frozenset(self.graph.enclosing(problem))
+        out = frozenset(self.enclosing(problem))
         if (level := self._levels.get(out)) is None:
             level = self._levels[out] = self.graph.subgraph(set(self.graph.nodes) - out)
         deps  = dependencies(level)

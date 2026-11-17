@@ -11,7 +11,7 @@ from typing import Any, NamedTuple
 
 from ...core import Label, Graph, Place, Rules, answer_for_places, comparable, dependencies, prove
 from ...core.driven import role_slots
-from ...core import is_driven
+from ...core import conditions, is_driven
 from ...core.driven import PerUnknown
 from ...core.frozen import Frozen, OrderedMap
 from .interface import DataStructure
@@ -47,7 +47,7 @@ def slots[N: Label, V: Place](graph: Graph[N, V], at: Callable[[V], V]) -> tuple
     '''Every place a run of `graph` takes a value at, by what the caller calls it: each driver
     datum, also one it computes (a warm start), then each boundary input. A place two problems
     take is there twice.'''
-    roles = dict.fromkeys(r for n in graph.enclosers if is_driven(graph[n])
+    roles = dict.fromkeys(r for n in conditions(graph.definitions) if is_driven(graph[n])
                           for r in graph[n].driver.contract.takes)
     return (*(Slot(place, role, problem, unknown, None if unknown is None else at(unknown))
               for role in roles for place, problem, unknown in role_slots(graph, role)),
@@ -125,7 +125,7 @@ class Assessed[N: Label, V: Place](Frozen):
     '''
 
     graph      : Graph[N, V]
-    proof      : Rules
+    proof      : type[Rules]
     table      : tuple[Slot[V, N], ...]
     candidates : tuple[tuple[V, Any, str], ...]
     structures : Mapping[type, Any]

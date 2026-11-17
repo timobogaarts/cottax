@@ -1,67 +1,21 @@
 '''
 What follows from owns meeting reads: who owns each place, the edges, the components and
-their order, reachability. A view of the graph, got by proving it well formed (`WellFormed`,
-the two binding rules): only then does each place have one producer and each read meet an
+their order, reachability. A view of the graph, got by proving it well formed (`WellFormed`):
+only then does each place have one producer and each read meet an
 owned place exactly, so an edge is a fact of the nodes and cannot disagree with them.
 '''
 
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Mapping
 from functools import cached_property
 
 import networkx as nx
 
-from ..frozen import Frozen, Violation, remembered
+from ..frozen import Frozen, remembered
 from .definition import NodeDefinition
-from .graph import (
-    Graph, check_nesting_ends_are_enclosers, check_nesting_ends_bound, check_no_nesting_loops,
-)
-from .places import Label, Place, comparables_in, is_prefix, overlaps
-from .rules import Rules, proved
-
-
-# ---------------------------------------------------------------- the rules: what the bindings obey
-
-def check_one_producer_per_place(g: Graph) -> Iterator[Violation]:
-    '''
-    The owned places, over every node, form an antichain (do not overlap).
-
-    o || m  ∀  n_i ≠ n_j,  n_i, n_j ∊ N:   o ∊ O_i, m ∊ O_j        
-    '''
-    yield from owned_overlaps((n, v) for n, d in g.definitions.items() for v in d.owns)
-
-
-def owned_overlaps[N: Label, V: Place](owned: Iterable[tuple[N, V]]) -> Iterator[Violation]:
-    '''Every comparable pair of `(owner, place)`s, the later against each earlier one it
-    meets, so each violation names its own two owners.'''
-    seen  : dict[V, N] = {}
-    below : set[V]     = set()
-    for node, place in owned:
-        for other in comparables_in(place, seen, below):
-            yield owned_comparably(place, node, other, seen[other])
-        seen.setdefault(place, node)
-        below.update(place.prefixes)
-
-
-def check_reads_are_exact(g: Graph) -> Iterator[Violation]:
-    '''
-    No read is strictly inside or around another node's owned place: a read is
-    exactly an owned place, or unrelated to every one.
-
-    o || p  or  o = p   ∀ n_i, n_j ∊ N:  o ∊ O_i, p ∊ I_j        
-    '''
-    readers, owners = g.readers, owners_of(g.definitions)
-    for place, other in overlaps(readers, owners):
-        if other != place:                                   # equal is the (correct) edge
-            yield (ReadInsideOwner if is_prefix(other, place) else OwnerInsideRead)(
-                place, other, tuple(readers[place]), owners[other])
-
-
-WellFormed = Rules('WellFormed', (check_nesting_ends_bound, check_no_nesting_loops,
-                                  check_nesting_ends_are_enclosers,
-                                  check_one_producer_per_place, check_reads_are_exact))
-'''The graph is readable: its nesting is a forest over enclosers bound in it (the three rules
-of `graph`), and its bindings obey the two above, so `owners` is a function and every edge
-exact. What an op keeps (`apply`), and what a view is built on.'''
+from .graph import Graph
+from .places import Label, Place
+from .rules import proved
+from .wellformed import WellFormed, owners_of
 
 
 # ---------------------------------------------------------------- the view
@@ -193,13 +147,6 @@ def dependencies[N: Label, V: Place](graph: Graph[N, V]) -> Dependencies[N, V]:
     return Dependencies(graph)
 
 
-# ---------------------------------------------------------------- derived maps
-
-def owners_of[N: Label, V: Place](definitions: Mapping[N, NodeDefinition[V]]) -> dict[V, N]:
-    '''Who owns each place. One producer per place is `check_one_producer_per_place`'s rule; assumed here.'''
-    return {v: n for n, d in definitions.items() for v in d.owns}
-
-
 # ---------------------------------------------------------------- the projection
 
 def nx_dependencies[N: Label](definitions: Mapping[N, NodeDefinition]) -> nx.DiGraph:
@@ -212,59 +159,3 @@ def nx_dependencies[N: Label](definitions: Mapping[N, NodeDefinition]) -> nx.DiG
             if (n := owners.get(v)) is not None:
                 g.add_edge(n, m)
     return g
-
-
-# ----------------------------------------------------------------- violation finals
-
-class OwnedTwice(Violation):
-    place   : Place
-    node    : Label
-    other   : Label
-    error    = ValueError
-    template = 'output {place!r} is owned by both {other!r} and {node!r}'
-
-class OwnInsideOwner(Violation):
-    place   : Place
-    witness : Place
-    node    : Label
-    other   : Label
-    error    = ValueError
-    template = ('output {place!r} of {node!r} lies inside {witness!r}, owned by {other!r} -- '
-                 'two nodes would determine one place')
-
-class OwnAroundOwner(Violation):
-    place   : Place
-    witness : Place
-    node    : Label
-    other   : Label
-    error    = ValueError
-    template = ('output {witness!r} of {other!r} lies inside {place!r}, owned by {node!r} -- '
-                 'two nodes would determine one place')
-
-class ReadInsideOwner(Violation):
-    place   : Place
-    witness : Place
-    readers : tuple[Label, ...]
-    owner   : Label
-    error    = ValueError
-    template = ('{readers} read {place!r}, which lies inside {witness!r}, owned by {owner!r} -- '
-                 'reads are matched by equality, so this would silently be a boundary input')
-
-class OwnerInsideRead(Violation):
-    place   : Place
-    witness : Place
-    readers : tuple[Label, ...]
-    owner   : Label
-    error    = ValueError
-    template = ('output {witness!r} of {owner!r} lies inside {place!r}, read by {readers} -- '
-                 'that read would silently miss this output')
-
-#--------------------------------------------------------------------- Violation pickers
-# These always yield a violation, separate from the main function to reduce them to just
-# checking whether there is a violation.
-def owned_comparably[N: Label, V: Place](place: V, node: N, other: V, owner: N) -> Violation:
-    '''The violation for `place`, owned by `node`, comparable to `other`, owned by
-    `owner`.'''
-    if other == place:
-        return OwnedTwice(place, node, owner)
-    return (OwnInsideOwner if is_prefix(other, place) else OwnAroundOwner)(place, other, node, owner)

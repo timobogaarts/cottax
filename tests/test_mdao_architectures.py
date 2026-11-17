@@ -5,6 +5,7 @@ graph on every fixture it is meant for, a study's own final is a few lines on a 
 and MDF and IDF driven agree. Fixtures and helpers are `test_cutting.py`'s.
 '''
 
+from cottax.core import conditions
 from cottax.core import prove, unproved, nesting
 
 import pytest
@@ -519,7 +520,7 @@ def test_two_closures_on_one_cycle_are_one_mda_under_mdf(implicit):
         Plan(implicit) + mdf(OnePerVariable())
     apart = FixedPointClosing(HAT, AtVariable())
     m = (Plan(implicit) + MDF(OnePerVariable(), apart, OPT)).graph
-    mda, = [p for p in m.enclosers if p not in implicit.enclosers]
+    mda, = [p for p in conditions(m.definitions) if p not in conditions(implicit.definitions)]
     assert dict(m.within) == {mda: OPT, N('h1'): mda, N('h2'): mda}
     assert set(m[mda].condition.unknowns) == {HAT(V('y1')), HAT(V('y2'))}
     prove(m, ExecutableGraph)
@@ -599,7 +600,7 @@ def test_mda_is_mdf_without_the_top(implicit, sellar):
     assert dict(r.graph.within) == {N('h1'): Y2_MDA, N('h2'): Y2_MDA}
     prove(r.graph, ExecutableGraph)
     explicit = (Plan(without_top(sellar)) + MDA(GaussSeidel(), CLOSING)).graph
-    assert explicit.enclosers == (Y2_MDA,) and not explicit.within
+    assert conditions(explicit.definitions) == (Y2_MDA,) and not explicit.within
     prove(explicit, ExecutableGraph)
     assert repr(MDA(GaussSeidel(), CLOSING)) == 'mda(disciplines, gauss_seidel, closing(^copy, at_first_member(^closure)))'
 
@@ -632,7 +633,7 @@ class AbsorbedMDA(Coupled):
 def test_an_absorbed_mda_needs_no_copy(implicit):
     r = AbsorbedMDA(GaussSeidel(), CLOSING).resolution(without_top(implicit))
     assert r.closures == ()
-    assert r.graph.enclosers == (N('h1'),) and N('h2') not in r.graph
+    assert conditions(r.graph.definitions) == (N('h1'),) and N('h2') not in r.graph
     assert r.graph[N('h1')].condition.unknowns == (V('y1'), V('y2'))
     assert HAT(V('y2')) not in r.graph.variables
     prove(r.graph, ExecutableGraph)
@@ -648,7 +649,7 @@ def test_an_analysis_refuses_a_design(implicit):
 
 def test_two_cycles_are_two_closures_under_mda(two_cycles):
     g = (Plan(without_top(two_cycles)) + MDA(GaussSeidel(), CLOSING)).graph
-    assert names(g.enclosers) == ['^closure.A1', '^closure.B1']
+    assert names(conditions(g.definitions)) == ['^closure.A1', '^closure.B1']
     prove(g, ExecutableGraph)
 
 

@@ -37,7 +37,7 @@ def steps[N: Label, V: Place](graph: Graph[N, V]) -> tuple[Step[N, V], ...]:
     of its one outermost problem over the interior. Remembered on the graph, as its proofs
     are.
     '''
-    outer = set(graph.outermost_enclosers)
+    outer = set(nesting(graph).outermost)
     found : list[Step[N, V]] = []
     for component in dependencies(graph).components:
         if len(component) == 1:

@@ -4,6 +4,7 @@
 every depth. A graph always has entries; a blocking exists where they are executable.
 """
 
+from cottax.core import conditions
 from cottax.core import is_proved, outline, prove, dependencies
 
 from itertools import permutations
@@ -384,7 +385,7 @@ def test_a_ring_is_unsettled_where_its_problem_is_part_of_the_grey_rings_decisio
 
 def rebound(g, order):
     '''`g` with its problems dealt into the binding positions they hold, in `order`.'''
-    dealt, problems = iter(order), set(g.enclosers)
+    dealt, problems = iter(order), set(conditions(g.definitions))
     return graph_of({(m := next(dealt) if n in problems else n): g[m] for n in g.nodes},
                     tuple(g.within.items()))
 
@@ -401,7 +402,7 @@ def test_the_boxes_do_not_depend_on_which_problem_is_bound_first(name):
     same depths, of the same types. Only the diagonal changes: the problems on each grey ring
     lead its stretch in binding order, so whichever is bound first comes first.'''
     g = ARRANGEMENTS[name]()
-    for order in permutations(g.enclosers):
+    for order in permutations(conditions(g.definitions)):
         other = rebound(g, order)
         assert boxes(other) == boxes(g)
         diagonal = sequence(other)

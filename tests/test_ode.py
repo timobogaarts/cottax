@@ -7,6 +7,7 @@ optimiser; written to JSON and read back; drawn; and generic in the place, run o
 floats over a toy `Word` place.
 '''
 
+from cottax.core import conditions
 from cottax.core import prove, steps, unproved
 
 import math
@@ -499,7 +500,7 @@ def test_mdf_cuts_nothing_inside_the_odes_loop_and_fits_the_logistic_rate():
                 {'opt': s.optimise(design=('k',), minimise='f')}).graph
     plan = Plan(g) + architecture(MDF)
     assert dict(plan.graph.within) == {solve_at('logistic'): node('opt')}
-    assert plan.graph.enclosers == g.enclosers
+    assert conditions(plan.graph.definitions) == conditions(g.definitions)
     plan += drive(BFGS(rtol=1e-10, atol=1e-10), diffrax_run())
     tree = s.run(plan.graph, {cx.Inputs: ivp((0.0, 1.0), x=0.1)},
                  read_from=from_state({'k': 0.5, 'target': logistic_at(1.0)}))

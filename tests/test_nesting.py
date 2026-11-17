@@ -145,7 +145,7 @@ def test_a_nested_pair_shares_a_cycle_at_its_own_level():
     # tree has two levels under opt's block.
     both = (outer + Nest(n('x'), n('opt'))).graph
     interior = nesting(both).interior(n('opt'))
-    assert set(interior.outermost_enclosers) == {n('mda'), n('x')}     # two, side by side
+    assert set(nesting(interior).outermost) == {n('mda'), n('x')}     # two, side by side
 
 
 def test_a_pair_whose_inner_is_outside_its_outers_component_is_refused(mdf):
@@ -165,8 +165,9 @@ def test_a_pair_whose_inner_is_outside_its_outers_component_is_refused(mdf):
                   graph_of(g.definitions, OrderedMap({n('mda'): n('opt'), n('p'): n('mda')}))):
         with pytest.raises(ValueError, match='not on one cycle'):
             prove(stale, ExecutableGraph)
-        rest = Rules('rest', tuple(r for r in ExecutableGraph.rules if r is not check_nestings_share_a_cycle))
-        prove(stale, rest)                                 # every other rule passes it
+        class Rest(Rules):
+            rules = tuple(r for r in ExecutableGraph.rules if r is not check_nestings_share_a_cycle)
+        prove(stale, Rest)                                 # every other rule passes it
 
 
 def test_nesting_changes_equality_and_the_hash(mdf, nested):
@@ -175,8 +176,8 @@ def test_nesting_changes_equality_and_the_hash(mdf, nested):
 
 
 def test_roots_is_what_a_block_answers(nested):
-    assert nested.outermost_enclosers == (n('opt'),)
-    assert nesting(nested).interior(n('opt')).outermost_enclosers == (n('mda'),)   # the outer gone, the inner leads
+    assert nesting(nested).outermost == (n('opt'),)
+    assert nesting(nesting(nested).interior(n('opt'))).outermost == (n('mda'),)   # the outer gone, the inner leads
 
 
 def test_a_statement_that_determines_nothing_cannot_be_an_end(mdf):
@@ -303,7 +304,7 @@ def test_two_siblings_share_one_outer(mdf):
         n('obj') : call(['y', 'w'],   ['f']),
     }))
     g = (Plan(g) + Nest(n('mda'), n('opt')) + Nest(n('mda2'), n('opt'))).graph
-    assert g.outermost_enclosers == (n('opt'),)
+    assert nesting(g).outermost == (n('opt'),)
     assert set(g.within) == {n('mda'), n('mda2')}
 
 
@@ -321,9 +322,9 @@ def test_three_levels_are_two_pairs_in_either_order():
     up   = (Plan(g) + Nest(n('mda2'), n('mda')) + Nest(n('mda'), n('opt'))).graph
     down = (Plan(g) + Nest(n('mda'), n('opt')) + Nest(n('mda2'), n('mda'))).graph
     assert dict(up.within) == dict(down.within) == {n('mda2'): n('mda'), n('mda'): n('opt')}
-    assert up.outermost_enclosers == (n('opt'),)
-    assert nesting(up).interior(n('opt')).outermost_enclosers == (n('mda'),)
-    assert nesting(nesting(up).interior(n('opt'))).interior(n('mda')).outermost_enclosers == (n('mda2'),)
+    assert nesting(up).outermost == (n('opt'),)
+    assert nesting(nesting(up).interior(n('opt'))).outermost == (n('mda'),)
+    assert nesting(nesting(nesting(up).interior(n('opt'))).interior(n('mda'))).outermost == (n('mda2'),)
 
 
 # ---------------------------------------------------------------- interior
@@ -332,7 +333,7 @@ def test_interior_is_the_block_without_the_problem_and_is_valid(mdf, nested):
     '''Any problem, at any depth: a nested one is asked with the problems enclosing it
     taken out; a function node iterates nothing; a name not here is not here. What
     comes back is a valid graph, the nesting rule re-asked of it as `subgraph` does.'''
-    with pytest.raises(ValueError, match='not a problem'):
+    with pytest.raises(ValueError, match='owns nothing inside'):
         nesting(nested).interior(n('d'))
     with pytest.raises(KeyError, match='not a node'):
         nesting(nested).interior(n('nope'))
@@ -357,7 +358,7 @@ def test_interior_of_a_sibling_carries_the_nesting_it_severs():
         n('fi') : call(['hp'], ['i']),
     }))
     g = (Plan(g) + Nest(n('i'), n('o'))).graph
-    assert set(g.outermost_enclosers) == {n('o'), n('p')}
+    assert set(nesting(g).outermost) == {n('o'), n('p')}
     assert dict(nesting(g).interior(n('o')).within) == {}    # the outer: its pair goes with it
     severed = nesting(g).interior(n('p'))                    # the sibling: severs (i, o)
     assert dict(severed.within) == {n('i'): n('o')}

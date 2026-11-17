@@ -15,16 +15,19 @@ kinds                        (FunctionalNode; AbstractConditionalNode, what ever
  ||                           of a condition node: its four names)
  \/
 graph                        (Graph, the one stored graph: definitions and `within`, checked
- ||                           at nothing; what is read off the bindings; the nesting's rules)
+ ||                           at nothing; what is read off the bindings)
  \/
-rules                        (Rules, NodeRules: what is proved of a graph, as values;
+rules                        (Rules, each_node: what is proved of a graph, as classes;
  ||                           unproved / prove / proved, a set remembered on the graph)
  \/
-dependencies                 (WellFormed, the nesting's and the bindings' rules; `dependencies(graph)`, the
- ||                           view of owners, edges, components, order, reachability)
+wellformed                   (WellFormed: the nesting's three rules and the bindings' two,
+ ||                           what a readable graph obeys)
  \/
-nesting                      (`nesting(graph)`, the view of a problem's cycle and interior;
- ||                           `contract`)
+dependencies                 (`dependencies(graph)`, the view of owners, edges, components,
+ ||                           order, reachability)
+ \/
+nesting                      (`nesting(graph)`, the view of the outermost problems, what each
+ ||                           is nested in, its cycle and interior; `contract`)
  \/
 executable                   (the structural proof, a group implying WellFormed: cycles,
  ||                           problems, and every problem's edges against its cycle; outline)
@@ -40,10 +43,11 @@ from .places import (
 from .definition import (
     Attribute, NodeDefinition, Renaming, relabelled,
 )
-from .kinds import AbstractConditionalNode, FunctionalNode, is_encloser, enclosers
+from .kinds import AbstractConditionalNode, FunctionalNode, conditions, owns_inside
 from .graph import Graph
-from .rules import NodeRules, Rules, is_proved, proved, proves, prove, unproved
-from .dependencies import Dependencies, WellFormed, dependencies
+from .rules import Rules, each_node, is_proved, proved, proves, prove, unproved
+from .wellformed import WellFormed
+from .dependencies import Dependencies, dependencies
 from .nesting import Nesting, nesting
 from .executable import ExecutableGraph, body_of, outline
 from .steps import Run, Solve, Step, steps

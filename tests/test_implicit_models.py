@@ -11,7 +11,7 @@ import math
 import pytest
 
 import cottax.assemblies.jax as cx
-from cottax.core import enclosers
+from cottax.core import conditions
 from cottax.core.frozen import OrderedMap
 from cottax.core.plan import Plan
 from cottax.core.driven import DriverContract
@@ -60,7 +60,7 @@ def test_an_implicit_model_is_a_body_and_a_problem(sellar):
 def test_the_pair_is_a_coupled_block_with_a_problem(sellar):
     '''Implicitness is structural: nothing declares it, the cycle is it.'''
     assert not dependencies(sellar).is_acyclic
-    assert enclosers(sellar.definitions) == (cx.absolute.node(cx.solve(N['disc1'])),)
+    assert conditions(sellar.definitions) == (cx.absolute.node(cx.solve(N['disc1'])),)
     solve, _ = entries(sellar)
     assert isinstance(solve, Solve) and solve.problem == cx.absolute.node(cx.solve(N['disc1']))
 

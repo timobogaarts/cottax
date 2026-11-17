@@ -6,7 +6,7 @@ the backend's proof, a level under this.
 
 from collections.abc import Iterator
 
-from ...core import Label, NodeDefinition, NodeRules, Place, Rules, Violation
+from ...core import Label, NodeDefinition, Place, Rules, Violation, each_node
 from ..driven import DrivenGraph
 from .implemented import check_implementation_fits, is_implemented
 
@@ -18,12 +18,14 @@ def check_implemented[N: Label, V: Place](name: N, node: NodeDefinition[V]) -> I
         yield NoImplementation(name)
 
 
-RealisedNodes = NodeRules('RealisedNodes', (check_implemented, check_implementation_fits))
-'''Every node carries what runs it, where it fits. The realised layer's two node rules;
-`Implement` asks the second before the graph is touched.'''
+class RealisedNodes(Rules):
+    '''Every node carries what runs it, where it fits. The realised layer's two node rules;
+    `Implement` asks the second before the graph is touched.'''
+    rules = (each_node(check_implemented), each_node(check_implementation_fits))
 
-RealisedGraph = Rules('RealisedGraph', implies=(DrivenGraph, RealisedNodes))
-'''A driven graph with what runs every node: what a backend's proof strengthens.'''
+
+class RealisedGraph(DrivenGraph, RealisedNodes):
+    '''A driven graph with what runs every node: what a backend's proof strengthens.'''
 
 
 # ----------------------------------------------------------------- violation finals

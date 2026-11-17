@@ -5,13 +5,14 @@ graph is touched.'''
 from collections.abc import Iterator
 
 from ...core import (
-    ExecutableGraph, Label, NodeDefinition, NodeRules, Place, Rules, Violation, is_driven, is_encloser,
+    ExecutableGraph, Label, NodeDefinition, Place, Rules, Violation, each_node, is_driven, AbstractConditionalNode,
 )
 
 
 def check_driven[N: Label, V: Place](name: N, node: NodeDefinition[V]) -> Iterator[Violation]:
-    '''Every problem carries a contract, placed.'''
-    if is_encloser(node) and not is_driven(node):
+    '''Every condition node carries a contract, placed. Asked after `ExecutableGraph`, so
+    each owns something inside: none is a requirement left loose.'''
+    if isinstance(node, AbstractConditionalNode) and not is_driven(node):
         yield Undriven(name)
 
 
@@ -23,11 +24,13 @@ def check_driver_fits[N: Label, V: Place](name: N, node: NodeDefinition[V]) -> I
         yield from node.driver.violations_on(node.condition)
 
 
-DrivenNodes = NodeRules('DrivenNodes', (check_driven, check_driver_fits))
-'''Every problem driven, by a driver that fits it.'''
+class DrivenNodes(Rules):
+    '''Every problem driven, by a driver that fits it.'''
+    rules = (each_node(check_driven), each_node(check_driver_fits))
 
-DrivenGraph = Rules('DrivenGraph', implies=(ExecutableGraph, DrivenNodes))
-'''An executable graph whose every problem is driven.'''
+
+class DrivenGraph(ExecutableGraph, DrivenNodes):
+    '''An executable graph whose every problem is driven.'''
 
 
 # ----------------------------------------------------------------- violation finals

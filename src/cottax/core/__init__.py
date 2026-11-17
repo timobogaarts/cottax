@@ -22,9 +22,9 @@ from .frozen import Violation, first, violations
 from .maths import (
     Label, Place, PlaceToPlace, comparable, comparables_in,
     NodeDefinition, Renaming, relabelled, Attribute,
-    AbstractConditionalNode, FunctionalNode, is_encloser, enclosers,
+    AbstractConditionalNode, FunctionalNode, conditions, owns_inside,
     Graph,
-    NodeRules, Rules, is_proved, proved, proves, prove, unproved,
+    Rules, each_node, is_proved, proved, proves, prove, unproved,
     Dependencies, WellFormed, dependencies, Nesting, nesting,
     ExecutableGraph, body_of, outline,
     Run, Solve, Step, steps,

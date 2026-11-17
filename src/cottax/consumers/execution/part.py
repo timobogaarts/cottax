@@ -4,7 +4,7 @@ name or read from a caller's structures, as a surface's methods.'''
 from collections.abc import Callable, Iterator, Mapping
 from typing import Any
 
-from ...core import Label, Minting, Graph, Place, PlaceToPlace, Rules, is_encloser, dependencies
+from ...core import Label, Minting, Graph, Place, PlaceToPlace, Rules, owns_inside, dependencies
 from ...core.driven import AssignByRule, role_slots
 from ...core import is_driven
 from ...core.driven import DriverContract, Role
@@ -101,7 +101,7 @@ class Running(Part):
 
     def valued(self, model: Graph | Model, values: Mapping[type, Mapping[Any, Any]] = OrderedMap(),
                read_from: Mapping[type, Any] = OrderedMap(), *,
-               proof: Rules = CallableGraph) -> GraphWithValues:
+               proof: type[Rules] = CallableGraph) -> GraphWithValues:
         '''
         `model` (a graph, or a `Model`: a `Declared`), proved a `proof` (a rule group), with a
         value at each boundary input, from exactly one source: the declaration's own values;
@@ -115,7 +115,7 @@ class Running(Part):
 
     def assess(self, model: Graph | Model, values: Mapping[type, Mapping[Any, Any]] = OrderedMap(),
                read_from: Mapping[type, Any] = OrderedMap(), *,
-               proof: Rules = CallableGraph) -> Assessed:
+               proof: type[Rules] = CallableGraph) -> Assessed:
         '''
         `valued`'s lookup, stopped before holding it to one value per input: an input without
         a value and a place given twice are asked of what it returns, and refused by its
@@ -152,7 +152,7 @@ class Running(Part):
         unknown = self.place(written, role=f'`values[{key.__name__}]`')
         at = dependencies(graph).owners.get(unknown)
         node = graph[at] if at is not None else None
-        if node is None or not is_encloser(node) or unknown not in node.owns_inside:
+        if node is None or unknown not in owns_inside(node):
             why = ('which nothing owns' if node is None else
                    f'which {at!r} computes and does not determine')
             raise NotAnUnknown(key.__name__, unknown, why).raised

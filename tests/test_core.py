@@ -8,7 +8,8 @@ to the laws the vocabulary states.
 '''
 
 from toy_places import Segmented
-from cottax.core import NodeRules, prove, unproved, dependencies, nesting
+from cottax.core import conditions
+from cottax.core import prove, unproved, dependencies, nesting
 
 import dataclasses
 import itertools
@@ -19,7 +20,7 @@ import pytest
 from jax.tree_util import GetAttrKey, SequenceKey
 
 from cottax.core.maths.places import comparable, is_prefix, overlaps
-from cottax.core.maths.dependencies import (
+from cottax.core.maths.wellformed import (
     OwnAroundOwner, OwnInsideOwner, OwnedTwice, OwnerInsideRead, ReadInsideOwner,
 )
 from cottax.core import (
@@ -36,7 +37,7 @@ from cottax.core.plan.primitive import (
 from cottax.core.refusal_kinds import DoesNotRead, ReadOnBothSides
 from cottax.core.maths.executable import ExecutableGraph
 from cottax.core.frozen import Answer, OrderedMap, answers
-from cottax.core.maths.graph import NotAnEncloser, Unbound
+from cottax.core.maths.wellformed import EndOwnsNothingInside, Unbound
 from cottax.core.maths.nesting import BoxOwnsNothing, check_blocks_own_something, check_blocks_partition
 from cottax.pytree.path import VarPath
 from cottax.core import Attachment, Mint, Minting, relabelled
@@ -288,7 +289,7 @@ def test_a_nesting_with_a_bad_end_is_listed_not_raised():
     a, t = Word('a'), Word('t')
     graph = Graph(OrderedMap({a: states([], ['x']), t: toy([], ['y'])}))
     assert [type(v) for v in unproved(Graph(graph.definitions, OrderedMap({Word('zz'): a})), WellFormed)] == [Unbound]
-    assert [type(v) for v in unproved(Graph(graph.definitions, OrderedMap({t: a})), WellFormed)] == [NotAnEncloser]
+    assert [type(v) for v in unproved(Graph(graph.definitions, OrderedMap({t: a})), WellFormed)] == [EndOwnsNothingInside]
 
 
 def test_a_contraction_refuses_a_block_owning_nothing():
@@ -325,7 +326,7 @@ def test_what_a_condition_node_owns_inside_is_set_where_it_is_stored():
     a, b = Word('a'), Word('b')
     g = G({a: states(['y'], []), b: toy(['u'], ['y'])})
     set_ = SetOwnsInside(a, places(['u'])).apply(g)
-    assert set_[a] == states(['y'], ['u']) and set_.enclosers == (a,)
+    assert set_[a] == states(['y'], ['u']) and conditions(set_.definitions) == (a,)
     assert SetOwnsInside(a, ()).apply(set_)[a] == states(['y'], [])
     assert repr(SetOwnsInside(a, places(['u']))) == 'set_owns_inside(a <- u)'
 

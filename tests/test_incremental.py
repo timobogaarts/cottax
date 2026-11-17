@@ -26,7 +26,7 @@ from cottax.core import FunctionalNode
 from cottax.core.realisation import implemented
 import purposes
 from cottax.core.frozen import OrderedMap
-from cottax.core import enclosers
+from cottax.core import conditions
 from graphs import graph_of
 
 
@@ -401,7 +401,7 @@ def ask_everything(g: Graph) -> None:
     '''Answer every query, so every layer of cache is warm.'''
     for name in QUERIES:
         ask(g, name)
-    dependencies(g).components, dependencies(g).is_acyclic, enclosers(g.definitions)
+    dependencies(g).components, dependencies(g).is_acyclic, conditions(g.definitions)
 
 
 # ---------------------------------------------------------------- the result itself
@@ -536,13 +536,13 @@ can name, is asked of every result.
 
 def _probe_asked_during(action, graph) -> int:
     '''How often `WellFormed` is asked of a graph other than `graph` during `action`.'''
-    real  = Rules.asked
+    real  = Rules.__dict__['asked']
     calls = []
-    def counting(self, g):
-        if self is WellFormed and g is not graph:
+    def counting(cls, g):
+        if cls is WellFormed and g is not graph:
             calls.append(1)
-        return real(self, g)
-    Rules.asked = counting
+        return real.__func__(cls, g)
+    Rules.asked = classmethod(counting)
     try:
         action()
     finally:

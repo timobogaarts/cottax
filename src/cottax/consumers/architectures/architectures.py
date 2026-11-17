@@ -13,13 +13,20 @@ from typing import Any, ClassVar
 
 from ...core import (
     AbstractConditionalNode, FunctionalNode, Label, kind_of, Graph, Place, Violation,
-    is_encloser, GraphOp, Nest, StagedOp, refusals, dependencies, nesting)
+    owns_inside, GraphOp, Nest, StagedOp, refusals, dependencies, nesting)
 from ...core.frozen import AbstractVar, Frozen, OrderedMap, answer, first
 from .closing import closed
 from .combine import Combine
 from .cut_rules import CutRule, Opened, ToCut, cuts_per_cycle
 from .interface import Closing, ModelReading
 from .refusals import BodyShared, NestedAlready, NotCombinable, TopNotAProblem, TopUnbound
+
+
+def problems[N: Label, V: Place](graph: Graph[N, V]) -> tuple[N, ...]:
+    '''The condition nodes that own something inside, in binding order: what an architecture
+    nests, opens and folds into. A requirement -- owning nothing inside -- is not one: it is
+    folded into a problem (`reached_requirements`).'''
+    return tuple(n for n, d in graph.definitions.items() if owns_inside(d))
 
 
 # ---------------------------------------------------------------- what a problem is, asked
@@ -172,7 +179,7 @@ def check_implicit_models(op: 'Architecture', graph: Graph) -> Iterator[Violatio
     into = combines_as(graph[op.design[0]]) if op.design and op.design[0] in graph else None
     free = Graph(graph.subgraph(n for n in graph.nodes if n not in own).definitions)
     bodies: dict = {}
-    for p in free.enclosers:
+    for p in problems(free):
         if refused := not_implicit(free, p):
             yield from refused
             continue
@@ -246,14 +253,14 @@ class Architecture[N: Label, V: Place](StagedOp[N, V]):
         scope    = self.scope(resolved)
         opened   = yield closed(cuts_per_cycle_boxed(scope, self.boxes, self.rule), self.closing)
         nested   = yield self.nesting_inside(scope)
-        yield self.combining(nested, tuple(p for p in opened.enclosers if p not in set(resolved.enclosers)))
+        yield self.combining(nested, tuple(p for p in problems(opened) if p not in set(problems(resolved))))
 
     def nesting_inside(self, scope: Graph[N, V]) -> tuple[GraphOp[N, V], ...]:
         '''Each problem of the scope lying wholly inside another's body nested there, read
         before anything is cut; none where the final combines declared problems.'''
         if self.combines_declared:
             return ()
-        pairs = inside(scope, {p: body_of_problem(scope, p) for p in scope.enclosers})
+        pairs = inside(scope, {p: body_of_problem(scope, p) for p in problems(scope)})
         return tuple(Nest(i, o) for i, o in pairs.items())
 
     def resolution(self, graph: Graph[N, V]) -> Resolution[N, V]:
@@ -272,9 +279,9 @@ class Architecture[N: Label, V: Place](StagedOp[N, V]):
         under = self.scope(opened)
         out = []
         for cycle in dependencies(under).cycles:
-            problems = [p for p in cycle if is_encloser(under[p]) and p not in under.within]
-            out.append(OnCycle(tuple(p for p in problems if p in bound),
-                               tuple(p for p in problems if p not in bound)))
+            heads = [p for p in cycle if owns_inside(under[p]) and p not in under.within]
+            out.append(OnCycle(tuple(p for p in heads if p in bound),
+                               tuple(p for p in heads if p not in bound)))
         return tuple(out)
 
 
@@ -287,14 +294,14 @@ def check_top_bound(op: 'Monolithic', graph: Graph) -> Iterator[Violation]:
 
 
 def check_top_is_problem(op: 'Monolithic', graph: Graph) -> Iterator[Violation]:
-    if op.top in graph and not is_encloser(graph[op.top]):
+    if op.top in graph and not owns_inside(graph[op.top]):
         yield TopNotAProblem(str(op.top))
 
 
 def check_top_combinable(op: 'Monolithic', graph: Graph) -> Iterator[Violation]:
     '''The top is combined with what it absorbs and, by the final, with closures or
     declared problems: it combines as some kind, and what it absorbs as the same.'''
-    if op.top in graph and is_encloser(graph[op.top]):
+    if op.top in graph and owns_inside(graph[op.top]):
         kind = combines_as(graph[op.top])
         for n in (op.top, *reached_requirements(graph, op.top)):
             if (found := combines_as(graph[n])) is None or kind is not None and found is not kind:
@@ -443,10 +450,10 @@ def cuts_per_cycle_boxed[N: Label, V: Place](graph: Graph[N, V], boxes: Boxes[N,
     as a reader, those that read the variable -- under `check_implicit_models` always its
     body, since a problem reads nothing from outside its box. In the graph's own names.
     '''
-    bodies = {p: body_of_problem(graph, p) for p in graph.enclosers}
+    bodies = {p: body_of_problem(graph, p) for p in problems(graph)}
     pairs  = inside(graph, bodies)
     trees: dict = {}
-    for p in graph.enclosers:
+    for p in problems(graph):
         trees.setdefault(chain(pairs, p)[-1], []).append(p)
     folded = set(boxes.folded(graph))
     blocks = tuple((*tree, *bodies[root]) if folded & set(tree) else bodies[root]
@@ -486,7 +493,7 @@ class Disciplines[N: Label, V: Place](Boxes[N, V]):
     and under an architecture every implicit model in its scope.'''
 
     def folded(self, graph: Graph[N, V]) -> tuple[N, ...]:
-        return graph.enclosers
+        return problems(graph)
 
     def __repr__(self) -> str:
         return 'disciplines'

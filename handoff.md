@@ -16,6 +16,8 @@ partial evaluation, switches, repositories), which is not copied here.
   It still has seven files of uncommitted edits from the PR #7 rename
   (`owns_inside`, `is_encloser`, `.graph.enclosers`); those are the owner's to commit.
 - Local-only branch `backup/two-faces-before-squash` can be deleted.
+- **`tower`** (2026-11-17): pieces 1-3 and the maths cleanup built, uncommitted, for review
+  (sections 5b-5e). Next session starts at **5f**.
 
 ## 2. What `node-attributes` built (as merged, not as first designed)
 
@@ -322,6 +324,74 @@ Owner asked: memo cleanup, `dispatch` and `valued` out of maths, then piece 3. A
     (now five rules), so ops (`apply` keeps it) and the doors still refuse at once.
   - `readers_of` inlined into `Graph.readers`. `owners_of` stays: the binding check must not
     read the view it guards.
+  - **`wellformed.py`** (between `rules` and `dependencies`) holds the five rules, `owners_of`,
+    `WellFormed` and their refusals. `graph.py` imports neither `kinds` nor any rule.
+  - **No "encloser" any more.** `kinds.owns_inside(d)` (a condition node's `owns_inside`, `()`
+    otherwise) and `kinds.conditions(defs)` replace `is_encloser` / `enclosers` /
+    `Graph.enclosers`. `outermost` and `enclosing(p)` moved to `nesting(g)`.
+    `NotAnEncloser` -> `EndOwnsNothingInside` (same message). Post-executable sites (driven,
+    roles, drive, structures) use `conditions`; architectures keep a `problems(graph)` helper
+    (owns inside: requirements still differ there).
+  - **rules.py, one group class.** `NodeRules` is gone: a node rule is lifted with
+    `each_node(rule)`, a small value, inside a plain `Rules`. `closure` is no longer
+    `remembered` (`REMEMBERED` is now four, all on a graph). `proved` is a value
+    (`group`, `of`, `at`) with `__call__`, so `proves` reads `isinstance` and nothing is
+    written onto a function. `unproved` skips a group implying one that failed, so a group's
+    rules may assume what it implies (the `is_proved` guard in
+    `check_nesting_ends_on_one_cycle` is gone). `at=` stays a dotted path: `jax_jit` uses
+    `at='valued.graph'`.
+  - **Groups are classes.** `class ExecutableGraph(WellFormed): rules = (...)`; the bases are
+    what a group implies, `closure` is computed from them at class creation (each once,
+    in the order written), `asked` reads the class's own `rules` only. A group with no rules
+    of its own (`DrivenGraph(ExecutableGraph, DrivenNodes)`) is proved once its bases are.
+    Never instantiated; annotated `type[Rules]`. No more `Rules('Name', ...)` strings.
+  - processax breaks: `is_encloser` in `process/graphs/kinds.py:13,93,126` and
+    `preprocess/tests/test_coupled_reads.py` -> `owns_inside` (truthy); `g.graph.enclosers` in
+    `preprocess/tests/test_milestone1.py:129,149` -> `conditions(g.graph.definitions)`.
+  - Tests at end of day: the touched files only (never the full suite), all green, slow ones
+    too. Last batch: 23 files, 572 passed + 18 slow.
+
+### 5f. Next session: start here
+
+**Settled in discussion (not code changes):**
+- *Class groups vs the old `ProvedGraph` tower.* Same names, and inheritance still means
+  "implies", but a group is never instantiated: the proof is a fact in the graph's set, not
+  the value's type. So no wrapper, no forwarding, no `.graph.graph`, one jit key per graph,
+  a DAG instead of a chain, and node and whole-graph rules can mix in any group. A
+  combination needs a class only to be *named*; proving its bases proves it.
+- *Making a group the view* (`class WellFormed(Frozen): graph`) would be the tower again:
+  rejected.
+- *Node checks stay on the nodes, at construction.* A rule one node alone decides, and
+  whose breaking is never a meaningful intermediate state, belongs on the node. Relational
+  rules go to a group (`WellFormed`), and so do per-node rules about a stage (driven,
+  implemented, jit). Test for moving one: is a node breaking it ever meaningful mid-plan?
+  (A requirement is, which is why "owns something inside" is `check_no_requirements`.)
+- `definition`, `kinds`, `places` and `graph` are fine as they are (owner).
+
+**Proposed and agreed in principle, not built: trim `rules.py` to about 55 lines.**
+1. `@node_check` decorator on the 8 node checks: returns a small `NodeCheck` value with
+   `__call__(graph)` looping the nodes and `.node(name, node)` for the per-node call
+   (used by `json/format.py`, `realisation/implemented.py` and `test_contracts`). Groups then
+   list node and graph checks in one `rules`; `each_node` goes. Graph checks stay plain
+   functions (a function already is "a callable of a graph").
+2. Drop `proved` and `proves`; the five declaration sites write the access in Python:
+   `checks = (lambda view: unproved(view.graph, WellFormed),)` (`Dependencies`, `Nesting`),
+   `@checked(lambda graph: unproved(graph, ExecutableGraph))` (`steps`),
+   `@checked(lambda valued: unproved(valued.graph, CallableGraph))` (`run`, `Traced`).
+   Costs the two `proves(...)` lines in `test_execution.py:286-287`.
+3. `proofs` -> private `_proofs`.
+4. Drop the `__new__` guard on `Rules`. Keep the closure from the bases in order written:
+   `reversed(__mro__)` would ask later siblings first (`CallableNodes` before `WellFormed`),
+   so a broken graph would report "not callable" before the structural fault.
+   Left: `Rules`, `NodeCheck`/`node_check`, `_proofs`, `unproved` (list), `prove` (raise),
+   `is_proved` (look up, used by tests only, kept for cache-aware users). Confirm before
+   building: the owner said "do handoff then done" right after this proposal.
+
+**Still open from earlier:**
+- `body_of` into the nesting view (`nesting(g).body`), recommended.
+- Optional: `Solve` holding its interior's steps (one tree); `checked` precomputing its
+  signature (~8 µs/call).
+- processax: the breaks listed in 5e are the owner's to fix.
 
 ## 6. Step 2 mapped: the tower becomes rule groups
 

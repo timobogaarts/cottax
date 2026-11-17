@@ -13,7 +13,7 @@ import jax
 import numpy as np
 from jax.tree_util import tree_leaves
 
-from ...core import Label, Graph, NodeDefinition, NodeRules, Place, Rules, Violation, proved
+from ...core import Label, Graph, NodeDefinition, Place, Violation, each_node, proved
 from ...core.frozen import Frozen, OrderedMap
 from ...core.realisation import RealisedNodes, implementation_of, is_implemented
 from .run import CallableGraph, blamed, run
@@ -71,12 +71,14 @@ def check_reassembles[N: Label, V: Place](name: N, node: NodeDefinition[V]
         yield PartialBody(name, implementation)
 
 
-JitKeyNodes = NodeRules('JitKeyNodes', (check_hashable, check_reassembles), implies=(RealisedNodes,))
-'''Every node a jit cache key: it hashes, and what runs it compares by value. Asks only that
-what runs it is there, not that it is callable.'''
+class JitKeyNodes(RealisedNodes):
+    '''Every node a jit cache key: it hashes, and what runs it compares by value. Asks only
+    that what runs it is there, not that it is callable.'''
+    rules = (each_node(check_hashable), each_node(check_reassembles))
 
-JitGraph = Rules('JitGraph', implies=(CallableGraph, JitKeyNodes))
-'''A callable graph whose every node is a jit cache key.'''
+
+class JitGraph(CallableGraph, JitKeyNodes):
+    '''A callable graph whose every node is a jit cache key.'''
 
 
 # ============================================================================ traced

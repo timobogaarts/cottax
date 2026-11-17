@@ -9,7 +9,8 @@ from dataclasses import replace
 
 from ..maths.definition import NodeDefinition
 from ..frozen import Frozen, OrderedMap, Violation, first
-from ..maths.graph import Graph, NestingLoop
+from ..maths.graph import Graph
+from ..maths.wellformed import NestingLoop
 from ..maths.places import Label, Place
 from .algebra import GraphOp
 

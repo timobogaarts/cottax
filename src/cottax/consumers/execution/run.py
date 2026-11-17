@@ -7,7 +7,7 @@ from typing import Any
 
 from ...core import (
     ConditionalNode, FunctionalNode,  Label, Graph, NodeDefinition,
-    NodeRules, Place, Rules, Run, Violation, is_driven, proved, steps, dependencies)
+    Place, each_node, Rules, Run, Violation, is_driven, proved, steps, dependencies)
 from ...core.frozen import OrderedMap, checked
 from ...core.realisation import RealisedGraph, implementation_of, is_implemented
 from .interface import DriverImplementation
@@ -62,11 +62,13 @@ def _names(roles: tuple[type, ...]) -> tuple[str, ...]:
     return tuple(role.__name__ for role in roles)
 
 
-CallableNodes = NodeRules('CallableNodes', (check_function_callable, check_implements_its_driver))
-'''Every function's implementation callable, every driver's implementing its contract.'''
+class CallableNodes(Rules):
+    '''Every function's implementation callable, every driver's implementing its contract.'''
+    rules = (each_node(check_function_callable), each_node(check_implements_its_driver))
 
-CallableGraph = Rules('CallableGraph', implies=(RealisedGraph, CallableNodes))
-'''A realised graph whose every implementation is callable / driver implemented.'''
+
+class CallableGraph(RealisedGraph, CallableNodes):
+    '''A realised graph whose every implementation is callable / driver implemented.'''
 
 
 
