@@ -105,7 +105,8 @@ lives in `doe`'s answer to declaration).
   combining a DOE needs it.
 - Per point convergence: a `Converged` report and a non-raising setting on the optimistix
   drivers; the DOE records it as a response.
-- Plan models (a grid, a Latin hypercube) as input sugar.
+- `flat.scan`, work in progress: sugar writing the plan model from a preset (a full factorial,
+  a Latin hypercube, ...) over each factor's range.
 - A DOE in the presets: MDF with a DOE top needs `check_top_combinable` to refuse only what
   it would combine.
 - The condition-kind check (F3) and the history rework (F1, F2).
