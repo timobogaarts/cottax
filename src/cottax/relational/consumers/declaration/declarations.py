@@ -28,7 +28,7 @@ class Implicit[N: Label, V: Place](Paired[N, V]):
         return tuple(minted(Cond(), u) for u in self.outputs)
 
     def condition_node(self, at: N) -> ConditionalNode[V]:
-        return self.condition
+        return ConditionalNode(self.condition)
 
     @property
     def problem(self) -> N:
@@ -120,7 +120,7 @@ class Constraint[N: Label, V: Place](Paired[N, V]):
         return self.outputs
 
     def condition_node(self, at: N) -> ConditionalNode[V]:
-        return self.condition
+        return ConditionalNode(self.condition)
 
     @property
     def requirement(self) -> N:
@@ -247,7 +247,7 @@ class Problem[N: Label, V: Place](Declaration[N, V]):
         return merged_tags((t.place, t.tags) for t in self.bounds.terms if t is not None)
 
     def nodes(self, at: N) -> tuple[tuple[N, NodeDefinition[V]], ...]:
-        return ((at, self.condition),)
+        return ((at, ConditionalNode(self.condition)),)
 
     def loose_at(self, names: DerivedNames[N, V]) -> N | None:
         '''`^solve.<objective>`; none with no objective.'''

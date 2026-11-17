@@ -6,7 +6,7 @@ nobody answered, the default: a grey problem with no slots, a place written as i
 from typing import Any
 
 from ...core.frozen import answer
-from ...core import Label, Mint, Place
+from ...core import Label, Mint, Place, kind_of
 from .interface import NodeDrawing, PlaceDrawing
 from .interface_types import Drawn
 
@@ -38,7 +38,9 @@ UNDRAWN, AS_STR = Undrawn(), AsStr()
 
 
 def drawn(node: Any) -> Drawn:
-    return answer(NodeDrawing, node, UNDRAWN).drawn(node)
+    '''How `node` is drawn: a condition node by its condition.'''
+    subject = kind_of(node)
+    return answer(NodeDrawing, subject, UNDRAWN).drawn(subject)
 
 
 def spell_plain(place: Label) -> str:

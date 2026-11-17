@@ -5,7 +5,8 @@ import dataclasses
 from typing import Any
 
 from ...core import (
-    Label, NodeDefinition, Place, Violation, AbstractGraph, NestingGraph, GraphOp, Plan,
+    Condition, ConditionalNode, Label, NodeDefinition, Place, Violation, AbstractGraph,
+    NestingGraph, GraphOp, Plan,
 )
 from ...core.frozen import Frozen, OrderedMap, answer, answers, checked
 from ..surface.interface import DerivedNames, Written
@@ -78,7 +79,7 @@ def declare(*models: Any) -> Declared:
         if isinstance(leaf, Declaration):
             nodes.extend(leaf.nodes_when_held(at) if id(leaf) in held else leaf.nodes(at))
         elif id(leaf) not in held:
-            nodes.append((at, leaf))
+            nodes.append((at, ConditionalNode(leaf) if isinstance(leaf, Condition) else leaf))
         node_tags.append((at, tags))
     graph = NestingGraph(AbstractGraph(OrderedMap(nodes)), OrderedMap())
     declarations = [leaf for _, leaf, _ in found if isinstance(leaf, Declaration)]
@@ -156,8 +157,9 @@ def _children(x: Any, is_leaf: Callable[[Any], bool]) -> list[tuple[Step, Any]] 
 
 
 def _is_model(x: Any) -> bool:
-    '''A declaration or a node, tagged or not.'''
-    return isinstance(untagged(x)[0], (Declaration, NodeDefinition))
+    '''A declaration, a node or a condition (declared as the node holding it), tagged or
+    not.'''
+    return isinstance(untagged(x)[0], (Declaration, NodeDefinition, Condition))
 
 
 

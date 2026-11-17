@@ -16,13 +16,14 @@ import sys
 import pytest
 
 from cottax.core import (
-    AbstractGraph, ComposedOp, ConditionalNode, Cut, ExecutableGraph, FunctionalNode, GaussSeidel,
-    GraphWithValues, Insert, Mint, Minting, NestingGraph, is_encloser, minted,
+    AbstractGraph, ComposedOp, Condition, ConditionalNode, Cut, ExecutableGraph, FunctionalNode, GaussSeidel,
+    GraphWithValues, Insert, Mint, Minting, NestingGraph, minted,
 )
 from cottax.core.frozen import OrderedMap, answer, answers, choice, violations
 from cottax.core.maths.definition import relabelled
 from cottax.core.maths.plan import Plan
-from cottax.core.driven import DriverContract, Start
+from cottax.core.driven import Start
+from cottax.core.driven import DriverContract
 from cottax.consumers.architectures import MDA
 from cottax.consumers.architectures.interface import Closing, ModelReading
 from cottax.consumers.execution import CallableGraph, Drive, run
@@ -55,8 +56,8 @@ class Plain:
         return '/'.join(self.segments)
 
 
-class Vanishes(ConditionalNode):
-    '''A condition node whose conditions vanish: the level of the two finals below.'''
+class Vanishes(Condition):
+    '''A condition whose conditions vanish: the level of the two finals below.'''
     reads_inside  : tuple
     owns_inside   : tuple
     reads_outside = ()
@@ -74,7 +75,7 @@ def coupled(place, kind):
     p = lambda *s: place(s)
     return NestingGraph(AbstractGraph(OrderedMap({
         p('body'): FunctionalNode((p('k'), p('u')), (p('r'),)),
-        p('cond'): kind((p('r'),), (p('u'),)),
+        p('cond'): ConditionalNode(kind((p('r'),), (p('u'),))),
     })), OrderedMap())
 
 
@@ -211,7 +212,7 @@ class ZeroSpelling(Spelling[Zero]):
 
 class Secant(DriverContract):
     '''A contract of the toy's: any problem of one scalar unknown, from a start.'''
-    accepts = staticmethod(is_encloser)
+    accepts = staticmethod(lambda condition: bool(condition.owns_inside))
     takes   = (Start,)
     reports = ()
 
@@ -272,7 +273,7 @@ class Vanishing(Wrapper):
 
     def nodes(self, at):
         return ((at, self.function_node()),
-                (minted(Zeroed(), at), Zero(self.function_outputs, self.outputs)))
+                (minted(Zeroed(), at), ConditionalNode(Zero(self.function_outputs, self.outputs))))
 
 
 @choice(Part)
@@ -364,7 +365,7 @@ class Gap(ComposedOp):
         gaps   = tuple(map(GapOf(), copies))
         return (*self.cuts, Insert(OrderedMap({
             minted(GapOf(), self.at): FunctionalNode((*(c.var for c in self.cuts), *copies), gaps),
-            self.at: Zero(gaps, copies)})))
+            self.at: ConditionalNode(Zero(gaps, copies))})))
 
 
 @choice(Closing)
@@ -383,13 +384,13 @@ def test_the_toy_is_placed_by_an_architecture_closing_its_own_way():
     '''Two toy models coupled through their states: an MDA asks each what it is, cuts once,
     closes the cut by the toy's `Gap` and nests both models in the closure.'''
     g = NestingGraph(AbstractGraph(OrderedMap({
-        T('a'): FunctionalNode((T('k'), T('u'), T('v')), (T('ra'),)), T('A'): Zero((T('ra'),), (T('u'),)),
-        T('b'): FunctionalNode((T('u'), T('v')), (T('rb'),)),         T('B'): Zero((T('rb'),), (T('v'),)),
+        T('a'): FunctionalNode((T('k'), T('u'), T('v')), (T('ra'),)), T('A'): ConditionalNode(Zero((T('ra'),), (T('u'),))),
+        T('b'): FunctionalNode((T('u'), T('v')), (T('rb'),)),         T('B'): ConditionalNode(Zero((T('rb'),), (T('v'),))),
     })), OrderedMap())
     out = (Plan(g) + MDA(GaussSeidel(), ClosedByGap())).graph
     closure, hat = Tok((purposes.Closure(), 'a')), Tok((purposes.Copy(), 'v'))
     assert dict(out.within) == {T('A'): closure, T('B'): closure}
-    assert out[closure] == Zero((minted(GapOf(), hat),), (hat,))
+    assert out[closure].condition == Zero((minted(GapOf(), hat),), (hat,))
     assert ExecutableGraph(out).graph == out
     with pytest.raises(TypeError, match='test_answers.Raw has no ModelReading answer'):
         Plan(coupled(Tok, Raw)) + MDA(GaussSeidel(), ClosedByGap())
@@ -441,10 +442,10 @@ table = {i.__qualname__: {c.__qualname__: type(a).__qualname__ for c, a in t.ite
                           if type(a).__module__.startswith(('cottax.relational', 'cottax.ode',
                                                             'cottax.pytree'))}
          for i, t in answered().items()}
-from cottax.core import Label, Mint, NodeDefinition, Place
+from cottax.core import Condition, Label, Mint, NodeDefinition, Place
 def category(about):
     kinds = about if isinstance(about, tuple) else (about,)
-    if all(isinstance(k, type) and issubclass(k, NodeDefinition) for k in kinds):
+    if all(isinstance(k, type) and issubclass(k, (NodeDefinition, Condition)) for k in kinds):
         return 'node'
     if set(kinds) <= {Place, Label}:
         return 'place'

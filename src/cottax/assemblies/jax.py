@@ -11,7 +11,7 @@ from ..core import (
     Jacobi, NoCuts,
 )
 from ..core.frozen import OrderedMap, choice
-from ..core.driven import Driven, Start
+from ..core.driven import Start, driven
 from ..consumers.architectures import (
     IDF, MDA, MDF, SAND, AtFirstMember, Analysis, Architecture, Bodies, Boxes,
     Architecting, CloseFunctionalCycles, Coupled, Disciplines, IndividualFeasible, Monolithic,
@@ -208,7 +208,7 @@ __all__ = [
     'DoeDeclaring', 'Sample', 'DoeCondition', 'Varied', 'Recorded', 'Sampler', 'Sampling', 'JaxDoe',
     'Newton', 'Picard', 'BFGS', 'ScipyMinimize', 'HostMinimiser', 'HostProblem',
     'canonical', 'box', 'Box', 'NotSquare', 'JitGraph',
-    'Running', 'Results', 'Inputs', 'Traced', 'Start', 'Driven', 'CallableGraph', 'completed',
+    'Running', 'Results', 'Inputs', 'Traced', 'Start', 'driven', 'CallableGraph', 'completed',
     'PlainFormat', 'LatexFormatter', 'render_xdsm_svg', 'render_matrix_svg', 'by_namespace',
     'render_html', 'draw', 'render', 'to_dot', 'Style', 'STYLES', 'TERRACOTTA', 'PYXDSM', 'DARK',
 ]

@@ -4,7 +4,7 @@ declares, `Sample`.'''
 from collections.abc import Iterator, Mapping
 from typing import Any
 
-from ...core import Label, NodeDefinition, Place, Violation, minted
+from ...core import ConditionalNode, Label, NodeDefinition, Place, Violation, minted
 from ...core.frozen import OrderedMap, choice, violations
 from ...consumers.declaration.interface import Declaring
 from ...consumers.declaration.interface_types import (
@@ -57,7 +57,7 @@ class Sample[N: Label, V: Place](Declaration[N, V]):
         return DoeCondition(*self._condition_fields)
 
     def nodes(self, at: N) -> tuple[tuple[N, NodeDefinition[V]], ...]:
-        return ((at, self.condition),)
+        return ((at, ConditionalNode(self.condition)),)
 
     def nodes_when_held(self, at: N) -> tuple[tuple[N, NodeDefinition[V]], ...]:
         '''Nothing: nothing holds a DOE.'''

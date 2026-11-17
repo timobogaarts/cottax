@@ -12,10 +12,9 @@ from collections.abc import Generator, Iterator, Sequence
 from typing import Any, ClassVar
 
 from ...core import (
-    Combine, ConditionalNode, CutRule, FunctionalNode, Label, NestingGraph, Opened, Place, ToCut, Violation,
+    AbstractConditionalNode, Combine, CutRule, FunctionalNode, Label, kind_of, NestingGraph, Opened, Place, ToCut, Violation,
     is_encloser, cuts_per_cycle, GraphOp, Nest, StagedOp, refusals,
 )
-from ...core.driven import condition_of
 from ...core.frozen import AbstractVar, Frozen, OrderedMap, answer, first
 from .closing import closed
 from .interface import Closing, ModelReading
@@ -26,18 +25,18 @@ from .refusals import BodyShared, NestedAlready, NotCombinable, TopNotAProblem, 
 
 def not_implicit[N: Label](graph: NestingGraph[N, Any], problem: N) -> tuple[Violation, ...]:
     '''Why the problem is not an implicit model, by its `ModelReading`; refused if none.'''
-    return tuple(answer(ModelReading, condition_of(graph[problem])).not_implicit(graph, problem))
+    return tuple(answer(ModelReading, kind_of(graph[problem])).not_implicit(graph, problem))
 
 
 def body_of_problem[N: Label](graph: NestingGraph[N, Any], problem: N) -> tuple[N, ...]:
     '''The function nodes that are the problem's own, by its `ModelReading`.'''
-    return answer(ModelReading, condition_of(graph[problem])).body(graph, problem)
+    return answer(ModelReading, kind_of(graph[problem])).body(graph, problem)
 
 
 def combines_as(node: Any) -> type | None:
     '''The kind `node` folds as, `None` where it folds into nothing or nobody answers.'''
-    found = answer(ModelReading, condition_of(node), None)
-    return None if found is None else found.combines_as(condition_of(node))
+    found = answer(ModelReading, subject := kind_of(node), None)
+    return None if found is None else found.combines_as(subject)
 
 
 def _spelled(kind: type | None) -> str:
@@ -306,7 +305,7 @@ def reached_requirements[N: Label, V: Place](graph: NestingGraph[N, V], top: N) 
     reach  = set(graph.graph.reach(graph[top].owns_inside))
     owners = graph.graph.owners
     return tuple(r for r, d in graph.definitions.items()
-                 if isinstance(d, ConditionalNode) and not d.owns_inside
+                 if isinstance(d, AbstractConditionalNode) and not d.owns_inside
                  and all(owners.get(c) in reach for c in d.reads_inside))
 
 

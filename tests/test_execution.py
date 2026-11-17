@@ -20,7 +20,9 @@ from cottax.core import (
 )
 from cottax.core.maths.valued import InputMissing, NotAPlace, OwnedGiven
 from cottax.core.frozen import OrderedMap
-from cottax.core.driven import Driven, DrivenGraph, DriverContract, PerProblem, PerUnknown, Role, is_driven
+from cottax.core.driven import driven as with_driver, DrivenGraph
+from cottax.core import is_driven
+from cottax.core.driven import DriverContract, PerProblem, PerUnknown, Role
 from cottax.consumers.execution import CallableGraph, run
 from cottax.consumers.execution.interface_types import ConditionMap, Context, Posed
 from cottax.consumers.execution.refusals import (
@@ -146,9 +148,9 @@ def places(problem: Word, unknown: Word, driver: DriverContract) -> tuple:
             tuple((W(f'^{role.__name__.lower()}.{problem}'),) for role in driver.reports))
 
 
-def driven(problem: Word, condition, implementation=newton, driver=Newton()) -> 'Driven':
+def driven(problem: Word, condition, implementation=newton, driver=Newton()) -> 'ConditionalNode':
     (unknown,) = condition.owns_inside
-    return implemented(Driven(condition, driver, *places(problem, unknown, driver)),
+    return implemented(with_driver(condition, driver, *places(problem, unknown, driver)),
                              implementation)
 
 
@@ -203,7 +205,7 @@ def test_the_data_arrives_one_tuple_per_role_and_the_conditions_as_values():
     run(GraphWithValues(graph, OrderedMap({X: 1.0, W('^start.u'): 2.0, W('^budget.DiscA.close'): 7})))
     posed, context, data = spy.seen[0]
     conditions = posed.conditions
-    assert posed.condition is graph[CLOSE].condition and posed.reports == Newton().reports
+    assert posed.condition == (graph[CLOSE]).condition and posed.reports == Newton().reports
     assert not is_driven(posed.condition)   # what the values mean, nothing of the graph
     assert data == {Start: (2.0,), Budget: (7,)}
     assert isinstance(conditions, InteriorConditionMap) and isinstance(conditions, ConditionMap)
@@ -317,7 +319,7 @@ def test_a_driven_node_runs_by_an_implementation_of_its_own_driver():
     '''A bare callable says nothing of what it implements, an implementation of another
     contract answers something else, and one of this contract may lack a role this driver
     has: each refused before anything runs. Data it does not need is fine (`Returns`).'''
-    condition = definitions()[CLOSE].condition
+    condition = (definitions()[CLOSE]).condition
     for node, refused in ((driven(CLOSE, condition, lambda d, c, x: None), NotADriverImplementation),
                           (driven(CLOSE, condition, newton, Bisection()), ImplementsAnother),
                           (driven(CLOSE, condition, Tolerant()), DataMissing),
@@ -348,7 +350,7 @@ def test_the_most_specific_contract_is_chosen_whatever_order_the_map_is_written_
 
 
 def test_a_report_the_driver_asks_for_lands_and_one_it_does_not_is_not_made():
-    condition = definitions()[CLOSE].condition
+    condition = (definitions()[CLOSE]).condition
     history   = Newton(reports=(Steps, History))
     out = ran(flat({CLOSE: driven(CLOSE, condition, newton, history)}))
     assert len(out[W('^history.DiscA.close')]) > out[W('^steps.DiscA.close')] > 0
@@ -366,7 +368,7 @@ class Explicit(ConditionMap):
 
 def test_an_implementation_runs_against_a_condition_map_in_closed_form():
     '''`u^2 - k` with `k` in the context: no graph, no proof, no run.'''
-    condition = definitions()[CLOSE].condition
+    condition = (definitions()[CLOSE]).condition
     square    = Explicit(lambda u, context: (u[0] * u[0] - context[0],))
     (u,), reports = newton(Posed(condition, (Steps, History), square, ()), (4.0,),
                            {Start: (1.0,), Budget: (50,)})

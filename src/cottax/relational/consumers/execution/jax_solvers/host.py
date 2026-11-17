@@ -17,7 +17,8 @@ import numpy as np
 from jax.flatten_util import ravel_pytree
 
 from .....core import Place
-from .....core.driven import DriverContract, Role, Start
+from .....core.driven import Start
+from .....core.driven import DriverContract, Role
 from .....core.frozen import AbstractClassVar
 from .....relational import Scaling
 from .....relational.contracts import Scales

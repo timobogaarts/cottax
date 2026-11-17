@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from cottax.core import ConditionalNode, FunctionalNode, Mint
+from cottax.core import Condition, ConditionalNode, FunctionalNode, Mint
 from cottax.core.frozen import Choice, OrderedMap, answers
 from cottax.consumers.visualization import DARK, TERRACOTTA, render_matrix_svg, render_xdsm_svg
 from cottax.consumers.visualization.interface import Formatter, NodeDrawing, PlaceDrawing
@@ -68,7 +68,7 @@ class Tilde(Mint):
 Body = FunctionalNode
 
 
-class Unanswered(ConditionalNode):
+class Unanswered(Condition):
     '''A condition node no language answers for.'''
     reads_inside  : tuple
     owns_inside   : tuple
@@ -77,7 +77,7 @@ class Unanswered(ConditionalNode):
     def relabel(self, renaming): return self
 
 
-class Answered(ConditionalNode):
+class Answered(Condition):
     '''One that is: a category of the test's own, and a slot per condition.'''
     reads_inside  : tuple
     owns_inside   : tuple
@@ -164,7 +164,7 @@ def test_a_category_draws_in_its_own_colour_on_a_dark_ground():
     assert f'stroke="{stroke}"' in render_matrix_svg(g, style=DARK)
 
 
-class Twin(ConditionalNode):
+class Twin(Condition):
     '''One answered with another category under `TOY`'s name.'''
     reads_inside  : tuple
     owns_inside   : tuple

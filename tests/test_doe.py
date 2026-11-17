@@ -13,8 +13,9 @@ from jax.tree_util import GetAttrKey
 import cottax.assemblies.jax as cx
 from cottax.core import ExecutableGraph, FunctionalNode, GraphWithValues, violations
 from cottax.core.frozen import OrderedMap
-from cottax.core.driven import Assign, Driven, DrivenGraph, Start
-from cottax.core.driven.nodes import NotAccepted
+from cottax.core import ConditionalNode
+from cottax.core.driven import Assign, DrivenGraph, Start, driven, driving_violations
+from cottax.core.driven.driver import NotAccepted
 from cottax.core.realisation import implemented
 from cottax.core.refusal_kinds import Constant, OwnReadInsideCycle, ReadInsideCycle
 from cottax.consumers.execution import CallableGraph, run
@@ -76,7 +77,7 @@ def test_core_refuses_a_doe_by_its_own_rules(nodes, kind):
 def test_sampling_answers_a_doe_and_nothing_else():
     DrivenGraph(Assign(N('doe'), Sampling(), (), ())(model()))
     root_find = RelationalCondition((Relation(V('h'), None, Eq),), (), (V('x'),), ())
-    assert [type(v) for v in violations(Driven, root_find, Sampling(), (), ())] == [NotAccepted]
+    assert [type(v) for v in driving_violations(ConditionalNode(root_find), Sampling())] == [NotAccepted]
 
 
 def test_a_relabelling_moves_every_place_of_a_doe():
@@ -99,7 +100,7 @@ def square(x):
 
 def sampled(doe=DOE, batch_size=None):
     '''`doe` driven by `Sampling`, run by `JaxDoe`.'''
-    return implemented(Driven(doe, Sampling(), (), ()), JaxDoe(batch_size))
+    return implemented(driven(doe, Sampling()), JaxDoe(batch_size))
 
 def swept(nodes, within=(), **values):
     '''Every place after a run of `nodes`, `values` at its inputs by key.'''
@@ -121,7 +122,7 @@ def test_a_problem_nested_in_a_doe_is_solved_at_every_point():
     from cottax.relational.consumers.execution.jax_solvers import Newton
     root = RelationalCondition((Relation(V('r'), None, Eq),), (), (V('u'),), ())
     out = swept({N('doe'): sampled(DoeCondition(DOE.factors, (Recorded(V('u'), V('U')),))),
-                 N('q'):   implemented(Driven(root, RootFinding(steps=False), ((V('u0'),),), ()),
+                 N('q'):   implemented(driven(root, RootFinding(steps=False), ((V('u0'),),)),
                                        Newton(rtol=1e-12, atol=1e-12)),
                  N('r'):   call(lambda x, u: u**2 - x, ['x', 'u'], ['r'])},
                 within=((N('q'), N('doe')),), P=PLAN, u0=1.)

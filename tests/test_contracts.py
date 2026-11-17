@@ -8,10 +8,11 @@ from dataclasses import dataclass
 
 import pytest
 
-from cottax.core import violations
+from cottax.core import ConditionalNode, violations
 from cottax.relational import Min, Objective
-from cottax.core.driven import Driven, DriverContract, PerProblem, PerUnknown
-from cottax.core.driven.nodes import NotAccepted
+from cottax.core.driven import driven, driving_violations
+from cottax.core.driven import DriverContract, PerProblem, PerUnknown
+from cottax.core.driven.driver import NotAccepted
 from cottax.core.driven import Start, Steps
 from cottax.relational.contracts import (
     ConstrainedMinimisation, ConstrainedMinimiser, FixedPointIteration,
@@ -83,7 +84,7 @@ def test_an_iterator_refuses_a_fixed_point_without_one_update_per_unknown():
     for node in (twice, once):
         assert is_fixed_point(node) and RootFinder.accepts(node)
         assert not FixedPointIterator.accepts(node)
-        assert [type(v) for v in violations(Driven, node, FixedPointIteration(steps=False),
+        assert [type(v) for v in driving_violations(ConditionalNode(node), FixedPointIteration(steps=False),
                                              *slots(FixedPointIteration(steps=False), node))
                 ] == [NotAccepted]
 
@@ -164,7 +165,7 @@ class Minimises(DriverImplementation[ConstrainedMinimisation]):
 
 
 def refusals(driver: DriverContract, implementation, condition=ROOT_FIND) -> list:
-    node = Driven(condition, driver, *slots(driver, condition))
+    node = driven(condition, driver, *slots(driver, condition))
     return [type(v) for v in check_implements_its_driver(W('p'),
                                                          implemented(node, implementation))]
 

@@ -6,11 +6,10 @@ from collections.abc import Callable, Iterable, Iterator, Mapping
 from typing import Any
 
 from ...core import (
-    FunctionalNode, GraphWithValues, Label, NodeDefinition, Place, Run, SteppedExecutableGraph,
-    Violation,
+    ConditionalNode, FunctionalNode, GraphWithValues, Label, NodeDefinition, Place, Run,
+    SteppedExecutableGraph, Violation, is_driven,
 )
 from ...core.frozen import OrderedMap, checked
-from ...core.driven import DrivenNode
 from ...core.realisation import RealisedGraph, implementation_of, is_implemented
 from .interface import DriverImplementation
 from .interface_types import ConditionMap, ConditionValues, Context, Posed, Unknowns
@@ -45,17 +44,17 @@ def check_implements_its_driver[N: Label, V: Place](name: N, node: NodeDefinitio
     - Is the implementation capable of taking and reporting the contract's (chosen) input
     data and reports?
     '''
-    if isinstance(node, DrivenNode) and is_implemented(node):
-        implementation = implementation_of(node)
+    if is_driven(node) and is_implemented(node):
+        implementation, contract = implementation_of(node), node.driver.contract
         if not isinstance(implementation, DriverImplementation):
             yield NotADriverImplementation(name, implementation)
-        elif not isinstance(node.contract, implementation.implements):
-            yield ImplementsAnother(name, type(node.contract).__name__,
+        elif not isinstance(contract, implementation.implements):
+            yield ImplementsAnother(name, type(contract).__name__,
                                     implementation.implements.__name__)
         else:
-            if missing := tuple(r for r in implementation.needs if r not in node.contract.takes):
+            if missing := tuple(r for r in implementation.needs if r not in contract.takes):
                 yield DataMissing(name, type(implementation).__name__, _names(missing))
-            if absent := tuple(r for r in node.contract.reports if r not in implementation.provides):
+            if absent := tuple(r for r in contract.reports if r not in implementation.provides):
                 yield ReportUnavailable(name, type(implementation).__name__, _names(absent))
 
 
@@ -103,7 +102,7 @@ class Env[V]:
     def write(self, places: tuple[V, ...], values: Iterable[Any]) -> None:
         self.values.update(zip(places, values, strict=True))
 
-type AtSolve = Callable[[DrivenNode, SteppedExecutableGraph, Env], None]
+type AtSolve = Callable[[ConditionalNode, SteppedExecutableGraph, Env], None]
 '''What a walk does at a `Solve`, handed the problem, its interior and the values so far:
 it writes the unknowns and the reports, and walks the interior if it wants its values.'''
 
@@ -150,19 +149,20 @@ def _call(name: Any, node: Any, env: Env) -> None:
     env.write(node.owns, (result,) if len(node.owns) == 1 else result)
 
 
-def _solve(node: DrivenNode, interior: CallableGraph, env: Env) -> None:
+def _solve(node: ConditionalNode, interior: CallableGraph, env: Env) -> None:
     conditions = InteriorConditionMap.posing(node, interior)
+    driver = node.driver
 
     # Solve: posed what the values mean and what is asked back, nothing of the graph
     values, reports = implementation_of(node)(
-        Posed(node.condition, node.contract.reports, conditions, conditions.context_places),
+        Posed(node.condition, driver.contract.reports, conditions, conditions.context_places),
         env.read(conditions.context_places),
-        dict(zip(node.contract.takes, map(env.read, node.data))))
+        dict(zip(driver.contract.takes, map(env.read, driver.data))))
 
     # Add unknowns, what the condition owns outside (a DOE's records) and reports to data.
     # Workaround, pending the history rework: outside owns returned beside the unknowns.
     env.write(node.owns_inside + node.condition.owns_outside, values)
-    for role, slot in zip(node.contract.reports, node.reports):
+    for role, slot in zip(driver.contract.reports, driver.reports):
         env.write(slot, reports[role])
     # Walk interior again for consistent values in non-unknowns.
     walk(interior, env, _solve)
@@ -182,17 +182,18 @@ class InteriorConditionMap[N: Label, V: Place](ConditionMap):
     '''Where the answer is read: the condition's reads, its conditions then its parameters.'''
 
     @classmethod
-    def posing(cls, node: DrivenNode[V], interior: CallableGraph[N, V]
+    def posing(cls, node: ConditionalNode[V], interior: CallableGraph[N, V]
                ) -> 'InteriorConditionMap[N, V]':
         '''The map `run` hands `node`'s driver, `interior` its `Solve`'s. Fixed: what the
         interior reads from outside, and what the condition reads that the interior does not
         produce (a parameter); the map answers at every condition read.'''
         solved   = set(node.owns_inside)
+        stated   = node.condition.reads
         produced = set(interior.graph.graph.owned_variables)
         fixed    = tuple(dict.fromkeys(
-            p for p in (*interior.graph.graph.boundary_inputs, *node.condition.reads)
+            p for p in (*interior.graph.graph.boundary_inputs, *stated)
             if p not in solved and p not in produced))
-        return cls(interior, node.owns_inside, fixed, node.condition.reads)
+        return cls(interior, node.owns_inside, fixed, stated)
 
     def __call__(self, unknowns: Unknowns, context: Context) -> ConditionValues:
         env = Env(zip(self.context_places, context, strict=True))

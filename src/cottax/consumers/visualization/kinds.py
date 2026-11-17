@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 
-from ...core import ConditionalNode, NodeDefinition
-from ...core.driven import condition_of
+from ...core import AbstractConditionalNode, NodeDefinition
 from .interface_types import Drawn, Kind
 from .lookup import drawn
 from .refusals import NamedAlike
@@ -30,11 +29,11 @@ def by_name(kinds: Iterable[Kind | None]) -> dict[str, Kind]:
 
 
 def drawn_of(node: NodeDefinition) -> Drawn | None:
-    '''How `node` is drawn as a condition node (a driven node through its condition),
-    `None` for a node that runs.'''
-    if not isinstance(node, ConditionalNode):
+    '''How `node` is drawn as a condition node, driven or not, `None` for a node that
+    runs.'''
+    if not isinstance(node, AbstractConditionalNode):
         return None
-    return drawn(condition_of(node))
+    return drawn(node)
 
 
 def stated_shape(node: NodeDefinition) -> str | None:

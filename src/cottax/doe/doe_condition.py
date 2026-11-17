@@ -1,8 +1,7 @@
 '''`DoeCondition`: each factor set to every point of its plan, each response recorded there --
 a design of experiments.'''
 
-from ..core import ConditionalNode, Place, Renaming
-from ..core.maths.definition import attributes_text
+from ..core import Condition, Place, Renaming
 from ..core.frozen import Frozen
 
 
@@ -36,7 +35,7 @@ class Recorded[V: Place](Frozen):
         return f'{self.response} into {self.record}'
 
 
-class DoeCondition[V: Place](ConditionalNode[V]):
+class DoeCondition[V: Place](Condition[V]):
     '''Each factor set to every point of its plan, `x_i = p(i)` for `i = 1..n`, and each
     response recorded at each point, `h_i = F(x_i)`, `F` what its cycle computes. It owns the
     factors inside and reads the responses there; it reads the plans outside and owns the
@@ -84,8 +83,7 @@ class DoeCondition[V: Place](ConditionalNode[V]):
                             tuple(r.relabel(renaming) for r in self.responses))
 
     def __repr__(self) -> str:
-        return (f'DoeCondition({"; ".join(map(repr, (*self.factors, *self.responses)))})'
-                f'{attributes_text(self)}')
+        return f'DoeCondition({"; ".join(map(repr, (*self.factors, *self.responses)))})'
 
 
 def is_doe(node: object) -> bool:

@@ -7,15 +7,23 @@ from jax.tree_util import GetAttrKey, tree_leaves_with_path
 from cottax.core.frozen import OrderedMap
 from cottax.core.maths.graph import AbstractGraph
 from cottax.core.maths.nesting import NestingGraph
-from cottax.core import FunctionalNode, NodeDefinition
+from cottax.core import Condition, ConditionalNode, FunctionalNode, NodeDefinition
 from cottax.core.realisation import implemented
 from cottax.pytree.path import NodePath, VarPath
 from cottax.relational import Eq, Min, Objective, Relation, RelationalCondition
 
 
+def node_of(definition):
+    '''`definition` as a graph binds it: a bare condition as the node holding it.'''
+    return ConditionalNode(definition) if isinstance(definition, Condition) else definition
+
+
 def graph_of(definitions, within=()) -> NestingGraph:
-    '''A nesting graph over its bindings and its pairs, each a mapping or pairs.'''
-    return NestingGraph(AbstractGraph(OrderedMap(definitions)), OrderedMap(within))
+    '''A nesting graph over its bindings and its pairs, each a mapping or pairs; a bare
+    condition is bound as the node holding it (`node_of`).'''
+    pairs = definitions.items() if hasattr(definitions, 'items') else definitions
+    return NestingGraph(AbstractGraph(OrderedMap((n, node_of(d)) for n, d in pairs)),
+                        OrderedMap(within))
 
 
 def three_problems(*nesting: tuple[str, str]) -> NestingGraph:
@@ -56,7 +64,7 @@ def graph_from_pytree(pytree: Any) -> NestingGraph:
     '''A graph of the node definitions in a pytree, each named by its key path, in
     flatten order (a dict's keys sorted).'''
     def is_node(x: Any) -> bool:
-        return isinstance(x, NodeDefinition)
+        return isinstance(x, (NodeDefinition, Condition))
 
     return graph_of((NodePath(keys), leaf)
                     for keys, leaf in tree_leaves_with_path(pytree, is_leaf=is_node)

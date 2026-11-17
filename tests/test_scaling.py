@@ -318,7 +318,7 @@ def test_a_scaled_contract_is_written_and_read_back():
     written = json.loads(json.dumps(write_json(study(contracts=cx.SCALED).graph, False)))
     back = read_json(written)
     opt = cx.absolute.node('OPT')
-    assert back[opt].contract == ConstrainedMinimisation(steps=False, scaled=True)
+    assert back[opt].driver.contract == ConstrainedMinimisation(steps=False, scaled=True)
 
 
 def test_a_contract_written_before_scaled_existed_reads_back_unscaled():
@@ -333,4 +333,4 @@ def test_a_contract_written_before_scaled_existed_reads_back_unscaled():
                 without(v)
     without(written)
     back = read_json(written)[cx.absolute.node('OPT')]
-    assert back.contract == ConstrainedMinimisation(steps=False)
+    assert back.driver.contract == ConstrainedMinimisation(steps=False)

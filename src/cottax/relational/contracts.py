@@ -7,7 +7,8 @@ Driver contracts:
 '''
 
 from ..core import Place
-from ..core.driven import DriverContract, PerProblem, Role, Start, Steps
+from ..core.driven import Start, Steps
+from ..core.driven import DriverContract, PerProblem, Role
 from .classification import is_equalities, is_fixed_point, is_optimise, is_unconstrained_optimise
 
 

@@ -15,7 +15,7 @@ from jax.tree_util import DictKey
 from cottax.core import FunctionalNode, GraphWithValues
 from cottax.relational import Min, Objective
 from cottax.core.frozen import OrderedMap
-from cottax.core.driven import Driven
+from cottax.core.driven import driven as with_driver
 from cottax.core.driven import Start, Steps
 from cottax.relational.contracts import FixedPointIteration, Minimisation, RootFinding
 from cottax.consumers.execution import CallableGraph, run
@@ -102,13 +102,13 @@ def test_next_values_are_the_right_sides_in_the_order_of_the_unknowns():
 
 def driven_node(condition, driver, reports=()):
     '''A start per unknown.'''
-    return Driven(condition, driver, (tuple(STARTS(u) for u in condition.unknowns),),
+    return with_driver(condition, driver, (tuple(STARTS(u) for u in condition.unknowns),),
                   tuple((p,) for p in reports))
 
 
 def posed(node, conditions) -> Posed:
     '''What an implementation is posed for `node`, tried through `conditions`.'''
-    return Posed(node.condition, node.contract.reports, conditions, ())
+    return Posed(node.condition, node.driver.contract.reports, conditions, ())
 
 
 SQUARE_ROOT = RelationalCondition((Relation(V('r'), None, Eq),), (), (V('u'),), ())
@@ -172,7 +172,7 @@ def call(reads, owns, fn) -> 'FunctionalNode':
     return implemented(FunctionalNode(tuple(reads), tuple(owns)), fn)
 
 
-def driven(condition, driver, implementation, reports=()) -> 'Driven':
+def driven(condition, driver, implementation, reports=()) -> 'ConditionalNode':
     return implemented(driven_node(condition, driver, reports), implementation)
 
 

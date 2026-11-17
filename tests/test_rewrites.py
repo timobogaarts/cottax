@@ -13,9 +13,11 @@ from jax.tree_util import GetAttrKey
 
 from cottax.core.frozen import OrderedMap
 from cottax.relational import Min, Objective
-from cottax.core.maths.plan import Cut, Insert, Plan
-from cottax.core import ConditionalNode, FunctionalNode, body_of, enclosers
-from cottax.core.driven import Assign, Driven, DriverContract, is_driven
+from cottax.core.maths.plan import Cut, Insert, Plan, refusals
+from cottax.core import Condition, ConditionalNode, FunctionalNode, body_of, enclosers
+from cottax.core.driven import Assign, driven as with_driver
+from cottax.core import is_driven
+from cottax.core.driven import DriverContract
 from cottax.core.driven import Start
 from cottax.assemblies.jax import absolute
 
@@ -133,8 +135,8 @@ def test_a_fixed_point_cut_is_one_node_and_stays_cyclic(looped):
     assert names(g) == ['.d1', '.d2', '.obj', '^solve.y1']
     assert not g.graph.is_acyclic
     assert enclosers(g.definitions) == (o.at,)
-    assert is_fixed_point(g[o.at])
-    assert g[o.at].relations == (Relation(o.copies[0], Y1, Eq),)   # `^copy.y1 = y1`
+    assert is_fixed_point(g[o.at].condition)
+    assert g[o.at].condition.relations == (Relation(o.copies[0], Y1, Eq),)   # `^copy.y1 = y1`
     assert g[o.at].owns == o.copies and g[o.at].reads == o.vars
     assert body_of(g).graph.is_acyclic
 
@@ -185,7 +187,7 @@ def test_a_closure_over_several_cuts_is_one_problem(two_cycles):
     assert [v.spelling for v in op.copies] == ['^copy.y2', '^copy.z']
     assert g[op.at].owns  == op.copies
     assert g[op.at].reads == op.vars == (Y2, Z)
-    assert g[op.at].relations == tuple(Relation(m, v, Eq)
+    assert g[op.at].condition.relations == tuple(Relation(m, v, Eq)
                                             for m, v in zip(op.copies, op.vars))
 
 
@@ -239,7 +241,7 @@ def test_combine_is_one_problem_over_every_unknown(two_problems):
     assert names(g) == ['.fa', '.fb', '^solve.mda']
     assert g[op.at].owns  == (M, Z)                 # concatenated, in `problems` order
     assert g[op.at].reads == (Y1, Y2)
-    assert is_root_find(g[op.at])
+    assert is_root_find(g[op.at].condition)
 
 
 def test_combine_is_the_join_written_by_hand(two_problems):
@@ -282,7 +284,7 @@ def test_an_optimise_absorbs_a_root_find(mdf):
     '''SAND: the unknowns join the design, the vanishing relations join the constraints.'''
     op = Combine(PROBLEM(N('sand')), (N('opt'), N('h'),), RelationalCondition)
     g  = op(mdf)
-    joined = g[op.at]
+    joined = g[op.at].condition
 
     assert is_optimise(joined)
     assert joined.objectives  == (Objective(F, Min),)
@@ -300,7 +302,7 @@ def test_two_fixed_points_stay_a_fixed_point():
         N('hb'): fixed_point((Y2,), (Z,)),
     }))
     op = Combine(PROBLEM(N('mda')), (N('ha'), N('hb'),), RelationalCondition)
-    assert is_fixed_point(op(g)[op.at])
+    assert is_fixed_point(op(g)[op.at].condition)
 
 
 def test_a_fold_refuses_a_node_that_is_not_the_kind_it_declared(two_problems):
@@ -313,14 +315,14 @@ def test_a_fold_refuses_a_node_that_is_not_the_kind_it_declared(two_problems):
         Combine(PROBLEM(N('mda')), (N('ha'), N('nope'),), RelationalCondition)(two_problems)
 
 
-def test_a_fold_refuses_a_driven_problem(two_problems):
-    '''A `Driven` is not a `RelationalCondition`, so the fold has no `+` to reach: the
-    algorithm answering each would be discarded, and which should answer the join cannot
-    be read off the two.'''
+def test_a_fold_refuses_a_driven_problem_with_a_bare_one(two_problems):
+    '''Which algorithm should answer the join cannot be read off a driven problem and a
+    bare one: the driver of the one would be discarded or imposed on the other.'''
     driven = (Plan(two_problems) + assign(N('ha'), Newton())).graph
-    with pytest.raises(TypeError, match='well-defined over one kind only') as e:
-        Combine(PROBLEM(N('mda')), (N('ha'), N('hb'),), RelationalCondition)(driven)
-    assert 'Driven' in str(e.value)
+    fold = Combine(PROBLEM(N('mda')), (N('ha'), N('hb'),), RelationalCondition)
+    assert [type(v).__name__ for v in refusals(fold, driven)] == ['DrivenOnOneSide']   # as data
+    with pytest.raises(ValueError, match='one is driven and one is not'):
+        fold(driven)
 
 
 def test_a_fold_declares_what_it_folds(two_problems):
@@ -329,7 +331,7 @@ def test_a_fold_declares_what_it_folds(two_problems):
     A kind with no `+` at all is refused when the op is built, before any graph: a level
     defines none -- it leaves one to its finals -- so the kind names the final folded.'''
     with pytest.raises(TypeError, match='defines no `\\+`'):
-        Combine(PROBLEM(N('mda')), (N('ha'), N('hb'),), ConditionalNode)
+        Combine(PROBLEM(N('mda')), (N('ha'), N('hb'),), Condition)
 
 
 def test_combine_reads_written():
@@ -388,9 +390,9 @@ def test_a_rewire_works_on_a_statement_that_groups_its_places():
     # ... and when it *is* the reader, the relation's operator survives the rename.
     op    = Cut(C, (N('opt'),), HAT)
     moved = op(g)
-    assert is_optimise(moved[N('opt')])
-    assert moved[N('opt')].relations == (Relation(op.copy, None, Eq),)
-    assert moved[N('opt')].objectives == (Objective(F, Min),) and moved[N('opt')].unknowns == (Z,)
+    assert is_optimise(moved[N('opt')].condition)
+    assert moved[N('opt')].condition.relations == (Relation(op.copy, None, Eq),)
+    assert moved[N('opt')].condition.objectives == (Objective(F, Min),) and moved[N('opt')].condition.unknowns == (Z,)
 
 
 # ---------------------------------------------------------------- assign
@@ -422,7 +424,7 @@ def test_assign_derives_one_start_per_unknown(sellar):
     node = g[cut.at]
 
     assert is_driven(node) and is_fixed_point(node.condition)
-    assert node.data == ((START(HAT(Y2)),),)
+    assert node.driver.data == ((START(HAT(Y2)),),)
     assert START(HAT(Y2)) in g.graph.boundary_inputs
 
 
@@ -436,7 +438,7 @@ def test_assign_derives_nothing_for_a_driver_requiring_nothing(sellar):
 
     cut = closure(sellar, Y2)
     g   = assigned(Plan(sellar) + cut, cut.at, SelfStarting()).graph
-    assert g[cut.at].data == ()
+    assert g[cut.at].driver.data == ()
     assert g[cut.at].reads == g[cut.at].reads_inside
 
 
@@ -469,7 +471,7 @@ def test_assign_keeps_an_optimise_start_apart_from_its_conditions():
     opt = assigned(Plan(g), N('opt'), Descent()).graph[N('opt')]
 
     assert is_driven(opt) and is_optimise(opt.condition)
-    assert opt.data == ((START(V('x')),),)
+    assert opt.driver.data == ((START(V('x')),),)
     assert opt.reads_inside == (V('f'),)
 
 
@@ -489,7 +491,7 @@ def test_a_rewire_reaches_the_statement_a_driver_wraps():
 
     assert [p.spelling for p in after.reads] == ['^copy.r', '^start.u']
     assert [p.spelling for p in after.reads_inside] == ['^copy.r']     # renamed, still a condition
-    assert [p.spelling for slot in after.data for p in slot] == ['^start.u']   # untouched
+    assert [p.spelling for slot in after.driver.data for p in slot] == ['^start.u']   # untouched
 
 
 # ---------------------------------------------------------------- the unknowns
@@ -516,7 +518,7 @@ def test_determine_names_the_unknowns_and_keeps_the_binding():
     p = Plan(graph_with(stated(Relation(R, None, Eq)))) + Determine(N('c'), (U,))
     assert p.graph.nodes == (N('m'), N('c'))            # in place: the binding did not move
     assert problem_type_of(p.graph[N('c')]) == 'root-find'
-    assert p.graph[N('c')].unknowns == (U,)
+    assert p.graph[N('c')].condition.unknowns == (U,)
     assert enclosers(p.graph.definitions) == (N('c'),)
 
 
@@ -531,7 +533,7 @@ def test_determine_takes_no_target_type_because_the_shape_follows():
 def test_undetermine_is_the_inverse():
     for req in (stated(Relation(R, None, Eq)), stated(Relation(U, GU, Eq))):
         p = Plan(graph_with(req)) + Determine(N('c'), (U,))
-        assert (p + Undetermine(N('c'))).graph[N('c')] == req
+        assert (p + Undetermine(N('c'))).graph[N('c')].condition == req
 
 
 def test_determine_refuses_a_statement_that_already_determines_something():
@@ -572,8 +574,8 @@ def test_what_a_driven_statement_determines_cannot_be_edited():
 
 def test_undriving_first_is_what_makes_it_editable():
     p = driven() + Undrive(N('c')) + Undetermine(N('c'))
-    assert p.graph[N('c')].unknowns == ()
-    assert (p + Determine(N('c'), (U,))).graph[N('c')] == driven().graph[N('c')].condition
+    assert p.graph[N('c')].condition.unknowns == ()
+    assert (p + Determine(N('c'), (U,))).graph[N('c')] == ConditionalNode(driven().graph[N('c')].condition)
 
 
 def test_every_rewrite_case_has_wording():

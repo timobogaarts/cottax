@@ -51,7 +51,7 @@ def test_an_implicit_model_is_a_body_and_a_problem(sellar):
     body, problem = sellar[n('disc1')], sellar[cx.absolute.node(cx.solve(N['disc1']))]
     assert body.reads == (v('z'), v('y1'), v('y2')) and body.owns == (cx.absolute.place(cx.cond(v('y1'))),)
     assert problem.owns == (v('y1'),) and problem.reads == body.owns
-    assert is_root_find(problem)
+    assert is_root_find(problem.condition)
 
 
 def test_the_pair_is_a_coupled_block_with_a_problem(sellar):
@@ -109,7 +109,7 @@ def test_a_closure_is_assigned_where_it_binds(sellar):
     plan = Plan(sellar) + cx.absolute.fixed_point_cut(v('y2'), [n('disc1')])
     assert plan.ops[-1].at == cx.absolute.node(cx.closure(N['y2']))
     driven = plan + cx.absolute.assign(plan.ops[-1].at, RootFinding(steps=False))
-    assert driven.graph[plan.ops[-1].at].contract == RootFinding(steps=False)
+    assert driven.graph[plan.ops[-1].at].driver.contract == RootFinding(steps=False)
 
 
 # ---------------------------------------------------------------- a design over models
@@ -157,5 +157,5 @@ def test_drive_answers_each_problem_by_the_implementation_accepting_it(first_for
     implementations = (Hold(), Newton()) if first_foreign else (Newton(), Hold())
     drive = Drive(implementations, (*CONTRACTS, Holding()), flat.role_places)
     graph = (declared + drive).graph
-    assert isinstance(graph[n('held')].contract, Holding)
-    assert isinstance(graph[cx.absolute.node(cx.solve(n('f')))].contract, RootFinding)
+    assert isinstance(graph[n('held')].driver.contract, Holding)
+    assert isinstance(graph[cx.absolute.node(cx.solve(n('f')))].driver.contract, RootFinding)

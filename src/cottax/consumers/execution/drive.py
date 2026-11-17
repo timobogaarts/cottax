@@ -5,7 +5,9 @@ from collections.abc import Callable
 
 from ...core import NestingGraph, ComposedOp, GraphOp
 from ...core.frozen import OrderedMap
-from ...core.driven import Assign, DriverContract, is_driven
+from ...core.driven import Assign
+from ...core import is_driven, kind_of
+from ...core.driven import DriverContract
 from ...core.realisation import Implement, is_implemented
 from .interface import DriverImplementation
 from .refusals import NoDefaultContract, NoneAccepts, NoneImplements
@@ -26,7 +28,7 @@ class Drive(ComposedOp):
     def composed(self, graph: NestingGraph) -> tuple[GraphOp, ...]:
         undriven = {p for p in graph.enclosers if not is_driven(graph[p])}
         picked = OrderedMap((p, self.chosen(p, node) if p in undriven
-                             else self.covering(p, node.contract))
+                             else self.covering(p, node.driver.contract))
                             for p in graph.enclosers
                             if not is_implemented(node := graph[p]))
         def assigned(p, implementation: DriverImplementation) -> Assign:
@@ -36,8 +38,9 @@ class Drive(ComposedOp):
                 *((Implement(picked),) if picked else ()))
 
     def chosen(self, name, problem) -> DriverImplementation:
+        '''The first implementation whose contract accepts the problem's condition.'''
         for implementation in self.implementations:
-            if implementation.implements.accepts(problem):
+            if implementation.implements.accepts(kind_of(problem)):
                 return implementation
         raise NoneAccepts(name, problem).raised
 

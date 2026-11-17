@@ -151,7 +151,7 @@ def test_a_start_renamed_onto_a_model_is_still_the_start():
     '''A warm start from another node's output: one place moved, the role untouched --
     the Newton reads `Start` and never learns where it came from.'''
     graph = driven(newton, Rename(CLOSE, ((START, K),))).graph
-    assert graph[CLOSE].data[0] == (K,)
+    assert graph[CLOSE].driver.data[0] == (K,)
     out = run(graph, {X: 1.0, BUDGET: 50})
     assert math.isclose(out[U], exact_u(1.0), rel_tol=1e-12)
 
