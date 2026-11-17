@@ -21,9 +21,10 @@ class Varied[V: Place](Frozen):
 
 
 class Recorded[V: Place](Frozen):
-    '''`response` at each point, stacked along a leading axis at `record`. A record is a
-    driver's history in concept, as an integrator's `Trajectory` is; the two stand apart until
-    the history rework (`TODO.md`).'''
+    '''`response` at each point, stacked along a leading axis at `record`.
+
+    Workaround, pending the history rework: a record is a driver's history in concept, as an
+    integrator's `Trajectory` is, and the two stand apart until that rework unifies them.'''
 
     response : V
     record   : V
@@ -39,13 +40,17 @@ class DoeCondition[V: Place](ConditionalNode[V]):
     '''Each factor set to every point of its plan, `x_i = p(i)` for `i = 1..n`, and each
     response recorded at each point, `h_i = F(x_i)`, `F` what its cycle computes. It owns the
     factors inside and reads the responses there; it reads the plans outside and owns the
-    records outside.
+    records outside. It combines with nothing.
 
-    The records are the condition's own (`owns_outside`) until the history rework, which may
-    move them to the driver (`TODO.md`). Outside its cycle a factor, and anything owned on the
-    cycle, holds no answer -- what one point left -- and nothing refuses a model off the cycle
-    reading it yet (`TODO.md`). Nested in nothing, work in progress: nesting one proves, and is
-    unsupported until that check exists. Combines with nothing.'''
+    Workaround, pending the history rework: the records are the condition's own
+    (`owns_outside`), and that rework may move them to the driver.
+
+    Pending a check of the condition kind: outside its cycle a factor, and anything owned on
+    the cycle, holds no answer -- what one point left -- and nothing refuses a model off the
+    cycle reading it.
+
+    Work in progress: a DOE is nested in nothing. Nesting one proves, and is unsupported until
+    that check exists.'''
 
     factors   : tuple[Varied[V], ...]
     responses : tuple[Recorded[V], ...]

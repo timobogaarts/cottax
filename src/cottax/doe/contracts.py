@@ -15,7 +15,7 @@ class Sampler[V: Place](DriverContract[V]):
 
 class Sampling[V: Place](Sampler[V]):
     '''Every point, `i = 1..n`. It takes nothing, `n` being the plans' length, and reports
-    nothing, the records being the condition's own until the history rework (`TODO.md`).'''
+    nothing: the records are the condition's own, a workaround pending the history rework.'''
     takes   = ()
     reports = ()
 

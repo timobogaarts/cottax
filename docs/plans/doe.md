@@ -34,8 +34,9 @@ nothing. `owns_inside` is derived from the pairs, so `SetOwnsInside` refuses it,
 
 ## Flags
 
-Each is a line in `TODO.md`, added by the step introducing it, and a sentence in the
-docstring where it lives.
+Each is a sentence in the docstring where it lives, labelled *Workaround*, *Pending* or *Work
+in progress*, and a line in `TODO.md` (local, as `CLAUDE.md`), added by the step introducing
+it.
 
 - **F1, workaround: the records are the node's.** They sit on its `owns_outside`, so the run
   writes a condition's `owns_outside` and an implementation returns them after the unknowns.
@@ -95,7 +96,7 @@ lives in `doe`'s answer to declaration).
    as no implicit model, with no body, combining as nothing, so a preset meeting one says why
    (without it, the refusal asks for a module that does not exist). Test: `flat.mda()` on a
    model holding a DOE is refused by kind.
-7. **Docs.** A DOE section in `CLAUDE.md`; the follow-ups in `TODO.md`.
+7. **Docs.** A DOE section in `CLAUDE.md`; the follow-ups in `TODO.md` (both local).
 
 ## Follow-ups, not on this branch
 
