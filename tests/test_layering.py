@@ -155,7 +155,8 @@ def test_a_name_the_core_door_gives_is_imported_from_it():
 # ================================================================ 2. the features
 
 DRIVEN = {'cottax.relational.contracts': 'the shipped contracts are `DriverContract`s',
-          'cottax.ode.contracts':        'the integrator and its roles'}
+          'cottax.ode.contracts':        'the integrator and its roles',
+          'cottax.doe.contracts':        'the sampler'}
 '''The modules of a feature outside its `consumers/` that also import `core.driven`.'''
 
 
