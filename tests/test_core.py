@@ -487,7 +487,7 @@ def test_every_case_a_rule_can_name_has_wording():
     def finals(cls):
         return {s for c in cls.__subclasses__() for s in ({c} | finals(c))
                 if not s.__module__.startswith((              # those finals' cases are their own tests'
-                    'cottax.relational', 'cottax.ode', 'cottax.core.maths.cut_rules', 'cottax.core.driven', 'cottax.core.realisation', 'cottax.consumers.execution',
+                    'cottax.relational', 'cottax.ode', 'cottax.doe', 'cottax.core.maths.cut_rules', 'cottax.core.driven', 'cottax.core.realisation', 'cottax.consumers.execution',
                     'cottax.consumers.json', 'cottax.consumers.pickle', 'cottax.consumers.visualization',
                     'cottax.consumers.declaration', 'cottax.consumers.surface', 'cottax.consumers.architectures',
                     'cottax.assemblies.jax',

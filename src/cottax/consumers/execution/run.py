@@ -159,8 +159,9 @@ def _solve(node: DrivenNode, interior: CallableGraph, env: Env) -> None:
         env.read(conditions.context_places),
         dict(zip(node.contract.takes, map(env.read, node.data))))
 
-    # Add unknowns and reports to data
-    env.write(node.owns_inside, values)
+    # Add unknowns, what the condition owns outside (a DOE's records) and reports to data.
+    # Workaround, pending the history rework: outside owns returned beside the unknowns.
+    env.write(node.owns_inside + node.condition.owns_outside, values)
     for role, slot in zip(node.contract.reports, node.reports):
         env.write(slot, reports[role])
     # Walk interior again for consistent values in non-unknowns.
