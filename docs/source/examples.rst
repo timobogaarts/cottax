@@ -13,3 +13,4 @@ Examples
    examples/coupled_ode
    examples/non_jax
    examples/optimal_control
+   examples/doe_sellar
