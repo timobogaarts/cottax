@@ -712,7 +712,7 @@ def test_the_mdf_absorbs_constraints_declared_where_computed(x64):
     opt   = flat.optimise(minimise='f', design={'z1': (-10, 10), 'z2': (0, 10), 'x1': (0, 10)})
     model = cx.absolute.declare(flat.residual(disc1, 'y1'), disc2, objective, margin1, margin2,
                        {'opt': opt}) + cx.flat.mdf(n('opt'))
-    top   = model.graph[n('opt')]
+    top   = model.graph[n('opt')].condition
     assert cx.Relation(v('g2'), v('g2_max'), cx.Le) in top.relations
     assert v('g2_max') in top.parameters and cx.absolute.node(cx.require(N['margin2'])) not in model.graph
 
