@@ -1,7 +1,7 @@
 '''
 The design of experiments, a third language beside `relational` and `ode`: its condition node,
 proved by core with nothing edited for it, the contract answering it, its run in jax,
-and its declaration through the shipped surface.
+its declaration through the shipped surface, and its drawing.
 '''
 
 import jax
@@ -18,9 +18,12 @@ from cottax.core.realisation import implemented
 from cottax.core.refusal_kinds import Constant, OwnReadInsideCycle, ReadInsideCycle
 from cottax.consumers.execution import CallableGraph, run
 from cottax.consumers.execution.jax_jit import JitGraph
+from cottax.consumers.visualization import render_html, render_matrix_svg, render_xdsm_svg, to_dot
+from cottax.consumers.visualization.xdsm import xdsm_struct
 from cottax.doe import DoeCondition, Recorded, Varied
 from cottax.doe.contracts import Sampling
 from cottax.doe.consumers.execution import JaxDoe, PlansDiffer
+from cottax.doe.consumers.visualization import SAMPLE
 from cottax.pytree.path import NodePath, VarPath
 from cottax.relational import Eq, Relation, RelationalCondition
 from cottax.relational.contracts import RootFinding
@@ -179,3 +182,14 @@ def test_sellars_analysis_under_a_doe_records_what_a_run_per_point_gives():
     each = [s.run(alone, {cx.Inputs: {**inputs, 'z_1': z}, **start})['f'] for z in PLAN]
     out = s.run(under_doe, {cx.Inputs: inputs, **start})
     assert jnp.allclose(out[cx.record('f')], jnp.array(each))
+
+
+# ================================================================ the drawing
+
+def test_a_doe_is_drawn_in_its_own_category():
+    g = model()
+    struct = xdsm_struct(g, blocks=True)
+    assert struct['problem_types'] == {'.doe': 'sample'}
+    assert struct['slots'] == {'.doe': [('hᵢ =', ['.h']), ('xᵢ =', ['.P'])]}
+    assert SAMPLE.legend in render_xdsm_svg(g, blocks=True) and SAMPLE.legend in render_html(g)
+    assert SAMPLE.colour[1] in render_matrix_svg(g) and SAMPLE.colour[1] in to_dot(g)

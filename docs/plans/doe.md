@@ -89,8 +89,9 @@ lives in `doe`'s answer to declaration).
    `z_1` (`fixed_point_cut`, `nest`, `drive(JaxDoe(), Newton())`) records what a loop of runs
    gives.
 4. **Visualisation.** `doe/consumers/visualization.py`: a `Kind` in a hue of its own, the
-   node's `NodeDrawing` (its plans and responses as slots), the `MintDrawing`s of `Points` and
-   `Record`. Tests: the kind and slots drawn; the step 3 model renders.
+   node's `NodeDrawing` (its responses and plans as slots). The mints keep the default,
+   written around their spelling (`points(x)`, `record(h)`). Test: the kind and slots drawn,
+   in every picture.
 5. **Export.** `doe/consumers/json.py`: the `Spelling`, as ODE's. Test: a round trip.
 6. **Architectures** (F5). `doe/consumers/architectures.py`: a `ModelReading` refusing a DOE
    as no implicit model, with no body, combining as nothing, so a preset meeting one says why
