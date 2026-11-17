@@ -15,7 +15,7 @@ from cottax.core import ExecutableGraph, Plan
 from cottax.consumers.visualization.sequencing import Cycle, Run, Solve, Unresolved, walk, entries
 from cottax.pytree.path import NodePath, VarPath
 from cottax.core import FunctionalNode
-from cottax.core.maths.plan import Nest
+from cottax.core.plan import Nest
 from cottax.core.realisation import implemented
 from cottax.relational import Eq, Relation, RelationalCondition
 from cottax.consumers.visualization.sequencing import ordered_graph, sequence

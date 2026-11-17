@@ -17,7 +17,7 @@ from jax.tree_util import DictKey, GetAttrKey
 
 from cottax.pytree.path import NodePath, VarPath
 from cottax.core import ExecutableGraph, FunctionalNode, SteppedExecutableGraph
-from cottax.core.maths.plan import Cut, Plan
+from cottax.core.plan import Cut, Plan
 from cottax.core.realisation import implemented
 from cottax.core.frozen import OrderedMap
 from cottax.consumers.visualization.style import DARK, PYXDSM, TERRACOTTA

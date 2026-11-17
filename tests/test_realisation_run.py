@@ -17,7 +17,7 @@ from typing import Any
 from jax.tree_util import DictKey
 
 from cottax.core import FunctionalNode, GraphWithValues
-from cottax.core.maths.plan import Plan, Rename
+from cottax.core.plan import Plan, Rename
 from cottax.consumers.execution import CallableGraph, run as run_graph
 from cottax.consumers.execution.interface import DriverImplementation
 import dataclasses

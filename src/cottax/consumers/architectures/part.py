@@ -1,6 +1,7 @@
 '''`Architecting`: the architectures as a surface's methods, closed by the closing it holds.'''
 
-from ...core import CutRule, GaussSeidel, Label
+from ...core import Label
+from .cut_rules import CutRule, GaussSeidel
 from ...core.frozen import AbstractVar
 from ..surface.interface import Part
 from .architectures import IDF, MDA, MDF, SAND

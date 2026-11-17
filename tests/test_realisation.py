@@ -35,7 +35,7 @@ from cottax.core.realisation import (
     implementation_of, is_implemented,
 )
 from cottax.core.realisation.proof import NoImplementation
-from cottax.core.maths.plan.ops import (
+from cottax.core.plan.ops import (
     AttributeAlreadySet, AttributeNotSet, NoAttributeNamed,
 )
 
@@ -68,12 +68,6 @@ class Holding(Condition):
     def relabel(self, renaming):
         return Holding(relabelled(self.reads_inside, renaming),
                        relabelled(self.owns_inside, renaming), relabelled(self.reads_outside, renaming))
-
-    def join(self, other):
-        if not isinstance(other, Holding):
-            return NotImplemented
-        return Holding(self.reads_inside + other.reads_inside, self.owns_inside + other.owns_inside,
-                       self.reads_outside + other.reads_outside)
 
 
 def Holds(*fields, driver=None, **named) -> ConditionalNode:
@@ -403,18 +397,13 @@ def test_an_implementation_goes_on_a_function_or_a_driven_node():
     assert kinds(refusals(Implement(OrderedMap({W('solve'): print})), graph())) == [AttributeDoesNotFit]
 
 
-def test_a_driver_goes_on_a_node_carrying_attributes_and_implemented_nodes_are_not_folded():
+def test_a_driver_goes_on_a_node_carrying_attributes():
     '''The driver is the node's own field, so what the node carries stays where asking
-    the graph's node finds it. And what two nodes carry has no join: an implemented node is
-    folded once its implementation is off.'''
-    from cottax.core import Attribute, Combine, with_attributes
+    the graph's node finds it. (A fold of such a node is refused: `test_combine`.)'''
+    from cottax.core import Attribute, with_attributes
     class Note(Attribute): ...
     noted = with_driver(with_attributes(Holds((r,), (u,)), OrderedMap({Note: 'n'})), Bare(), *NONE)
     assert noted.attributes == OrderedMap({Note: 'n'}) and is_driven(noted)
-    driven = Assign(W('solve'), Bare(), *NONE).apply(graph())
-    done   = Implement(OrderedMap({W('solve'): print})).apply(driven)
-    fold   = Combine(W('solve'), (W('solve'), W('body')), Holding)
-    assert 'CarriesAttributes' in [type(v).__name__ for v in refusals(fold, done)]
 
 
 def test_an_implemented_driven_node_keeps_what_runs_it_through_a_rename():

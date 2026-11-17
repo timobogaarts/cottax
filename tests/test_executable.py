@@ -18,12 +18,13 @@ from cottax.consumers.execution.interface import DriverImplementation
 from cottax.core.realisation import Implement, ImplementDrivers, implemented, is_implemented
 from cottax.consumers.visualization.sequencing import Run, Solve, entries
 from cottax.consumers.visualization.kinds import problem_type_of
-from cottax.core.maths.plan import Nest, Plan
+from cottax.core.plan import Nest, Plan
 from cottax.core.frozen import OrderedMap
 from cottax.relational import (
     Eq, Le, Relation, RelationalCondition, is_fixed_point, is_root_find,
 )
-from cottax.core import Combine, GraphWithValues
+from cottax.core import GraphWithValues
+from cottax.consumers.architectures import Combine
 from cottax.pytree.path import NodePath, VarPath
 from cottax.core import FunctionalNode, enclosers
 import purposes
@@ -406,8 +407,8 @@ def mdf():
     read off the *structure* -- dropping either leaves something drivable -- so it is
     the case nesting exists to state, and `Nest` is where it is stated.
     '''
-    from cottax.core.maths.plan import Plan
-    from cottax.core.maths.plan import Cut
+    from cottax.core.plan import Plan
+    from cottax.core.plan import Cut
     from cottax.relational.rewrites import FixedPointCut
     g = graph_of(OrderedMap({
         N('opt'): RelationalCondition((Relation(V('g'), None, Le),),
@@ -580,7 +581,7 @@ def test_proving_a_graph_condenses_each_block_a_bounded_number_of_times():
     '''A block's graph is held by the blocking and read by every rule, so its components
     condense once however many rules ask. Linear in the blocks -- 77 before that.'''
     import networkx as nx
-    from cottax.core.maths.plan import Cut
+    from cottax.core.plan import Cut
     from cottax.relational.rewrites import FixedPointCut
     from cottax.relational import is_optimise
 

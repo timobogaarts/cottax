@@ -9,7 +9,8 @@ import pytest
 
 from cottax.core import FunctionalNode
 from cottax.core.maths.executable import ExecutableGraph
-from cottax.core.maths.plan import Combine, Nest, Plan
+from cottax.core.plan import Nest, Plan
+from cottax.consumers.architectures import Combine
 from cottax.core.frozen import OrderedMap, violations
 from cottax.core.realisation import implemented
 from cottax.consumers.architectures import (
@@ -20,7 +21,7 @@ from cottax.consumers.architectures.architectures import body_of_problem, cuts_p
 import purposes
 from cottax.pytree.path import NodePath, VarPath
 from cottax.relational import Eq, Le, Relation, RelationalCondition, is_optimise
-from cottax.core.maths.cut_rules import (
+from cottax.consumers.architectures.cut_rules import (
     ByName, CutRule, GaussSeidel, GaussSeidelMinimal, Jacobi, coupling_reads, per_functional_cycle,
 )
 from cottax.consumers.architectures import CloseFunctionalCycles, closed
@@ -158,7 +159,7 @@ def test_a_problem_lying_inside_anothers_body_is_nested_in_it():
     lie on `H`'s cycle, inside `H`'s body, so it can be placed nowhere else and is nested
     there; with `D3` beside, the bodies only overlap, and that is two solves sharing a body.'''
     from cottax.consumers.architectures.refusals import BodyShared
-    from cottax.core.maths.plan import refusals
+    from cottax.core.plan import refusals
     model = {OPT: optimise(V('f'), (V('z'),)),
              N('D1'): call(['z', 'u1', 'u2'], ['r1']), N('D2'): call(['u2', 'u3'], ['r2']),
              N('H'): root_find((V('r1'), V('r2')), (V('u1'), V('u2'))),
@@ -194,7 +195,7 @@ def test_a_problem_of_another_language_is_held_to_its_own_picture():
     from cottax.ode import Dt, OdeCondition
     from cottax.ode.consumers.architectures import RateUnwritten
     from cottax.consumers.architectures.refusals import BodyShared
-    from cottax.core.maths.plan import refusals
+    from cottax.core.plan import refusals
     ode = lambda x, r: OdeCondition((Dt(V(x), V(r), V(f'{x}0')),), V('span'))    # noqa: E731
     top = {OPT: optimise(V('f'), (V('z'),)), N('obj'): call(['z', 'x'], ['f'])}
     off = graph_of(OrderedMap({**top, N('h'): ode('x', 'r')}))
@@ -213,7 +214,7 @@ def test_what_is_combined_into_the_top_is_a_relational_condition():
     the top with it: neither may be of another language.'''
     from cottax.ode import Dt, OdeCondition
     from cottax.consumers.architectures.refusals import NotCombinable
-    from cottax.core.maths.plan import refusals
+    from cottax.core.plan import refusals
     from test_core import States                 # an ODE is never a requirement
     held = graph_of(OrderedMap({OPT: optimise(V('f'), (V('z'),)), N('A'): call(['z'], ['f', 'r']),
                                 N('req'): States((V('r'),), ())}))

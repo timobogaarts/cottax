@@ -2,7 +2,8 @@
 is no implicit model; offers its closing, `FixedPointClosing`, each group of cuts closed by a
 `FixedPointCut`.'''
 
-from ...core import Cut, FunctionalNode, Label, Place, PlaceToPlace, ToCut, Violation
+from ...core import Cut, FunctionalNode, Label, Place, PlaceToPlace, Violation
+from ...consumers.architectures.interface_types import ToCut
 from ...core.frozen import answers, choice
 from ...consumers.architectures.interface import Closing, ModelReading
 from ...consumers.architectures.interface_types import At
@@ -16,7 +17,7 @@ class RelationalModel(ModelReading):
     '''An implicit model where it states equalities alone, each condition written by a
     function node and every unknown read by one of them; its body those functions, a closed
     cut beside them changing nothing, the copy converging to what it copies; folded by its
-    `+`.'''
+    join.'''
 
     def not_implicit(self, graph, problem):
         node, owners = graph[problem], graph.graph.owners
@@ -36,6 +37,9 @@ class RelationalModel(ModelReading):
 
     def combines_as(self, condition):
         return RelationalCondition
+
+    def join(self, condition, other):
+        return condition.join(other)
 
 
 @choice(Closing)

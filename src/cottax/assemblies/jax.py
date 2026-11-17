@@ -7,14 +7,16 @@ from collections.abc import Callable, Mapping
 from typing import Any
 
 from ..core import (
-    ByName, Closure, Copy, Mint, PlaceToPlace, GaussSeidel, GaussSeidelMinimal, GaussSeidelOrdered,
-    Jacobi, NoCuts,
+    Closure, Copy, Mint, PlaceToPlace,
+)
+from ..consumers.architectures.cut_rules import (
+    ByName, GaussSeidel, GaussSeidelMinimal, GaussSeidelOrdered, Jacobi, NoCuts,
 )
 from ..core.frozen import OrderedMap, choice
 from ..core.driven import Start, driven
 from ..consumers.architectures import (
     IDF, MDA, MDF, SAND, AtFirstMember, Analysis, Architecture, Bodies, Boxes,
-    Architecting, CloseFunctionalCycles, Coupled, Disciplines, IndividualFeasible, Monolithic,
+    Architecting, CloseFunctionalCycles, Combine, Coupled, Disciplines, IndividualFeasible, Monolithic,
     MultidisciplinaryFeasible, Resolution, Simultaneous, Solves,
 )
 from ..consumers.execution import CallableGraph, Drive, Driving, Inputs, Results, Running
@@ -186,7 +188,7 @@ __all__ = [
     'Locator', 'Conventions', 'Shipped', 'PytreeLocator', 'Under', 'InFull',
     'Scope', 'flat', 'absolute', 'Declared', 'tags_of',
     'Static', 'DictKey', 'GetAttrKey', 'SequenceKey',
-    'FixedPointClosing', 'FixedPointCut', 'AtFirstMember',
+    'FixedPointClosing', 'FixedPointCut', 'AtFirstMember', 'Combine',
     'GaussSeidel', 'GaussSeidelMinimal', 'GaussSeidelOrdered', 'Jacobi', 'NoCuts', 'ByName',
     'CloseFunctionalCycles', 'Architecture', 'Monolithic', 'Coupled', 'MultidisciplinaryFeasible',
     'IndividualFeasible', 'Simultaneous', 'Analysis', 'MDF', 'IDF', 'SAND', 'MDA', 'Boxes',

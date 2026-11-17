@@ -131,34 +131,6 @@ class Driver[V: Place](Attachment[V]):
                 elif len(places) != (wanted := role.arity(node)):
                     yield RoleMisplaced(role.__name__, wanted, places)
 
-    def join_violations(self, other: 'Driver[V]', node: Condition[V],
-                        other_node: Condition[V]) -> Iterator[Violation]:
-        '''Two contracts (which algorithm answers the join is not read off the two), or a
-        per-problem role at two places.'''
-        if other.contract != self.contract:
-            yield DriversDiffer(self.contract, other.contract)
-            return
-        for roles, mine, theirs in ((self.contract.takes, self.data, other.data),
-                                    (self.contract.reports, self.reports, other.reports)):
-            for role, here, there in zip(roles, mine, theirs):
-                if not issubclass(role, PerUnknown) and here != there:
-                    yield RoleAtTwoPlaces(role.__name__, here, there)
-
-    def joined(self, other: 'Driver[V]', node: Condition[V],
-               other_node: Condition[V], joined: Condition[V]
-                         ) -> 'Driver[V]':
-        '''The driver of a join under one contract: a per-unknown role at each unknown's
-        place, in the join's order of unknowns; a per-problem role at the one place both
-        take it.'''
-        def slot(role: type, here: tuple[V, ...], there: tuple[V, ...]) -> tuple[V, ...]:
-            if issubclass(role, PerUnknown):
-                at = dict(zip(node.owns_inside, here)) | dict(zip(other_node.owns_inside, there))
-                return tuple(at[u] for u in joined.owns_inside)
-            return here
-        return Driver(self.contract,
-                      tuple(map(slot, self.contract.takes, self.data, other.data)),
-                      tuple(map(slot, self.contract.reports, self.reports, other.reports)))
-
     def __repr__(self) -> str:
         return type(self.contract).__name__
 
@@ -210,20 +182,3 @@ class RoleMisplaced(Violation):
     places : tuple
     error    = ValueError
     template = '{role} sits at {places!r}, but takes {wanted} on this node'
-
-
-class DriversDiffer(Violation):
-    driver : object
-    other  : object
-    error    = ValueError
-    template = ('{driver!r} and {other!r} answer the two: which algorithm answers their join '
-                'is not read off the two -- drive them alike, or `Undrive` and join the conditions')
-
-
-class RoleAtTwoPlaces(Violation):
-    role   : str
-    places : tuple
-    other  : tuple
-    error    = ValueError
-    template = ('{role} sits at {places!r} and at {other!r}: one problem takes it once -- '
-                'name one place for both before joining them')

@@ -91,43 +91,54 @@ def _is_answer_module(module: str) -> bool:
 # ================================================================ 1. core
 
 MATHS = ('cottax.core.maths', 'cottax.core.frozen')
+MINTS = (*MATHS, 'cottax.core.mints')
+PLAN = (*MATHS, 'cottax.core.plan')
+DOOR = (*MINTS, 'cottax.core.plan', 'cottax.core.conditional')
+'''What the front door `cottax.core` gives: the maths, the mints over its places, the plan
+over the maths, the condition node over the plan, and `frozen`.'''
+DEFINING = ('cottax.core.maths', 'cottax.core.mints', 'cottax.core.plan', 'cottax.core.conditional')
+'''The layers whose names the front door gives, and whose refusal kinds `refusal_kinds` holds.'''
 CORE = (('cottax.core.maths', MATHS), ('cottax.core.frozen', ('cottax.core.frozen',)),
-        ('cottax.core.refusal_kinds', (*MATHS, 'cottax.core.refusal_kinds')),
-        ('cottax.core.driven', (*MATHS, 'cottax.core.driven')),
-        ('cottax.core.realisation', (*MATHS, 'cottax.core.driven', 'cottax.core.realisation')))
-'''Each layer of core and what of cottax it may import; `refusals`, the maths' kinds, the maths.
-`driven` and `realisation` may also take names from the front door `cottax.core`, which is
-the maths alone.'''
+        ('cottax.core.mints', MINTS), ('cottax.core.plan', PLAN),
+        ('cottax.core.conditional', (*PLAN, 'cottax.core.conditional')),
+        ('cottax.core.refusal_kinds', (*DOOR, 'cottax.core.refusal_kinds')),
+        ('cottax.core.driven', (*DOOR, 'cottax.core.driven')),
+        ('cottax.core.realisation', (*DOOR, 'cottax.core.driven', 'cottax.core.realisation')))
+'''Each layer of core and what of cottax it may import, in order: the maths; the mints and
+the plan, each over it alone; the condition node; `refusals`, their kinds. `driven` and `realisation` may also take names from
+the front door `cottax.core`, which is `DOOR`.'''
 
 
 def _core_allows(module: str) -> tuple[str, ...]:
     if module == 'cottax.core':
-        return MATHS
+        return DOOR
     return next((a for package, a in CORE if _under(module, package)), ())
 
 
 def _core_import(module: str, name: str) -> bool:
     if not name.startswith('cottax'):
         return name.split('.')[0] in (*sys.stdlib_module_names, 'networkx')
-    front = name == 'cottax.core' and module != 'cottax.core' and not _under(module, *MATHS)
+    front = name == 'cottax.core' and module != 'cottax.core' and not _under(module, *DOOR)
     return front or _under(name, *_core_allows(module))
 
 
 def test_core_imports_its_layers_in_order_and_only_the_stdlib_and_networkx():
-    '''Rule 1. `frozen` imports nothing else of cottax; the maths `frozen`; `driven` the maths;
-    `realisation` the maths and `driven`; the front door the maths. Every module of core is in
-    one of these layers, and imports nothing outside the standard library but networkx.'''
+    '''Rule 1. `frozen` imports nothing else of cottax; the maths `frozen`; the mints and the
+    plan the maths, neither the other; the condition node the plan; `driven` those; `realisation` those and `driven`; the front
+    door those four. Every module of core is in one of these layers, and imports nothing
+    outside the standard library but networkx.'''
     core = [m for m in MODULES if _under(m, 'cottax.core')]
     assert [m for m in core if not _core_allows(m)] == []
     assert _offences(core, _core_import) == {}
 
 
 def test_core_refusals_holds_every_kind_the_maths_defines():
-    '''Rule 1. `core.refusal_kinds` is a study's door to the maths' refusal kinds: its `__all__` is
-    every `Violation` defined under `core/maths/`, and each is the class defined there.'''
+    '''Rule 1. `core.refusal_kinds` is a study's door to the refusal kinds of the layers the
+    front door gives: its `__all__` is every `Violation` defined under `core/maths/`,
+    `core/plan/` and `core/conditional/`, and each is the class defined there.'''
     from cottax.core import Violation
     import cottax.core.refusal_kinds as refusals
-    defined = {n: v for m in MODULES if _under(m, 'cottax.core.maths')
+    defined = {n: v for m in MODULES if _under(m, *DEFINING)
                for n, v in vars(importlib.import_module(m)).items()
                if isinstance(v, type) and issubclass(v, Violation) and v.__module__ == m}
     assert sorted(refusals.__all__) == sorted(defined)
@@ -135,18 +146,18 @@ def test_core_refusals_holds_every_kind_the_maths_defines():
 
 
 def test_a_name_the_core_door_gives_is_imported_from_it():
-    '''Rule 1. Outside the maths, a name the front door `cottax.core` gives is imported from
-    the door, never from the maths module defining it (a lazy import too); a name it does not
-    give, a rule, is imported from its own module.'''
+    '''Rule 1. Outside the layers the front door gives, a name it gives is imported from the
+    door, never from the module defining it (a lazy import too); a name it does not give, a
+    rule, is imported from its own module.'''
     import cottax.core as door
     given = {k for k in vars(door) if not k.startswith('_')}
     found = {}
     for m, path in MODULES.items():
-        if m == 'cottax.core' or _under(m, 'cottax.core.maths'):
+        if m == 'cottax.core' or _under(m, *DEFINING):
             continue
         for node in ast.walk(ast.parse(path.read_text())):
             if (isinstance(node, ast.ImportFrom)
-                    and _under(_resolved(node, m, path.name == '__init__.py'), 'cottax.core.maths')
+                    and _under(_resolved(node, m, path.name == '__init__.py'), *DEFINING)
                     and (bad := {a.name for a in node.names} & given)):
                 found.setdefault(m, set()).update(bad)
     assert found == {}
@@ -165,15 +176,15 @@ def _feature_import(module: str, name: str) -> bool:
         return False
     if _is_answer_module(module) or not name.startswith('cottax'):
         return True
-    return (name == 'cottax.core' or _under(name, *MATHS)
+    return (name == 'cottax.core' or _under(name, *DOOR)
             or _under(name, f'cottax.{feature}') and not _under(name, f'cottax.{feature}.consumers')
             or module in DRIVEN and _under(name, 'cottax.core.driven'))
 
 
 def test_a_feature_imports_no_other_and_outside_its_consumers_the_maths_alone():
-    '''Rule 2. No feature imports another, nor the assembly. Outside its `consumers/` it imports of
-    cottax the maths and itself, not its own `consumers/` and no consumer; `DRIVEN` also
-    `core.driven`.'''
+    '''Rule 2. No feature imports another, nor the assembly. Outside its `consumers/` it imports
+    of cottax the front door's layers (`DOOR`) and itself, not its own `consumers/` and no
+    consumer; `DRIVEN` also `core.driven`.'''
     assert _offences([m for m in MODULES if _under(m, *(f'cottax.{f}' for f in FEATURES))],
                      _feature_import) == {}
 

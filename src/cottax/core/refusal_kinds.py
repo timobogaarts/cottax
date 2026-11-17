@@ -1,6 +1,6 @@
-'''Every refusal kind the maths defines, for a study matching a refusal by kind.'''
+'''Every refusal kind the maths, the plan and the condition node define, for a study
+matching a refusal by kind.'''
 
-from .maths.cut_rules import CycleTooLarge, KeyRepeats, NoRule, OrderMismatch, SeveralRules
 from .maths.definition import (
     AttributeDoesNotFit, OwnInsideRead, OwnsNested, OwnsTwice, ReadInsideOwn,
     ReadsOwn,
@@ -13,38 +13,35 @@ from .maths.executable import (
 from .maths.graph import (
     OwnAroundOwner, OwnedTwice, OwnerInsideRead, OwnInsideOwner, ReadInsideOwner,
 )
-from .maths.conditional import DrivenOnOneSide
 from .maths.kinds import OwnsNothing, ReadOnBothSides, StatesNothing
 from .maths.nesting import (
     BlockTooSmall, BoxOwnsNothing, NestingLoop, NodeInTwoBlocks, NotAnEncloser, SelfNested, Unbound,
     Unreachable,
 )
-from .maths.plan.ops import (
+from .plan.ops import (
     AlreadyCut, AttributeAlreadySet, AttributeNotSet, DoesNotRead, NoAttributeNamed,
-    NoReaders, NotProduced, NotRenamed, OwnedInsideTwice, OwnsInsideDriven, OwnsInsideNotAChoice,
+    NoReaders, NotProduced, NotRenamed,
 )
-from .maths.plan.primitive import (
-    AlreadyNested, CarriesAttributes, NameTaken, NodeTwice, NotAddable, NotBound,
-    NotNested, NotOfKind, NothingDeleted, NothingInserted, NothingToCombine, Stranded,
+from .conditional.ops import OwnedInsideTwice, OwnsInsideDriven, OwnsInsideNotAChoice
+from .plan.primitive import (
+    AlreadyNested, NameTaken, NotBound, NotNested, NothingDeleted, NothingInserted, Stranded,
 )
 from .maths.valued import InputMissing, NotAPlace, OwnedGiven
 
 __all__ = [
-    'CycleTooLarge', 'KeyRepeats', 'NoRule', 'OrderMismatch', 'SeveralRules',
     'AttributeDoesNotFit',
     'OwnInsideRead', 'OwnsNested', 'OwnsTwice', 'ReadInsideOwn', 'ReadsOwn',
     'NothingToAsk',
     'Constant', 'NoProblem', 'OutsideCycle', 'OwnReadInsideCycle', 'ReadInsideCycle',
     'RequirementUnanswered', 'SeveralOutermost', 'StillCyclic',
     'OwnAroundOwner', 'OwnedTwice', 'OwnerInsideRead', 'OwnInsideOwner', 'ReadInsideOwner',
-    'DrivenOnOneSide', 'OwnsNothing', 'ReadOnBothSides', 'StatesNothing',
+    'OwnsNothing', 'ReadOnBothSides', 'StatesNothing',
     'BlockTooSmall', 'BoxOwnsNothing', 'NestingLoop', 'NodeInTwoBlocks', 'NotAnEncloser',
     'SelfNested', 'Unbound', 'Unreachable',
     'AlreadyCut', 'DoesNotRead', 'NoReaders', 'NotProduced', 'NotRenamed', 'OwnedInsideTwice',
     'OwnsInsideDriven', 'OwnsInsideNotAChoice',
     'AttributeAlreadySet', 'AttributeNotSet', 'NoAttributeNamed',
-    'CarriesAttributes',
-    'AlreadyNested', 'NameTaken', 'NodeTwice', 'NotAddable', 'NotBound', 'NotNested',
-    'NotOfKind', 'NothingDeleted', 'NothingInserted', 'NothingToCombine', 'Stranded',
+    'AlreadyNested', 'NameTaken', 'NotBound', 'NotNested', 'NothingDeleted', 'NothingInserted',
+    'Stranded',
     'InputMissing', 'NotAPlace', 'OwnedGiven',
 ]

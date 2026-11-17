@@ -8,7 +8,7 @@ from ..core import (
     Violation, is_driven,
 )
 from ..core.frozen import OrderedMap
-from ..core.maths.plan.ops import stores_owns_inside
+from ..core.conditional.ops import stores_owns_inside
 from .relational_condition import Eq, Relation, RelationalCondition
 
 

@@ -9,7 +9,7 @@ import pytest
 from jax.tree_util import GetAttrKey
 
 from cottax.core.frozen import OrderedMap
-from cottax.core.maths.plan import ComposedOp, Delete, GraphOp, Insert, Plan
+from cottax.core.plan import ComposedOp, Delete, GraphOp, Insert, Plan
 from cottax.pytree.path import NodePath, VarPath
 from cottax.core import FunctionalNode
 from cottax.core.realisation import implemented

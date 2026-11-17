@@ -20,7 +20,7 @@ import cottax.assemblies.jax as cx
 from cottax.consumers.declaration import declare
 from cottax.core import ConditionalNode
 from cottax.core.frozen import OrderedMap, violations
-from cottax.core.maths.plan import Insert, Nest, Plan, Rename
+from cottax.core.plan import Insert, Nest, Plan, Rename
 from cottax.relational.contracts import (
     ConstrainedMinimisation, ConstrainedMinimiser, FixedPointIteration, RootFinder, RootFinding,
 )
@@ -624,7 +624,7 @@ def test_the_default_closing_binds_a_closure_in_its_own_namespace():
 
 def test_an_architecture_takes_its_top_and_defaults_the_rest():
     from cottax.consumers.architectures import IDF, MDA, MDF, SAND
-    from cottax.core.maths.cut_rules import GaussSeidel, Jacobi
+    from cottax.consumers.architectures.cut_rules import GaussSeidel, Jacobi
 
     assert cx.flat.mdf(N.opt) == MDF(GaussSeidel(), cx.flat.closing, cx.absolute.node(N.opt))
     assert cx.flat.idf(N.opt) == IDF(GaussSeidel(), cx.flat.closing, cx.absolute.node(N.opt))
@@ -655,7 +655,7 @@ def test_each_edit_is_the_op_it_is_named_after_its_names_read_by_the_surface():
 
 
 def test_the_architectures_and_the_drive_are_the_surfaces_too():
-    from cottax.core.maths.cut_rules import Jacobi
+    from cottax.consumers.architectures.cut_rules import Jacobi
     assert flat.mdf('opt') == cx.flat.mdf('opt')
     assert flat.idf('opt', Jacobi()) == cx.flat.idf('opt', Jacobi())
     assert flat.mda() == cx.flat.mda()
@@ -778,7 +778,7 @@ def test_a_declaration_stands_where_a_node_name_is_due():
 
 def test_a_problem_in_a_slot_is_not_found_by_the_name_it_takes_loose():
     '''A slot's name wins: the problem itself then names a node the graph does not have.'''
-    from cottax.core.maths.plan import refusals
+    from cottax.core.plan import refusals
     from cottax.consumers.architectures.refusals import TopUnbound
     opt   = flat.optimise(minimise='f', design=('z1', 'z2', 'x1'))
     model = cx.absolute.declare(flat.residual(disc1, 'y1'), disc2, objective, {'OPT': opt})

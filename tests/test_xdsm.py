@@ -12,11 +12,11 @@ from jax.tree_util import DictKey, GetAttrKey, SequenceKey
 
 from cottax.core.maths.executable import ExecutableGraph
 from cottax.relational import Min, Objective
-from cottax.core.maths.plan import Plan
+from cottax.core.plan import Plan
 from cottax.core.frozen import OrderedMap
-from cottax.core.maths.plan import Nest
+from cottax.core.plan import Nest
 from cottax.relational import Eq, Le, Relation, RelationalCondition
-from cottax.core.maths.plan import Cut
+from cottax.core.plan import Cut
 from cottax.relational.rewrites import FixedPointCut
 from cottax.pytree.path import NodePath, VarPath
 from cottax.core import FunctionalNode

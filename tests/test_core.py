@@ -20,14 +20,14 @@ from cottax.core.maths.graph import (
     OwnAroundOwner, OwnInsideOwner, OwnedTwice, OwnerInsideRead, ReadInsideOwner,
 )
 from cottax.core import (
-    AbstractGraph, NestingGraph, Combine, Condition, ConditionalNode, Cut, FunctionalNode,
+    AbstractGraph, NestingGraph, Condition, ConditionalNode, Cut, FunctionalNode,
     Rename, Replace, SetOwnsInside, refusals,
     Attribute, RemoveAttribute, SetAttribute, with_attributes,
     Violation, NodeDefinition, Insert, Delete,
     violations, comparables_in, first, prefixes,
     answer_for_labels, answer_for_places, GraphWithValues,
 )
-from cottax.core.maths.plan.primitive import (
+from cottax.core.plan.primitive import (
     Nest, Unnest, check_delete_keeps_nesting_whole, check_nesting, check_unnesting,
 )
 from cottax.core.refusal_kinds import DoesNotRead, ReadOnBothSides
@@ -101,11 +101,6 @@ class States(Condition):
     reads_outside = ()
     owns_outside  = ()
     def relabel(self, renaming): return self
-    def join(self, other):
-        '''The whole of what `Combine` asks of a kind -- no relation anywhere.'''
-        if not isinstance(other, States):
-            return NotImplemented
-        return States(self.reads_inside + other.reads_inside, self.owns_inside + other.owns_inside)
 
 
 class Driven(Condition):
@@ -129,10 +124,7 @@ class Ports(Attachment):
     owns  : tuple = ()
     def relabel(self, renaming):
         return Ports(relabelled(self.reads, renaming), relabelled(self.owns, renaming))
-    def violations_on(self, node):                          return iter(())
-    def join_violations(self, other, node, other_node):     return iter(())
-    def joined(self, other, node, other_node, joined):
-        return Ports(self.reads + other.reads, self.owns + other.owns)
+    def violations_on(self, node): return iter(())
 
 
 class Note(Attribute):
@@ -266,28 +258,6 @@ def test_reads_apart_in_the_prefix_order_may_be_on_either_side():
     assert not list(violations(Driven, condition(['r.a'], ['u']), (places(['r.b']),)))
 
 
-def test_a_fold_is_generic_in_the_place_and_in_the_kind():
-    """
-    `Combine` is `core`'s because it reads no relation: it folds by the `+` the declared
-    kind provides, and knows nothing else about it. Here that is a toy condition node in a toy
-    place, and the fold still binds, keeps a binding and refuses a kind that is not it.
-    """
-    a, b, t = Word('a'), Word('b'), Word('t')
-    g = G({a: states(['y'], ['x']), b: states(['z'], ['w']), t: toy([], ['k'])})
-
-    fresh = Combine(Word('both'), (a, b), States).apply(g)
-    assert tuple(fresh.definitions) == (t, Word('both'))          # bound at the end
-    assert fresh[Word('both')].reads_inside == places(['y', 'z'])
-    assert fresh[Word('both')].owns_inside == places(['x', 'w'])
-
-    kept = Combine(a, (a, b), States).apply(g)
-    assert tuple(kept.definitions) == (a, t)                      # `a` where it was
-    assert kept[a] == g[a] + g[b]
-
-    with pytest.raises(TypeError, match='one kind only'):
-        Combine(a, (a, t), States).apply(g)
-
-
 def test_a_cut_refuses_the_producer_among_its_readers():
     """Renaming at the producer would move its *output*, leaving `var` a boundary input."""
     a, b = Word('a'), Word('b')
@@ -297,24 +267,6 @@ def test_a_cut_refuses_the_producer_among_its_readers():
     with pytest.raises(ValueError, match='do not read'):
         Cut(Word('y'), (a,), hat).apply(g)
     assert list(refusals(Cut(Word('y'), (b,), hat), g)) == []            # the reader: fine
-
-
-def test_a_fold_is_asked_of_its_result_and_never_of_a_step_toward_it():
-    """`P -> h -> Q -> k -> R -> f -> P`, `Q` nested in `P`. Removing `R` alone would take
-    `Q` off `P`'s cycle; folding `R` into `P` keeps it on, and the result is the graph
-    written directly."""
-    P, h, Q, k, R, f = map(Word, ('P', 'h', 'Q', 'k', 'R', 'f'))
-    defs = {P: states(['c'], ['p']), h: toy(['p'], ['x1']), Q: states(['x1'], ['q']),
-            k: toy(['q'], ['x2']), R: states(['x2'], ['r']), f: toy(['r'], ['c'])}
-    g = G(defs, {Q: P})
-    folded = Combine(P, (P, R), States).apply(g)
-    direct = G({P: defs[P] + defs[R], h: defs[h], Q: defs[Q], k: defs[k], f: defs[f]}, {Q: P})
-    assert folded == direct
-    assert tuple(folded.definitions) == (P, h, Q, k, f)
-    alone = Delete((R,)).apply(g)                               # the step alone is carried ...
-    assert dict(alone.within) == {Q: P}
-    with pytest.raises(ValueError, match='not on one cycle'):
-        ExecutableGraph(alone)                                  # ... and refused as executable
 
 
 def test_an_ownership_violation_names_each_owner():
@@ -418,12 +370,6 @@ def test_an_attribute_says_which_nodes_it_fits():
     assert SetNote(OrderedMap({b: 'n'})).apply(g)[b].attributes == OrderedMap({Note: 'n'})
 
 
-def test_a_join_folds_no_attributes():
-    a, b = Word('a'), Word('b')
-    g = G({a: with_attributes(states(['y'], ['u']), OrderedMap({Note: 'n'})), b: states(['z'], ['v'])})
-    assert [type(v).__name__ for v in refusals(Combine(a, (a, b), States), g)] == ['CarriesAttributes']
-
-
 def test_every_case_a_rule_can_name_has_wording():
     """
     A missing template is a `KeyError` raised at the moment something else went wrong,
@@ -461,9 +407,6 @@ def test_every_case_a_rule_can_name_has_wording():
     seen(violations(Delete, ()))                                            # nothing deleted
     seen(violations(Cut, Word('x'), (), lambda w: w))                       # a copy nothing reads
     seen(violations(SetOwnsInside, a, places(['u', 'u'])))                  # a place owned inside twice
-    seen(violations(Combine, a, (b,), States))                              # fewer than two
-    seen(violations(Combine, a, (b, b), States))                            # a node twice
-    seen(violations(Combine, a, (a, b), Toy))                               # a kind with no `+`
     seen(violations(SetNote, OrderedMap()))                                            # names no node
     seen(violations(Toy, places(['p', 'r']), places(['q']), attributes=OrderedMap({Shaped: 1})))   # does not fit
 
@@ -475,17 +418,14 @@ def test_every_case_a_rule_can_name_has_wording():
     seen(refusals(SetOwnsInside(a, ()), G({a: driven(['y'], ['u'])})))  # a driven node derives it: not a choice
     attached = dataclasses.replace(states(['y'], ['u']), driver=Ports())
     seen(refusals(SetOwnsInside(a, ()), G({a: attached})))                   # it carries a driver
-    seen(refusals(Combine(a, (a, b), States), G({a: attached, b: states(['z'], ['w'])})))  # driven with bare
     seen(refusals(Rename(b, ((Word('nope'), Word('q')),)), g))          # a place it has not got
     seen(refusals(Cut(Word('free'), (b,), hat), g))                     # nothing produces it
     seen(refusals(Cut(Word('x'), (a,), onto), g))                       # the minted name is taken
     seen(refusals(Cut(Word('x'), (b,), hat), g))                        # `b` produces it, reads nothing
-    seen(refusals(Combine(a, (a, b), States), g))                       # `b` is a `Toy`
     noted = G({a: with_attributes(states(['y'], ['u']), OrderedMap({Note: 'n'})), b: states(['z'], ['v']),
                t: with_attributes(toy(['p'], ['q']), OrderedMap({Shaped: 1}))})
     seen(refusals(SetNote(OrderedMap({a: 'm'})), noted))                # carries one under that key already
     seen(refusals(DropNote((b,)), noted))                               # carries none to take off
-    seen(refusals(Combine(a, (a, b), States), noted))                   # what two nodes carry has no join
 
     cyc = {a: states(['y'], ['x']), b: states(['x'], ['y']), t: toy(['x'], ['w'])}
     with pytest.raises(KeyError, match='not a node of this graph'):     # `check_nesting_ends_bound`, at construction
@@ -521,7 +461,7 @@ def test_every_case_a_rule_can_name_has_wording():
     def finals(cls):
         return {s for c in cls.__subclasses__() for s in ({c} | finals(c))
                 if not s.__module__.startswith((              # those finals' cases are their own tests'
-                    'cottax.relational', 'cottax.ode', 'cottax.core.maths.cut_rules', 'cottax.core.driven', 'cottax.core.realisation', 'cottax.consumers.execution',
+                    'cottax.relational', 'cottax.ode', 'cottax.core.driven', 'cottax.core.realisation', 'cottax.consumers.execution',
                     'cottax.consumers.json', 'cottax.consumers.pickle', 'cottax.consumers.visualization',
                     'cottax.consumers.declaration', 'cottax.consumers.surface', 'cottax.consumers.architectures',
                     'cottax.assemblies.jax',

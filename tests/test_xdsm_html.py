@@ -13,7 +13,7 @@ from jax.tree_util import GetAttrKey
 
 from cottax.core import FunctionalNode
 from cottax.core.frozen import OrderedMap
-from cottax.core.maths.plan import Cut, Plan
+from cottax.core.plan import Cut, Plan
 import purposes
 from cottax.pytree.path import NodePath, VarPath
 from cottax.core.realisation import implemented

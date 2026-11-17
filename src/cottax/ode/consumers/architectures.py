@@ -27,6 +27,9 @@ class OdeModel(ModelReading):
     def combines_as(self, condition):
         return None
 
+    def join(self, condition, other):
+        return condition.join(other)
+
 
 class RateUnwritten(Violation):
     problem : str

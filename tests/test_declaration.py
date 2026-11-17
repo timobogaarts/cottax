@@ -16,7 +16,7 @@ import pytest
 from cottax.core import ConditionalNode, GraphWithValues, Mint, minted
 import purposes
 from cottax.core.frozen import OrderedMap, answer, choice
-from cottax.core.maths.plan import Plan
+from cottax.core.plan import Plan
 from cottax.core.driven import Assign
 from cottax.core.driven import DriverContract, PerUnknown
 from cottax.core.driven import Start

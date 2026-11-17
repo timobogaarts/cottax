@@ -1,5 +1,5 @@
 '''
-`core/maths/plan/ops.py`'s edits on what a node reads and owns: `Cut`, which names no
+`core/plan/ops.py`'s edits on what a node reads and owns: `Cut`, which names no
 relation. `Determine` / `Undetermine` are relational's, and `test_rewrites.py`'s.
 
 Names are built by hand from key entries, as in `test_algebra.py` and `test_rewrites.py`.
@@ -9,7 +9,7 @@ import pytest
 from jax.tree_util import GetAttrKey
 
 from cottax.core import FunctionalNode
-from cottax.core.maths.plan import Cut, Insert, Plan, refusals
+from cottax.core.plan import Cut, Insert, Plan, refusals
 import purposes
 from cottax.core.frozen import OrderedMap
 from cottax.pytree.path import NodePath, VarPath

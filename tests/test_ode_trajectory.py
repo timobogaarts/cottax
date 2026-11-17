@@ -17,9 +17,11 @@ import pytest
 import cottax.assemblies.jax as cx
 import purposes
 
-from cottax.core import Combine, ConditionalNode, ExecutableGraph, GaussSeidel, GraphWithValues
+from cottax.core import ConditionalNode, ExecutableGraph, GraphWithValues
+from cottax.consumers.architectures.cut_rules import GaussSeidel
+from cottax.consumers.architectures import Combine
 from cottax.core.frozen import OrderedMap, answer, choice, violations
-from cottax.core.maths.plan import Plan, refusals
+from cottax.core.plan import Plan, refusals
 from cottax.core.driven import Assign, driven as with_driver, DrivenGraph, Start
 from cottax.core.realisation import Implement
 from cottax.consumers.architectures import IDF, MDF, SAND, AtFirstMember
@@ -146,14 +148,6 @@ def test_a_renamed_ode_keeps_its_driver_and_what_it_carries():
     assert moved.driver.data == ((s.place('ts'),),) and moved.attributes == ode.attributes
     assert moved.condition.reads_outside == (s.place('x_init'), s.place('v0'), s.place('span'))
     assert moved.reads_outside == moved.condition.reads_outside + (s.place('ts'),)
-
-
-def test_a_driven_ode_does_not_join_a_relational_condition_whatever_drives_it():
-    '''The kinds are asked first: an ODE and a relation have no join, driven or not.'''
-    from cottax.relational import Eq, Relation, RelationalCondition
-    ode = declare(oscillator).graph[problem('oscillator')]
-    with pytest.raises(TypeError, match='unsupported operand'):
-        ode + RelationalCondition((Relation(s.place('q'), None, Eq),), (), (s.place('p'),), ())
 
 
 def test_a_value_written_for_a_place_of_the_driver_is_given_zero_too():
@@ -422,10 +416,18 @@ def velocity(x, w):
 
 def test_9_two_odes_recording_alike_join_as_one_driven_problem():
     '''Each declared driven by the same contract over one span and one set of times: their
-    join is one integration recording both.'''
-    at = problem('position')
-    g = (Plan(declare(position, velocity).graph)
-         + Combine(at, (at, problem('velocity')), OdeCondition)).graph
+    join, driven by that contract, is one integration recording both. A fold is of
+    conditions, so the drivers come off first and the fold is driven after: at the one
+    times both take, recording each state where it was recorded.'''
+    from cottax.core.driven import Undrive
+    at, other = problem('position'), problem('velocity')
+    declared = declare(position, velocity).graph
+    one, two = declared[at].driver, declared[other].driver
+    assert one.contract == two.contract and one.data == two.data
+    g = (Plan(declared) + Undrive(at) + Undrive(other)
+         + Combine(at, (at, other), OdeCondition)
+         + Assign(at, one.contract, one.data,
+                  tuple(a + b for a, b in zip(one.reports, two.reports)))).graph
     assert g[at].driver.data == ((s.place('times'),),)
     assert g[at].driver.reports == ((s.place('xs'), s.place('vs')),)
     ts = jnp.linspace(0.0, 1.5, 7)

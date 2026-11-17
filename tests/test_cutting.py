@@ -11,11 +11,11 @@ from jax.tree_util import GetAttrKey
 from cottax.core import FunctionalNode, is_encloser
 from cottax.relational import Min, Objective
 from cottax.core.maths.executable import ExecutableGraph
-from cottax.core.maths.plan import Cut, Nest, Plan
+from cottax.core.plan import Cut, Nest, Plan
 from cottax.core.frozen import violations
 from cottax.core.realisation import implemented
 from cottax.consumers.architectures import IDF, MDF, SAND
-from cottax.core.maths.cut_rules import (
+from cottax.consumers.architectures.cut_rules import (
     ByName, CutRule, GaussSeidel, GaussSeidelMinimal, GaussSeidelOrdered, Jacobi, NoCuts,
     coupling_reads, cuts_per_cycle, gauss_seidel, minimal_feedback_order, per_functional_cycle,
 )
@@ -25,7 +25,7 @@ import purposes
 from cottax.core.frozen import OrderedMap
 from cottax.pytree.path import NodePath, VarPath
 from cottax.relational import Eq, Le, Relation, RelationalCondition, is_optimise
-from cottax.core.maths.plan import Combine
+from cottax.consumers.architectures import Combine
 from cottax.relational.rewrites import FixedPointCut
 from cottax.consumers.visualization.sequencing import Run, Solve, entries
 from graphs import graph_of

@@ -15,7 +15,7 @@ from collections.abc import Callable, Mapping
 from typing import Any
 
 from ...core import (
-    Combine, Cut, Delete, Label, Nest, Place, PlaceToPlace, Rename, Unnest,
+    Cut, Delete, Label, Nest, Place, PlaceToPlace, Rename, Unnest,
 )
 from ...core.frozen import AbstractClassVar, AbstractVar, Answer, Choice, Frozen, OrderedMap
 from ...core.realisation import Implement
@@ -136,10 +136,6 @@ class Editing(Part):
     def unnest(self, inner: Label) -> Unnest:
         '''The problem `inner` answered at its own level again.'''
         return Unnest(inner)
-
-    def combine(self, at: Label, nodes: tuple[Label, ...], kind: type) -> Combine:
-        '''`nodes` folded into one at `at`, by `kind`'s `+`.'''
-        return Combine(at, nodes, kind)
 
     def delete(self, nodes: tuple[Label, ...]) -> Delete:
         '''`nodes` (one, or several) unbound.'''

@@ -16,12 +16,13 @@ import sys
 import pytest
 
 from cottax.core import (
-    AbstractGraph, ComposedOp, Condition, ConditionalNode, Cut, ExecutableGraph, FunctionalNode, GaussSeidel,
+    AbstractGraph, ComposedOp, Condition, ConditionalNode, Cut, ExecutableGraph, FunctionalNode,
     GraphWithValues, Insert, Mint, Minting, NestingGraph, minted,
 )
+from cottax.consumers.architectures.cut_rules import GaussSeidel
 from cottax.core.frozen import OrderedMap, answer, answers, choice, violations
 from cottax.core.maths.definition import relabelled
-from cottax.core.maths.plan import Plan
+from cottax.core.plan import Plan
 from cottax.core.driven import Start
 from cottax.core.driven import DriverContract
 from cottax.consumers.architectures import MDA

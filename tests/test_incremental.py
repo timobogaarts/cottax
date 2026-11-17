@@ -16,10 +16,11 @@ import pytest
 from jax.tree_util import GetAttrKey, SequenceKey
 
 from cottax.core import AbstractGraph, NestingGraph, Rename
-from cottax.core.maths.plan import Combine, ComposedOp, GraphOp, Nest, Primitive, Rebind, StagedOp, Unnest
-from cottax.core.maths.plan import Delete, Insert, Redefine
+from cottax.core.plan import ComposedOp, GraphOp, Nest, Primitive, Rebind, StagedOp, Unnest
+from cottax.consumers.architectures import Combine
+from cottax.core.plan import Delete, Insert, Redefine
 from cottax.relational import Eq, Relation, RelationalCondition
-from cottax.core.maths.plan import Cut
+from cottax.core.plan import Cut
 from cottax.pytree.path import NodePath, VarPath
 from cottax.core import FunctionalNode
 from cottax.core.realisation import implemented

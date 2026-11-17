@@ -13,7 +13,7 @@ from jax.tree_util import DictKey
 from cottax.core.maths.executable import ExecutableGraph
 from cottax.relational import Min, Objective
 from cottax.consumers.execution import CallableGraph
-from cottax.core.maths.plan import Delete, Plan
+from cottax.core.plan import Delete, Plan
 from cottax.relational import (
     Eq, Le, Rel, Relation, RelationalCondition, is_constrained_optimise, is_equalities,
     is_feasibility, is_fixed_point, is_optimise, is_root_find, is_unconstrained_optimise,
@@ -215,8 +215,8 @@ def test_a_parameter_is_held_fixed_related_and_never_alone():
 def test_the_join_holds_fixed_what_either_side_does_once():
     a = RelationalCondition((Relation(v('lo'), v('u'), Le),), (), (v('u'),), (v('lo'),))
     b = RelationalCondition((Relation(v('lo'), v('w'), Le),), (), (v('w'),), (v('lo'),))
-    assert (a + b).parameters == (v('lo'),)
-    assert (a + b).relabel({v('lo'): v('floor')}).parameters == (v('floor'),)
+    assert a.join(b).parameters == (v('lo'),)
+    assert a.join(b).relabel({v('lo'): v('floor')}).parameters == (v('floor'),)
 
 
 def test_a_statement_relabels_relations_objectives_and_unknowns():
@@ -269,7 +269,7 @@ def test_a_statement_with_no_unknowns_has_no_shape_yet():
 
 
 def test_a_statement_matching_no_shape_is_declared():
-    two = optimise(v('cost'), (v('a'),)) + optimise(v('g1'), (v('b'),))
+    two = optimise(v('cost'), (v('a'),)).join(optimise(v('g1'), (v('b'),)))
     assert len(two.objectives) == 2 and kind_of(two) is None
 
 
@@ -310,13 +310,13 @@ def test_the_five_finals_are_disjoint():
         'root find'             : root_find((v('r'),), (v('u'),)),
         'fixed point'           : fixed_point((v('g'),), (v('u'),)),
         'the join of the two'   : root_find((v('r'),), (v('x'),))
-                                  + fixed_point((v('g'),), (v('u'),)),
+                                  .join(fixed_point((v('g'),), (v('u'),))),
         'zero on the left'      : RelationalCondition((Relation(None, v('r'), Eq),),
                                                       (), (v('u'),), ()),
     }
     for name, c in corpus.items():
         assert sum(f(c) for f in finals) == 1, f'{name} is not exactly one final'
-    two = optimise(v('f'), (v('x'),)) + optimise(v('g'), (v('y'),))
+    two = optimise(v('f'), (v('x'),)).join(optimise(v('g'), (v('y'),)))
     assert not any(f(two) for f in finals)
     # and each level is the union of the two finals under it
     for c in corpus.values():
@@ -328,7 +328,7 @@ def test_a_root_find_joined_with_a_fixed_point_is_a_root_find():
     # What `Close` leaves: one relation against zero and one with two sides. Not every
     # relation puts an unknown on the left, so it is not the fixed point -- and the
     # paper's footnote is that anything else is `c(x) = 0` WLOG, which a Newton takes.
-    joined = root_find((v('r'),), (v('x'),)) + fixed_point((v('g'),), (v('u'),))
+    joined = root_find((v('r'),), (v('x'),)).join(fixed_point((v('g'),), (v('u'),)))
     assert is_equalities(joined)
     assert is_root_find(joined) and not is_fixed_point(joined)
     assert (is_equalities(root_find((v('r'),), (v('u'),)))
@@ -372,55 +372,26 @@ def test_the_join_concatenates_in_order_and_is_associative():
     a = root_find((v('r'),), (v('u'),))
     b = RelationalCondition((Relation(v('g1'), None, Le),), (), (v('x'),), ())
     c = RelationalCondition((), (Objective(v('cost'), Min),), (v('y'),), ())
-    assert (a + b) + c == a + (b + c)
-    joined = a + b
+    assert a.join(b).join(c) == a.join(b.join(c))
+    joined = a.join(b)
     assert (joined.relations   == a.relations   + b.relations
             and joined.objectives == a.objectives + b.objectives
             and joined.unknowns   == a.unknowns   + b.unknowns)
-    assert (b + a).relations == b.relations + a.relations    # this side first
+    assert b.join(a).relations == b.relations + a.relations    # this side first
 
 
-def test_the_join_refuses_anything_but_a_relational_condition_on_either_side():
-    """Joining a problem with a driven one discards the algorithm answering it, and which
-    should answer the join cannot be read off the two (two driven alike join, in
-    `test_driven_join`). A node with no `__add__` already raises, so a function says so by
-    not implementing it."""
-    plain  = ConditionalNode(root_find((v('r'),), (v('u'),)))
-    driven = with_driver(root_find((v('r2'),), (v('x'),)), RootFinding(steps=False),
-                         ((purposes.Start()(v('x')),),), ())
-    body   = implemented(FunctionalNode((v('u'),), (v('r'),)), lambda u: u)
-    with pytest.raises(TypeError, match='unsupported operand'):
-        body + body
-    for a, b in ((plain, driven), (driven, plain), (ConditionalNode(optimise(v('f'), (v('y'),))), driven)):
-        with pytest.raises(ValueError, match='one is driven and one is not'):
-            a + b
-
-
-def test_driven_join():
-    """Two problems driven alike join under that contract: the conditions by their own `+`,
-    a per-unknown role at each unknown's place, a per-problem one at the one place both take.
-    Two contracts, a per-problem role at two places, or a driven node and a bare one are
-    refused."""
-    from cottax.core.refusal_kinds import DrivenOnOneSide
-    from cottax.core.driven.driver import DriversDiffer, RoleAtTwoPlaces
-    start = purposes.Start()
-    def driven(r, u, steps=None):
-        contract = RootFinding(steps=steps is not None)
-        return with_driver(root_find((v(r),), (v(u),)), contract, ((start(v(u)),),),
-                           ((v(steps),),) if steps else ())
-    joined = driven('r1', 'u1') + driven('r2', 'u2')
-    assert joined == with_driver(root_find((v('r1'), v('r2')), (v('u1'), v('u2'))),
-                                 RootFinding(steps=False), ((start(v('u1')), start(v('u2'))),), ())
-    assert (driven('r1', 'u1', 'n') + driven('r2', 'u2', 'n')).driver.reports == ((v('n'),),)
-    with pytest.raises(ValueError) as refused:
-        driven('r1', 'u1') + driven('r2', 'u2', 'n')
-    assert refused.value.violation == DriversDiffer(RootFinding(steps=False), RootFinding(steps=True))
-    with pytest.raises(ValueError) as refused:
-        driven('r1', 'u1', 'n') + driven('r2', 'u2', 'm')
-    assert refused.value.violation == RoleAtTwoPlaces('Steps', (v('n'),), (v('m'),))
-    with pytest.raises(ValueError) as refused:
-        driven('r1', 'u1') + ConditionalNode(root_find((v('r2'),), (v('u2'),)))
-    assert type(refused.value.violation) is DrivenOnOneSide
+def test_combine_folds_relational_conditions_by_their_join_and_no_driven_one():
+    """`Combine` folds by the join this kind's `ModelReading` answers, so a fold of two
+    statements is their join. Which algorithm answers a join is not read off the two: a
+    driven node is refused, to be driven after the fold."""
+    from cottax.consumers.architectures import Combine
+    from cottax.consumers.architectures.refusals import FoldsDriven
+    from cottax.core import refusals
+    a, b = root_find((v('r'),), (v('u'),)), fixed_point((v('g'),), (v('w'),))
+    fold = Combine(n('a'), (n('a'), n('b')), RelationalCondition)
+    assert fold.apply(graph_of({n('a'): a, n('b'): b}))[n('a')] == ConditionalNode(a.join(b))
+    driven = with_driver(a, RootFinding(steps=False), ((purposes.Start()(v('u')),),), ())
+    assert list(refusals(fold, graph_of({n('a'): driven, n('b'): b}))) == [FoldsDriven((n('a'),))]
 
 
 # ---------------------------------------------------------------- running is refused

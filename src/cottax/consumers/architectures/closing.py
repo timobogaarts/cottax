@@ -2,9 +2,8 @@
 
 from collections.abc import Iterable, Sequence
 
-from ...core import (
-    CutRule, GraphOp, Label, NestingGraph, Opened, Place, first, cuts_per_cycle, ComposedOp,
-)
+from ...core import ComposedOp, GraphOp, Label, NestingGraph, Place, first
+from .cut_rules import CutRule, Opened, cuts_per_cycle
 from .interface import Closing
 from .refusals import ClosuresCollide
 

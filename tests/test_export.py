@@ -14,7 +14,7 @@ from jax.tree_util import DictKey, GetAttrKey, SequenceKey
 
 from cottax.core import FunctionalNode, NodeDefinition, answer_for_labels, answer_for_places
 from cottax.core.frozen import answers, violations
-from cottax.core.maths.plan import Plan
+from cottax.core.plan import Plan
 from cottax.relational.contracts import RootFinding
 from cottax.core.maths.definition import relabelled
 from cottax.core.maths.kinds import FunctionalNode

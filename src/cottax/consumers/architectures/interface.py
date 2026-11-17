@@ -7,7 +7,8 @@ Interface for the architectures.
 ```
 ModelReading  not_implicit(graph, problem)      why it is not an implicit model: refusals, none if it is
               body(graph, problem)              the function nodes that are its own: boxed with it, never cut
-              combines_as(condition)            the kind whose `+` folds it (`Combine`), or None
+              combines_as(condition)            the kind an architecture folds it as, or None
+              join(condition, other)            the one condition stating both: what `Combine` folds by
 Closing       __call__(cycle, group)            the op closing a group of cuts on a cycle
               bound_at(cycle, group)            the node name of the problem that op binds
 ```
@@ -20,7 +21,8 @@ from abc import abstractmethod
 from collections.abc import Iterable
 from typing import Any
 
-from ...core import AbstractConditionalNode, Condition, GraphOp, Label, NestingGraph, Place, ToCut, Violation
+from ...core import AbstractConditionalNode, Condition, GraphOp, Label, NestingGraph, Place, Violation
+from .cut_rules import ToCut
 from ...core.frozen import Answer, Choice, Frozen
 
 # ============================================================================ registered
@@ -31,7 +33,7 @@ class ModelReading(Answer):
 
     1. Whether it is an implicit model
     2. Its body, the function nodes that are its own
-    3. How it combines with other problems
+    3. How it combines with other problems, and how two are joined
     '''
 
     about = (Condition, AbstractConditionalNode)
@@ -51,8 +53,12 @@ class ModelReading(Answer):
 
     @abstractmethod
     def combines_as(self, condition: Any) -> type | None:
-        '''The kind whose `+` folds it (`Combine`'s `kind`), or `None`: it is folded into
-        nothing.'''
+        '''The kind an architecture folds it as (`Combine`'s `kind`), or `None`: an
+        architecture folds it into nothing.'''
+
+    join = None
+    '''`join(condition, other) -> Condition`: the one condition stating both, this side
+    first -- what `Combine` folds by. `None` for a kind no fold joins.'''
 
 
 # ============================================================================ chosen

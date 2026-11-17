@@ -14,12 +14,12 @@ from cottax.relational import Min, Objective
 from cottax.core.driven import Assign
 from cottax.core.driven import DriverContract
 from cottax.core import ConditionalNode, FunctionalNode
-from cottax.core.maths.plan import Delete, Insert, Nest, Plan, Unnest
+from cottax.core.plan import Delete, Insert, Nest, Plan, Unnest
 from cottax.core.realisation import implemented
 from cottax.relational import Eq, Relation, RelationalCondition
-from cottax.core.maths.plan import Cut
+from cottax.core.plan import Cut
 from cottax.relational.rewrites import Determine, Undetermine
-from cottax.core import Combine
+from cottax.consumers.architectures import Combine
 from cottax.pytree.path import NodePath, VarPath
 from cottax.core.frozen import OrderedMap, unchecked
 import purposes

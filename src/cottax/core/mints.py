@@ -2,14 +2,18 @@
 A purpose a name is derived for: a `Mint` is a value, its class the purpose, and calling it on
 a name gives the derived name (`Copy()(y)` is `^copy.y`), so it is the `PlaceToPlace` an op is
 handed. How a class of names wears one is its `Minting`, registered by the place.
+
+An interface of core's, not maths: nothing in the maths, the plan or the condition node asks
+it anything (`Cut` is handed a `PlaceToPlace`, whatever it is). The places answer it
+(`pytree/mint.py`), the features name purposes of their own, and the consumers read it.
 '''
 
 import dataclasses
 from abc import abstractmethod
 from typing import Any
 
-from ..frozen import Answer, Frozen, answer
-from .places import Label, Place
+from .frozen import Answer, Frozen, answer
+from .maths.places import Label, Place
 
 
 class Mint(Frozen):
@@ -72,7 +76,7 @@ def unminted[P](name: P) -> P:
     return name if mint_of(name) is None else answer(Minting, name).unminted(name)
 
 
-# ---------------------------------------------------------------- the purposes the maths' ops derive names for
+# ---------------------------------------------------------------- the purposes core's ops are handed names for
 
 class Copy(Mint):
     '''A cut's copy of a variable: `^copy.y`.'''

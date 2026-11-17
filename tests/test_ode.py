@@ -19,15 +19,17 @@ import cottax.assemblies.jax as cx
 
 from cottax.core import (
     ConditionalNode,
-    AbstractGraph, Combine, ExecutableGraph, FunctionalNode, GaussSeidel, GraphWithValues,
+    AbstractGraph, ExecutableGraph, FunctionalNode, GraphWithValues,
     NestingGraph, Rename,
 )
+from cottax.consumers.architectures.cut_rules import GaussSeidel
+from cottax.consumers.architectures import Combine
 from cottax.core.maths.definition import OwnsTwice, ReadsOwn
 from cottax.core.maths.executable import SeveralOutermost
 from cottax.core.refusal_kinds import OwnsInsideNotAChoice
 from cottax.relational.rewrites import Determine, Undetermine
 from cottax.core.frozen import OrderedMap, choice, violations
-from cottax.core.maths.plan import Nest, Plan, refusals
+from cottax.core.plan import Nest, Plan, refusals
 from cottax.core.driven import Assign, DrivenGraph, Start
 from cottax.core.realisation import Implement, implemented
 from cottax.consumers.declaration import declare
@@ -327,20 +329,16 @@ def test_two_odes_on_one_cycle_are_refused_until_combined_and_then_integrate_as_
         np.asarray((one[s.place('x')], one[s.place('v')])), abs=1e-12)
 
 
-def test_an_ode_joins_an_ode_and_nothing_else():
+def test_an_ode_joins_an_ode_over_one_span():
     x, v, r, q, t = Word('x'), Word('v'), Word('r'), Word('q'), Word('t')
     a, b = OdeCondition((Dt(x, r, Word('x0')),), t), OdeCondition((Dt(v, q, Word('v0')),), t)
-    assert (a + b).relations == a.relations + b.relations and (b + a).states == (v, x)
-    assert (a + b).span == t
+    assert a.join(b).relations == a.relations + b.relations and b.join(a).states == (v, x)
+    assert a.join(b).span == t
     assert [type(e) for e in violations(OdeCondition, a.relations * 2, t)] == [OwnsTwice]
     with pytest.raises(ValueError, match=re.escape(SpansDiffer(t, Word('s')).message)):
-        a + OdeCondition(b.relations, Word('s'))
+        a.join(OdeCondition(b.relations, Word('s')))
     with pytest.raises(ValueError, match='duplicate output'):    # a state determined twice
-        a + a
-    root = RelationalCondition((Relation(r, None, Eq),), (), (v,), ())
-    for left, right in ((a, root), (root, a)):
-        with pytest.raises(TypeError):
-            left + right
+        a.join(a)
 
 
 # ================================================================ an algebraic constraint nested
@@ -599,8 +597,8 @@ def test_a_join_steps_on_the_kinks_of_both_sides():
     a = OdeCondition((Dt(*map(s.place, ('x', 'rx', 'x0'))),), s.place('span'), (s.place('k1'),))
     b = OdeCondition((Dt(*map(s.place, ('y', 'ry', 'y0'))),), s.place('span'),
                      (s.place('k1'), s.place('k2')))
-    assert (a + b).kinks == (s.place('k1'), s.place('k2'))
-    assert 'kinks at' in repr(a + b) and 'kinks' not in repr(a._carried(kinks=()))
+    assert a.join(b).kinks == (s.place('k1'), s.place('k2'))
+    assert 'kinks at' in repr(a.join(b)) and 'kinks' not in repr(a._carried(kinks=()))
 
 
 def test_without_its_kinks_the_gradient_across_a_stride_is_wrong_and_with_them_exact():
@@ -671,9 +669,9 @@ def test_a_join_runs_on_the_one_clock_either_names_and_refuses_two():
     from cottax.ode.ode_condition import TimesDiffer
     a = OdeCondition((Dt(*map(s.place, ('x', 'rx', 'x0'))),), s.place('span'), time=s.place('t'))
     b = OdeCondition((Dt(*map(s.place, ('y', 'ry', 'y0'))),), s.place('span'))
-    assert (a + b).time == (b + a).time == s.place('t')
+    assert a.join(b).time == b.join(a).time == s.place('t')
     with pytest.raises(ValueError, match='one clock gives one time') as refused:
-        a + b._carried(time=s.place('s'))
+        a.join(b._carried(time=s.place('s')))
     assert refused.value.violation == TimesDiffer(s.place('t'), s.place('s'))
 
 

@@ -13,7 +13,7 @@ from jax.tree_util import GetAttrKey
 
 from cottax.core.frozen import OrderedMap
 from cottax.relational import Min, Objective
-from cottax.core.maths.plan import Cut, Insert, Plan, refusals
+from cottax.core.plan import Cut, Insert, Plan, refusals
 from cottax.core import Condition, ConditionalNode, FunctionalNode, body_of, enclosers
 from cottax.core.driven import Assign, driven as with_driver
 from cottax.core import is_driven
@@ -26,7 +26,7 @@ from cottax.core.realisation import implemented
 from cottax.relational import (
     Eq, Le, Relation, RelationalCondition, is_fixed_point, is_optimise, is_root_find,
 )
-from cottax.core import Combine
+from cottax.consumers.architectures import Combine
 from cottax.relational.rewrites import Determine, FixedPointCut, Undetermine
 from cottax.relational.contracts import RootFinding
 from cottax.core.driven import Undrive
@@ -246,8 +246,9 @@ def test_combine_is_one_problem_over_every_unknown(two_problems):
 
 def test_combine_is_the_join_written_by_hand(two_problems):
     op = Combine(PROBLEM(N('mda')), (N('ha'), N('hb'),), RelationalCondition)
-    assert op.definition(two_problems) == two_problems[N('ha')] + two_problems[N('hb')]
-    assert op(two_problems)[op.at] == two_problems[N('ha')] + two_problems[N('hb')]
+    joined = ConditionalNode(two_problems[N('ha')].condition.join(two_problems[N('hb')].condition))
+    assert op.definition(two_problems) == joined
+    assert op(two_problems)[op.at] == joined
 
 
 def test_combining_makes_one_component(two_problems):
@@ -307,7 +308,7 @@ def test_two_fixed_points_stay_a_fixed_point():
 
 def test_a_fold_refuses_a_node_that_is_not_the_kind_it_declared(two_problems):
     '''The kind is asked where the graph is read, so the refusal names which node and
-    what it found -- against `+`'s own `TypeError`, which names only two types.'''
+    what it found -- against the join's own error, which names only two types.'''
     with pytest.raises(TypeError, match='well-defined over one kind only') as e:
         Combine(PROBLEM(N('mda')), (N('ha'), N('fb'),), RelationalCondition)(two_problems)
     assert '.fb' in str(e.value) and 'FunctionalNode' in str(e.value)
@@ -315,22 +316,22 @@ def test_a_fold_refuses_a_node_that_is_not_the_kind_it_declared(two_problems):
         Combine(PROBLEM(N('mda')), (N('ha'), N('nope'),), RelationalCondition)(two_problems)
 
 
-def test_a_fold_refuses_a_driven_problem_with_a_bare_one(two_problems):
-    '''Which algorithm should answer the join cannot be read off a driven problem and a
-    bare one: the driver of the one would be discarded or imposed on the other.'''
+def test_a_fold_refuses_a_driven_problem(two_problems):
+    '''Which algorithm should answer the join cannot be read off the two: the driver of the
+    one would be discarded or imposed on the other. A fold is of conditions, driven after.'''
     driven = (Plan(two_problems) + assign(N('ha'), Newton())).graph
     fold = Combine(PROBLEM(N('mda')), (N('ha'), N('hb'),), RelationalCondition)
-    assert [type(v).__name__ for v in refusals(fold, driven)] == ['DrivenOnOneSide']   # as data
-    with pytest.raises(ValueError, match='one is driven and one is not'):
+    assert [type(v).__name__ for v in refusals(fold, driven)] == ['FoldsDriven']   # as data
+    with pytest.raises(TypeError, match='carry a driver'):
         fold(driven)
 
 
 def test_a_fold_declares_what_it_folds(two_problems):
     '''The kind is the op's intent, so it is a field and not something read back off the
     graph: a replay against a changed model refuses rather than folding what it finds.
-    A kind with no `+` at all is refused when the op is built, before any graph: a level
-    defines none -- it leaves one to its finals -- so the kind names the final folded.'''
-    with pytest.raises(TypeError, match='defines no `\\+`'):
+    A kind no reading joins is refused when the op is built, before any graph: a level
+    answers none -- it leaves one to its finals -- so the kind names the final folded.'''
+    with pytest.raises(TypeError, match='nothing answers a join of Condition'):
         Combine(PROBLEM(N('mda')), (N('ha'), N('hb'),), Condition)
 
 
@@ -349,7 +350,8 @@ def test_a_fold_at_a_name_it_folds_keeps_that_binding(two_problems):
     g  = op(two_problems)
 
     assert [n.spelling for n in g.nodes] == ['.fa', '.ha', '.fb']   # `.ha` where it was
-    assert g[N('ha')] == two_problems[N('ha')] + two_problems[N('hb')]
+    assert g[N('ha')] == ConditionalNode(
+        two_problems[N('ha')].condition.join(two_problems[N('hb')].condition))
 
 
 def test_a_fold_at_a_name_it_does_not_fold_is_refused(two_problems):

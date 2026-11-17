@@ -1,19 +1,16 @@
 '''
 The primitive ops, the only ones that build a graph: `Rebind` on the bindings (`Insert`,
-`Delete`, `Redefine`, `Combine`), `Nest` and `Unnest` on the nesting.
+`Delete`, `Redefine`), `Nest` and `Unnest` on the nesting.
 '''
 
-import operator
 from abc import abstractmethod
 from collections.abc import Collection, Iterator, Mapping
 from dataclasses import replace
-from functools import reduce
 
-from ..definition import NodeDefinition, with_attributes
-from ..conditional import ConditionalNode, addable, driver_join_violations, kind_of
-from ...frozen import Frozen, OrderedMap, Violation, first
-from ..nesting import NestingGraph, NestingLoop
-from ..places import Label, Place
+from ..maths.definition import NodeDefinition, with_attributes
+from ..frozen import Frozen, OrderedMap, Violation, first
+from ..maths.nesting import NestingGraph, NestingLoop
+from ..maths.places import Label, Place
 from .algebra import GraphOp
 
 
@@ -87,11 +84,6 @@ def check_delete_keeps_nesting_whole[N: Label](op: 'Delete', g: NestingGraph[N, 
     yield from stranded(g, set(op.nodes))
 
 
-def check_fold_keeps_nesting_whole[N: Label](op: 'Combine', g: NestingGraph[N, Place]) -> Iterator[Violation]:
-    '''No nesting pair loses one end to the nodes folded away (all but the one at `at`).'''
-    yield from stranded(g, set(op.nodes) - {op.at})
-
-
 # ---------------------------------------------------------------- the four
 
 def check_inserts(op: 'Insert') -> Iterator[Violation]:
@@ -158,78 +150,6 @@ class Redefine[N: Label, V: Place](Rebind[N, V]):
         return Rebinding(frozenset(), redefined)
 
 
-def check_nodes(op: 'Combine') -> Iterator[Violation]:
-    '''At least two nodes, none twice, of a kind that has a `+`.'''
-    if len(op.nodes) < 2:
-        yield NothingToCombine()
-    if len(set(op.nodes)) != len(op.nodes):
-        yield NodeTwice(tuple(op.nodes))
-    if not addable(op.kind):
-        yield NotAddable(op.kind.__name__)
-
-
-def check_folds_one_kind(op: 'Combine', graph: NestingGraph) -> Iterator[Violation]:
-    '''Every folded node is of the declared kind -- a condition node by its condition's --
-    so `definition` can use its `+`.'''
-    off = tuple(n for n in op.nodes if not isinstance(kind_of(graph[n]), op.kind))
-    if off:
-        found = dict.fromkeys(type(kind_of(graph[n])).__name__ for n in off)
-        yield NotOfKind(off, op.kind.__name__, ', '.join(found))
-
-
-def check_folds_no_attributes(op: 'Combine', graph: NestingGraph) -> Iterator[Violation]:
-    '''No folded node carries an attribute: what two nodes carry has no join yet.'''
-    for name in op.nodes:
-        if name in graph.definitions and (carried := graph[name].attributes):
-            yield CarriesAttributes(name, tuple(k.__name__ for k in carried))
-
-
-def check_folds_drivers_alike(op: 'Combine', graph: NestingGraph) -> Iterator[Violation]:
-    '''Every folded condition node's driver joins the first's: all driven or none, and
-    alike by the driver's own rules -- asked here, so a refusal is data before `+` raises it.'''
-    folded = [graph[n] for n in op.nodes if n in graph.definitions]
-    if not folded or not all(isinstance(d, ConditionalNode) for d in folded):
-        return                                          # `check_folds_one_kind` refuses it
-    for other in folded[1:]:
-        yield from driver_join_violations(folded[0], other)
-
-
-def check_lands_on_its_own(op: 'Combine', graph: NestingGraph) -> Iterator[Violation]:
-    '''The fold lands on a node it folds, or on a name nothing holds.'''
-    if op.at not in op.nodes and op.at in graph.definitions:
-        yield NameTaken(op.at)
-
-
-class Combine[N: Label, V: Place, D: NodeDefinition](Rebind[N, V]):
-    '''
-    Fold several nodes into one with their `+`: the others are removed and the fold is
-    defined at `at`, in one rebinding. Whether the fold fits the graph depends on the `+`,
-    so that is checked on the result.
-    '''
-
-    at : N
-    '''Where the fold lands: one of `nodes` (redefined in place) or a new name.'''
-
-    nodes : tuple[N, ...]
-
-    kind : type
-    '''The class whose `+` folds the nodes; each node must be one -- a condition node's
-    condition, for condition nodes.'''
-
-    checks = (check_nodes,)
-    checks_graph = (check_folds_one_kind, check_folds_no_attributes, check_folds_drivers_alike,
-                    check_lands_on_its_own, check_fold_keeps_nesting_whole)
-
-    def definition(self, graph: NestingGraph[N, V]) -> D:
-        '''The `+` of the folded nodes.'''
-        return reduce(operator.add, (graph[n] for n in self.nodes))
-
-    def rebinding(self, graph: NestingGraph[N, V]) -> Rebinding[N, V]:
-        return Rebinding(frozenset(self.nodes) - {self.at}, OrderedMap({self.at: self.definition(graph)}))
-
-    def __repr__(self) -> str:
-        return f'combine({self.at} <- {", ".join(str(n) for n in self.nodes)})'
-
 # ---------------------------------------------------------------- Nesting
 
 
@@ -294,35 +214,6 @@ class NothingInserted(Violation):
 class NothingDeleted(Violation):
     error    = ValueError
     template = 'delete(): nothing to delete'
-
-class NothingToCombine(Violation):
-    error    = ValueError
-    template = 'combine(): fewer than two nodes, so nothing to combine'
-
-class NodeTwice(Violation):
-    nodes : tuple[Label, ...]
-    error    = ValueError
-    template = 'combine(): {nodes!r} names a node twice'
-
-class NotAddable(Violation):
-    kind : str
-    error    = TypeError
-    template = 'combine(): a {kind} defines no `+`, so no two of them can be folded'
-
-class NotOfKind(Violation):
-    nodes : tuple[Label, ...]
-    kind  : str
-    found : str
-    error    = TypeError
-    template = ('combine({kind}): {nodes!r} is {found}, and a fold is well-defined over '
-                'one kind only')
-
-class CarriesAttributes(Violation):
-    node       : Label
-    attributes : tuple[str, ...]
-    error    = TypeError
-    template = ('combine(): {node!r} carries {attributes}, and what two nodes carry has no join '
-                '-- take it off first')
 
 class NameTaken(Violation):
     name : Label

@@ -3,7 +3,8 @@
 from abc import abstractmethod
 from collections.abc import Callable
 
-from ...core import Label, Place, ToCut
+from ...core import Label, Place
+from .cut_rules import ToCut
 from ...core.frozen import Frozen
 
 

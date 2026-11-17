@@ -1,7 +1,7 @@
 '''
 The condition written as relations: a `Rel` marker, a `Relation` between two places,
 and `RelationalCondition`, relations and objectives over places with the unknowns they
-determine and the parameters they hold fixed, and `+` the join.
+determine and the parameters they hold fixed, and `join`, two stated as one.
 '''
 
 import dataclasses
@@ -128,7 +128,7 @@ def check_parameters(node: 'RelationalCondition') -> Iterator[Violation]:
 
 class RelationalCondition[V: Place](Condition[V]):
     '''A condition: relations and objectives over places, the unknowns it determines and
-    the parameters it holds fixed. Every other term is read inside. Supports addition.'''
+    the parameters it holds fixed. Every other term is read inside. Joins another (`join`).'''
 
     relations  : tuple[Relation[V], ...]
     objectives : tuple[Objective[V], ...]
@@ -154,10 +154,9 @@ class RelationalCondition[V: Place](Condition[V]):
             if t not in self.unknowns and t not in self.parameters)
 
     def join(self, other: 'RelationalCondition[V]') -> 'RelationalCondition[V]':
-        '''The join: relations, objectives and unknowns concatenated, this side first; the
-        parameters too, a place both hold fixed once.'''
-        if not isinstance(other, RelationalCondition):
-            return NotImplemented
+        '''The join with another relational condition: relations, objectives and unknowns
+        concatenated, this side first; the parameters too, a place both hold fixed once.
+        What `Combine` folds by, through this kind's `ModelReading`.'''
         return RelationalCondition(self.relations  + other.relations,
                                    self.objectives + other.objectives,
                                    self.unknowns   + other.unknowns,

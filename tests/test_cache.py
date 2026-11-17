@@ -137,7 +137,7 @@ def every_cached_answer_is_the_real_one(*values) -> int:
 
 def rewritten_plan():
     '''A plan that primes at every op: each `FixedPointCut` is a `Cut` and an `Insert`.'''
-    from cottax.core.maths.plan import Cut, Plan
+    from cottax.core.plan import Cut, Plan
     from cottax.relational.rewrites import FixedPointCut
 
     n = 5
@@ -271,7 +271,7 @@ def test_a_plan_pickles_without_its_prefix_graphs():
     '''`Plan` is `Frozen`: the primed `trunk` and `graph` are memos and stay behind, and
     `graph` is rebuilt equal on the other side.'''
     import pickle
-    from cottax.core.maths.plan import Delete, Plan
+    from cottax.core.plan import Delete, Plan
     plan = Plan(acyclic()) + Delete((N('obj'),))
     assert 'graph' in plan.__dict__ and 'trunk' in plan.__dict__
     back = pickle.loads(pickle.dumps(plan))

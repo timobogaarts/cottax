@@ -12,11 +12,13 @@ from collections.abc import Generator, Iterator, Sequence
 from typing import Any, ClassVar
 
 from ...core import (
-    AbstractConditionalNode, Combine, CutRule, FunctionalNode, Label, kind_of, NestingGraph, Opened, Place, ToCut, Violation,
-    is_encloser, cuts_per_cycle, GraphOp, Nest, StagedOp, refusals,
+    AbstractConditionalNode, FunctionalNode, Label, kind_of, NestingGraph, Place, Violation,
+    is_encloser, GraphOp, Nest, StagedOp, refusals,
 )
 from ...core.frozen import AbstractVar, Frozen, OrderedMap, answer, first
 from .closing import closed
+from .combine import Combine
+from .cut_rules import CutRule, Opened, ToCut, cuts_per_cycle
 from .interface import Closing, ModelReading
 from .refusals import BodyShared, NestedAlready, NotCombinable, TopNotAProblem, TopUnbound
 

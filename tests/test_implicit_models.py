@@ -11,7 +11,7 @@ import pytest
 import cottax.assemblies.jax as cx
 from cottax.core import enclosers, GraphWithValues
 from cottax.core.frozen import OrderedMap
-from cottax.core.maths.plan import Plan
+from cottax.core.plan import Plan
 from cottax.core.driven import DriverContract
 from cottax.relational.contracts import CONTRACTS, RootFinding
 from cottax.consumers.execution import CallableGraph, run
@@ -127,7 +127,7 @@ def test_the_optimise_pairs_with_the_models_that_compute_its_conditions():
     graph = cx.absolute.declare({'cost':   flat.function(cost, 'cost'),
                          'margin': flat.function(margin, 'margin'),
                          'design': flat.optimise(minimise='cost', design=('R0', 'B0')).condition
-                                   + flat.requirement('margin', Le)}).graph
+                                   .join(flat.requirement('margin', Le))}).graph
     assert graph.graph.components == ((n('cost'), n('margin'), n('design')),)
     assert graph.graph.boundary_inputs == ()
 

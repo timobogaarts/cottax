@@ -9,9 +9,9 @@ from functools import cached_property
 
 from typing import Callable
 
-from ...frozen import Frozen, PerLevel, Violation, first
-from ..nesting import NestingGraph
-from ..places import Label, Place
+from ..frozen import Frozen, PerLevel, Violation, first
+from ..maths.nesting import NestingGraph
+from ..maths.places import Label, Place
 
 
 def refusals[N: Label, V: Place](op: 'GraphOp[N, V]',

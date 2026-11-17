@@ -1,16 +1,15 @@
 '''
-Rules on how to cut a graph's couplings.
+Rules on how to cut a graph's couplings: which a cut opens, per functional cycle. An
+architecture's, which hands one to a closing; not core's, since nothing below runs one.
 '''
 
 from abc import abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
 from functools import cached_property
 
-from ..frozen import Frozen, Violation, first
-from .graph import AbstractGraph
-from .kinds import FunctionalNode
-from .nesting import NestingGraph
-from .places import Label, Place
+from ...core import AbstractGraph, FunctionalNode, Label, NestingGraph, Place, Violation, first
+from ...core.frozen import Frozen
+from .refusals import CycleTooLarge, KeyRepeats, NoRule, OrderMismatch, SeveralRules
 
 
 type ToCut[N: Label, V: Place] = Mapping[V, tuple[N, ...]]
@@ -215,41 +214,3 @@ class GaussSeidelOrdered[N: Label, V: Place](Sweep[N, V]):
 
     def __repr__(self) -> str:
         return f'gauss_seidel({", ".join(map(str, self.order))})'
-
-
-# ---------------------------------------------------------------- violation finals
-
-class OrderMismatch(Violation):
-    order : tuple
-    nodes : tuple
-    error    = ValueError
-    template = ('gauss_seidel: the order {order!r} does not name the nodes {nodes!r} exactly '
-                'once each -- an order sweeps one cycle, and one per cycle is `ByName`')
-
-
-class CycleTooLarge(Violation):
-    size  : int
-    limit : int
-    error    = ValueError
-    template = ('{size} nodes on one cycle is beyond the exact order search (limit {limit}): '
-                'raise `GaussSeidelMinimal(limit=)`, or hand `GaussSeidelOrdered` an order')
-
-
-class KeyRepeats(Violation):
-    keys : tuple
-    error    = ValueError
-    template = 'by_name: {keys!r} each key more than one rule'
-
-
-class NoRule(Violation):
-    nodes : tuple
-    error    = ValueError
-    template = ('no rule keyed by a node of {nodes!r}: key one, `NoCuts()` to leave it '
-                'alone, or use the one rule alone for every cycle')
-
-
-class SeveralRules(Violation):
-    keyed : tuple
-    error    = ValueError
-    template = ('several rules keyed on one cycle, by {keyed!r}: cycles are disjoint, so '
-                'one key lies on one')

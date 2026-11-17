@@ -7,6 +7,6 @@ every edit of what a node reads and owns. Nothing below reads a plan.
 
 from .algebra import ComposedOp, GraphOp, Plan, Stage, StagedOp, refusals
 from .primitive import (
-    Primitive, Rebind, Rebinding, Combine, Delete, Insert, Nest, Redefine, Unnest,
+    Primitive, Rebind, Rebinding, Delete, Insert, Nest, Redefine, Unnest,
 )
-from .ops import Cut, RemoveAttribute, Rename, Replace, Rewire, SetAttribute, SetOwnsInside
+from .ops import Cut, RemoveAttribute, Rename, Replace, Rewire, SetAttribute

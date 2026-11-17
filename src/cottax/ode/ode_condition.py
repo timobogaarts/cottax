@@ -74,11 +74,10 @@ class OdeCondition[V: Place](Condition[V]):
         return (*self.initials, self.span, *self.kinks, *self.jumps)
 
     def join(self, other: 'OdeCondition[V]') -> 'OdeCondition[V]':
-        '''The join: the relations concatenated, this side first, over the one span both
-        read, stepping on the kinks and jumps of both, at the one time either names. Two
-        spans, or two times, are refused: one integration runs over one, on one clock.'''
-        if not isinstance(other, OdeCondition):
-            return NotImplemented
+        '''The join with another ODE: the relations concatenated, this side first, over the
+        one span both read, stepping on the kinks and jumps of both, at the one time either
+        names. Two spans, or two times, are refused: one integration runs over one, on one
+        clock. What `Combine` folds by, through this kind's `ModelReading`.'''
         if other.span != self.span:
             raise SpansDiffer(self.span, other.span).raised
         if None not in (self.time, other.time) and self.time != other.time:
