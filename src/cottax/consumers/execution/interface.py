@@ -112,7 +112,10 @@ class DriverImplementation[D: DriverContract](Frozen, Choice):
         Returns
         -----------
         [tuple[Any], Mapping[type[Role], Any]] = [Unknowns, ByRole]
-        Unknown values and, per role in `posed.reports`, its values (e.g. trajectory.)
+        The value at each place the condition owns, inside then outside (the unknowns, then a
+        DOE's records), and, per role in `posed.reports`, its values (e.g. trajectory.)
+        Workaround, pending the history rework: what a condition owns outside is returned
+        beside the unknowns, not as a report.
         '''
 
 

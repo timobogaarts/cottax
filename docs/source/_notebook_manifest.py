@@ -23,6 +23,7 @@ NOTEBOOKS = {
     "examples/coupled_ode.ipynb": {"source": "docs/source/examples/coupled_ode_i.ipynb", "ci": True},
     "examples/non_jax.ipynb": {"source": "docs/source/examples/non_jax_i.ipynb", "ci": True},
     "examples/optimal_control.ipynb": {"source": "docs/source/examples/optimal_control_i.ipynb", "ci": True},
+    "examples/doe_sellar.ipynb": {"source": "docs/source/examples/doe_sellar_i.ipynb", "ci": True},
 }
 
 NON_CI_NOTEBOOKS = [docs_path for docs_path, meta in NOTEBOOKS.items() if not meta["ci"]]

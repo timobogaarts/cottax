@@ -155,7 +155,8 @@ def test_a_name_the_core_door_gives_is_imported_from_it():
 # ================================================================ 2. the features
 
 DRIVEN = {'cottax.relational.contracts': 'the shipped contracts are `DriverContract`s',
-          'cottax.ode.contracts':        'the integrator and its roles'}
+          'cottax.ode.contracts':        'the integrator and its roles',
+          'cottax.doe.contracts':        'the sampler'}
 '''The modules of a feature outside its `consumers/` that also import `core.driven`.'''
 
 
@@ -345,10 +346,10 @@ def test_the_assembly_defines_only_what_is_pinned():
             if callable(v) and getattr(v, '__module__', None) == ASSEMBLY} == ASSEMBLY_DEFINES
 
 
-CONDITION_NODES = {'declare', 'requirement', 'satisfy', 'optimise', 'run', 'valued', 'assess',
-                   'copy', 'reading', 'parameter_reads', 'term', 'per_place', 'scaling'}
+CONDITION_NODES = {'declare', 'requirement', 'satisfy', 'optimise', 'sample', 'run', 'valued',
+                   'assess', 'copy', 'reading', 'parameter_reads', 'term', 'per_place', 'scaling'}
 '''What a part offers beside the kinds it declares (`declares`) and the ops it builds: the
-model declared, relational's condition nodes, a run on values written by name or held in a
+model declared, relational's condition nodes and the DOE, a run on values written by name or held in a
 caller's structure, a driver's scales written by name for such a run, where its cuts put a
 copy, and a declaring part's conventions, changed or asked.'''
 
