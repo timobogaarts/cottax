@@ -1,7 +1,8 @@
 '''
 The design of experiments, a third language beside `relational` and `ode`: its condition node,
 proved by core with nothing edited for it, the contract answering it, its run in jax,
-its declaration through the shipped surface, its drawing, and its JSON.
+its declaration through the shipped surface, its drawing, its JSON, and the presets
+refusing it.
 '''
 
 import jax
@@ -23,6 +24,7 @@ from cottax.consumers.visualization import render_html, render_matrix_svg, rende
 from cottax.consumers.visualization.xdsm import xdsm_struct
 from cottax.doe import DoeCondition, Recorded, Varied
 from cottax.doe.contracts import Sampling
+from cottax.doe.consumers.architectures import DoeNotPlaced
 from cottax.doe.consumers.execution import JaxDoe, PlansDiffer
 from cottax.doe.consumers.visualization import SAMPLE
 from cottax.pytree.path import NodePath, VarPath
@@ -201,3 +203,12 @@ def test_a_doe_is_drawn_in_its_own_category():
 def test_a_doe_run_by_jaxdoe_is_written_to_json_and_read_back():
     g = graph_of({N('doe'): sampled(batch_size=2), N('F'): call(square, ['x'], ['h'])})
     assert read_json(write_json(g)) == g
+
+
+# ================================================================ the presets
+
+def test_a_preset_refuses_a_model_holding_a_doe():
+    declared = s.declare(D1, D2, obj, {'sweep': s.sample(over={'z_1': PLAN}, record=('f',))})
+    with pytest.raises(ValueError) as refused:
+        declared + s.mda()
+    assert isinstance(refused.value.violation, DoeNotPlaced)
