@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Sequence
 from itertools import chain
-from ...core import NestingGraph
-from ...core import ExecutableGraph
+from ...core import Graph, dependencies
 from ...core import Plan
 from ...core import is_driven
 from ...core import Label, Place
@@ -112,9 +111,9 @@ def problems_first(names: Sequence[Label], groups: Iterable[Sequence[Label]],
 
 
 def xdsm_struct(
-    graph  : NestingGraph | ExecutableGraph | Plan,
+    graph  : Graph | Plan,
     *,
-    blocks : bool | ExecutableGraph = False,
+    blocks : bool = False,
     formatter : Formatter = PlainFormat(),
     problem_first : bool = True,
 ) -> dict:
@@ -123,7 +122,7 @@ def xdsm_struct(
     spelling (`spell_plain`); two spelled alike are refused (`SpelledAlike`).
 
     `blocks`: ring every solve and rebind the diagonal into run order
-    (`sequencing.ordered_graph`); an `ExecutableGraph` rings as that proof has it.
+    (`sequencing.ordered_graph`).
     `formatter`: how each name is shown (`shown_steps`, `shown_vars`).
     `problem_first`: problems first on the diagonal. With `blocks` the run order puts each
     level's problems first (`ordered_graph`); without, each component's problems are moved to
@@ -138,17 +137,11 @@ def xdsm_struct(
     its enclosing name, as the N2 groups it) and `blocks` (one record per ring, outermost
     first: `steps`, `ring` `'solve'` or `'run'`, `depth`, `type`).
     '''
-    if isinstance(graph, ExecutableGraph):                          # drawn as its own rings
-        blocks = graph
     graph = graph_drawn(graph)
     if not graph.nodes:
         raise ValueError('nothing to draw: the graph has no nodes')
-    first(chain(spelled_apart(graph.nodes), spelled_apart(graph.graph.variables)))
+    first(chain(spelled_apart(graph.nodes), spelled_apart(graph.variables)))
 
-    if isinstance(blocks, ExecutableGraph):
-        if set(blocks.graph.nodes) != set(graph.nodes):
-            raise ValueError('the blocking is not a blocking of this graph')
-        graph, blocks = blocks.graph, True
     ringed : tuple[Block, ...] | None = None
     if blocks:
         # the diagonal in run order, each level's problems first, unless `problem_first` is
@@ -159,7 +152,7 @@ def xdsm_struct(
     else:
         # the diagonal in binding order, each component's problems moved to its front
         names = problems_first(
-            graph.nodes, graph.graph.components, lambda n: problem_type_of(graph[n]) is not None,
+            graph.nodes, dependencies(graph).components, lambda n: problem_type_of(graph[n]) is not None,
         ) if problem_first else list(graph.nodes)
 
     def step(name: Label) -> str:
@@ -180,9 +173,9 @@ def xdsm_struct(
         'reads'   : {step(n): list(dict.fromkeys(var(v) for v in graph[n].reads))
                      for n in names},
         'writes'  : {step(n): [var(v) for v in graph[n].owns] for n in names},
-        'producer': {var(v): step(owner) for v, owner in graph.graph.owners.items()},
+        'producer': {var(v): step(owner) for v, owner in dependencies(graph).owners.items()},
         'shown_steps': {step(n): shown(n, formatter) for n in names},
-        'shown_vars' : {var(v): shown(v, formatter) for v in graph.graph.variables},
+        'shown_vars' : {var(v): shown(v, formatter) for v in graph.variables},
         'problem_types'  : {step(n): s for n in names
                      if (s := problem_type_of(graph[n])) is not None},
         'stated_shapes'  : {step(n): s for n in names

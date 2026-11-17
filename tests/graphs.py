@@ -5,8 +5,8 @@ from typing import Any
 from jax.tree_util import GetAttrKey, tree_leaves_with_path
 
 from cottax.core.frozen import OrderedMap
-from cottax.core.maths.graph import AbstractGraph
-from cottax.core.maths.nesting import NestingGraph
+
+from cottax.core.maths.graph import Graph
 from cottax.core import Condition, ConditionalNode, FunctionalNode, NodeDefinition
 from cottax.core.realisation import implemented
 from cottax.pytree.path import NodePath, VarPath
@@ -18,15 +18,15 @@ def node_of(definition):
     return ConditionalNode(definition) if isinstance(definition, Condition) else definition
 
 
-def graph_of(definitions, within=()) -> NestingGraph:
+def graph_of(definitions, within=()) -> Graph:
     '''A nesting graph over its bindings and its pairs, each a mapping or pairs; a bare
     condition is bound as the node holding it (`node_of`).'''
     pairs = definitions.items() if hasattr(definitions, 'items') else definitions
-    return NestingGraph(AbstractGraph(OrderedMap((n, node_of(d)) for n, d in pairs)),
+    return Graph(OrderedMap((n, node_of(d)) for n, d in pairs),
                         OrderedMap(within))
 
 
-def three_problems(*nesting: tuple[str, str]) -> NestingGraph:
+def three_problems(*nesting: tuple[str, str]) -> Graph:
     '''
     Three problems on one cycle, shaped as ASO: `p` minimises `f` over `z`, the fixed point
     `q` holds its copy `yh` of `y1`, and `r` minimises `f` over `x`. `a` reads `yh` and `b`
@@ -60,7 +60,7 @@ NESTED_BESIDE_P = (('r', 'q'),)
 problem answers.'''
 
 
-def graph_from_pytree(pytree: Any) -> NestingGraph:
+def graph_from_pytree(pytree: Any) -> Graph:
     '''A graph of the node definitions in a pytree, each named by its key path, in
     flatten order (a dict's keys sorted).'''
     def is_node(x: Any) -> bool:

@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from ...core import ExecutableGraph, NestingGraph, Plan
+from ...core import Graph, Plan
 from .matrix import NAMES_CSS as N2_NAMES, by_namespace, colour_toggle, n2_view
 from .page import HtmlDoc, Pictures, page, prefixes
 from .sequencing import graph_drawn
@@ -21,12 +21,12 @@ VIEWS = {'xdsm': 'XDSM', 'n2': 'N2'}
 
 
 def render_html(
-    graph     : NestingGraph | ExecutableGraph | Plan,
+    graph     : Graph | Plan,
     *,
     views     : Sequence[str] = ('xdsm', 'n2'),
     names     : bool = True,
     colour    : bool = True,
-    blocks    : bool | ExecutableGraph = False,
+    blocks    : bool = False,
     style     : Style | str = TERRACOTTA,
     formatter : Formatter = PlainFormat(),
     xdsm      : Mapping[str, Any] | None = None,
@@ -42,7 +42,7 @@ def render_html(
 
     `views`: the pictures each frame carries, `'xdsm'` and / or `'n2'`, the first opened.
     `names`, `colour`: the **Names** and (with an N2) **Colour** toggles' starting state.
-    `blocks`: ring the XDSM's solves (an `ExecutableGraph`: as that proof has them).
+    `blocks`: ring the XDSM's solves.
     `xdsm`: `render_xdsm_svg`'s own arguments for the XDSM view.
     `n2`: the N2 view's (`cell`, `font_size`, `order`, `groups` -- `by_namespace()` unless
     said --, `grouped`, `colours`).

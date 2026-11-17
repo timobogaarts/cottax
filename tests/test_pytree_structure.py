@@ -3,6 +3,9 @@
 a model run on it through the surface's `run(..., read_from=)` and written back.
 '''
 
+from toy_places import Segmented
+from cottax.core import prove
+
 import dataclasses
 
 import equinox as eqx
@@ -50,13 +53,15 @@ START = purposes.Start()
 def square(start=START(V('u'))) -> CallableGraph:
     '''`u * u == z`, a root find from a start at `start`.'''
     condition = RelationalCondition((Relation(V('r'), None, Eq),), (), (V('u'),), ())
-    return CallableGraph(graph_of({
+    graph = graph_of({
         N('res'): implemented(FunctionalNode((V('u'), V('z')), (V('r'),)),
                                       lambda u, z: u * u - z),
         N('h')  : implemented(driven(condition, RootFinding(steps=False),
                                            ((start,),), ()),
                                     Newton(rtol=1e-10, atol=1e-10)),
-    }))
+    })
+    prove(graph, CallableGraph)
+    return graph
 
 
 def on_tree(graph, tree, values=OrderedMap()):
@@ -71,7 +76,7 @@ def test_a_pytree_reads_and_writes_by_place():
 
 
 def test_the_pytree_structure_is_registered_for_a_var_path():
-    assert type(answer_for_places(DataStructure, square().graph)) is PytreeStructure
+    assert type(answer_for_places(DataStructure, square())) is PytreeStructure
 
 
 def test_a_place_holding_none_reads_none_and_one_not_held_is_refused():
@@ -81,7 +86,7 @@ def test_a_place_holding_none_reads_none_and_one_not_held_is_refused():
 
 
 @dataclasses.dataclass(frozen=True)
-class Lookalike:
+class Lookalike(Segmented):
     '''Not a `VarPath`, with the segments of one.'''
     segments : tuple
 
@@ -89,10 +94,11 @@ class Lookalike:
 def test_a_lookalike_of_a_var_path_is_refused_by_name():
     '''Read at the `VarPath` of its keys, it would read `a` before the run computes it.'''
     a     = Lookalike((DictKey('a'),))
-    graph = CallableGraph(graph_of({
+    graph = graph_of({
         N('g'): implemented(FunctionalNode((V('c'),), (V('a'),)), lambda c: 10 * c),
         N('f'): implemented(FunctionalNode((a,), (V('b'),)), lambda a: a + 1),
-    }))
+    })
+    prove(graph, CallableGraph)
     with pytest.raises(TypeError) as refused:
         on_tree(graph, {'a': 1.0, 'b': 0.0, 'c': 2.0})
     assert refused.value.args[0] == ForeignPlace(
@@ -225,10 +231,12 @@ def test_a_place_is_read_under_the_key_it_is_given_under():
 
 
 def test_a_place_inside_what_a_slot_reads_whole_is_read():
-    inside = CallableGraph(graph_of({N('f'): implemented(FunctionalNode((V('area', 'x'),), (V('y'),)),
-                                                                 lambda x: x)}))
-    whole  = CallableGraph(graph_of({N('f'): implemented(FunctionalNode((V('area'),), (V('y'),)),
-                                                                 lambda area: area)}))
+    inside = graph_of({N('f'): implemented(FunctionalNode((V('area', 'x'),), (V('y'),)),
+                                                                 lambda x: x)})
+    prove(inside, CallableGraph)
+    whole = graph_of({N('f'): implemented(FunctionalNode((V('area'),), (V('y'),)),
+                                                                 lambda area: area)})
+    prove(whole, CallableGraph)
     tree   = {'area': {'x': 1.0, 'w': 2.0}}
     # what is beside the read, inside the area, is not read; all of an area read whole is.
     assert cx.flat.assess(inside, read_from={cx.Inputs: tree}).unread == (V('area', 'w'),)
@@ -238,7 +246,8 @@ def test_a_place_inside_what_a_slot_reads_whole_is_read():
 
 def test_a_start_the_graph_computes_reads_nothing():
     warm = implemented(FunctionalNode((V('z'),), (START(V('u')),)), lambda z: z)
-    graph = CallableGraph(graph_of({**square().graph.graph.definitions, N('warm'): warm}))
+    graph = graph_of({**square().definitions, N('warm'): warm})
+    prove(graph, CallableGraph)
     tree  = {'u': 1.0, 'z': 9.0}
     assessed = cx.flat.assess(graph, read_from={cx.Inputs: tree, Start: tree})      # `u` is the root find's unknown
     assert (assessed.unread, assessed.overwritten) == ((), (V('u'),))
@@ -248,7 +257,7 @@ def test_a_tree_completed_holds_a_slot_for_what_the_run_computes():
     tree = completed(square(), {'u': 1.0, 'z': 9.0})
     assert tree == {'u': 1.0, 'z': 9.0, 'r': None}             # no slot at the minted start
     assert on_tree(square(), tree)['u'] == pytest.approx(3.0, rel=1e-10)
-    assert completed(square().graph, tree) == tree             # a graph, or a proof of one
+    assert completed(square(), tree) == tree             # a completed tree is complete
 
 
 def test_completing_invents_no_start():

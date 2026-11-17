@@ -5,8 +5,8 @@ import dataclasses
 from typing import Any
 
 from ...core import (
-    Condition, ConditionalNode, Label, NodeDefinition, Place, Violation, AbstractGraph,
-    NestingGraph, GraphOp, Plan,
+    Condition, ConditionalNode, Label, NodeDefinition, Place, Violation,
+    Graph, GraphOp, Plan, dependencies, WellFormed, prove,
 )
 from ...core.frozen import Frozen, OrderedMap, answer, answers, checked
 from ..surface.interface import DerivedNames, Written
@@ -32,7 +32,7 @@ class Declared[N: Label, V: Place](Frozen):
     node_tags  : Tags[N] = dataclasses.field(default=OrderedMap(), compare=False)
 
     @property
-    def graph(self) -> NestingGraph[N, V]:
+    def graph(self) -> Graph[N, V]:
         return self.plan.graph
 
     def __add__(self, op: GraphOp) -> 'Declared[N, V]':
@@ -41,7 +41,7 @@ class Declared[N: Label, V: Place](Frozen):
     def using(self, values: Mapping[V, Any]) -> 'Declared[N, V]':
         '''The same, with a value given at each of `values`, replaced or added: each a
         boundary input of the graph.'''
-        inputs = set(self.graph.graph.boundary_inputs)
+        inputs = set(dependencies(self.graph).boundary_inputs)
         if stray := tuple(p for p in values if p not in inputs):
             raise NotAnInput(stray).raised
         return dataclasses.replace(self, given=OrderedMap({**self.given, **values}))
@@ -70,7 +70,7 @@ def declare(*models: Any) -> Declared:
     if (first := next(places, None)) is None:
         if found:
             raise Nameless(tuple(leaf for _, leaf, _ in found)).raised
-        return Declared(Plan(NestingGraph(AbstractGraph(OrderedMap()), OrderedMap())),
+        return Declared(Plan(Graph(OrderedMap(), OrderedMap())),
                         OrderedMap())
     names = answer(DerivedNames, first)
     nodes, node_tags = [], []
@@ -81,7 +81,8 @@ def declare(*models: Any) -> Declared:
         elif id(leaf) not in held:
             nodes.append((at, ConditionalNode(leaf) if isinstance(leaf, Condition) else leaf))
         node_tags.append((at, tags))
-    graph = NestingGraph(AbstractGraph(OrderedMap(nodes)), OrderedMap())
+    graph = Graph(OrderedMap(nodes))
+    prove(graph, WellFormed)                    # a declared model is well formed, or refused here
     declarations = [leaf for _, leaf, _ in found if isinstance(leaf, Declaration)]
     return Declared(Plan(graph),
                     OrderedMap(p_v for leaf in declarations for p_v in leaf.given.items()),

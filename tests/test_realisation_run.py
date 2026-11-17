@@ -9,6 +9,8 @@ implemented here in plain Python. Its data arrives keyed by role, and its places
 ones `Assign` recorded, so a rename moves a start and the Newton never notices.
 '''
 
+from cottax.core import prove
+
 import math
 
 import pytest
@@ -16,7 +18,7 @@ from typing import Any
 
 from jax.tree_util import DictKey
 
-from cottax.core import FunctionalNode, GraphWithValues
+from cottax.core import FunctionalNode
 from cottax.core.plan import Plan, Rename
 from cottax.consumers.execution import CallableGraph, run as run_graph
 from cottax.consumers.execution.interface import DriverImplementation
@@ -31,6 +33,7 @@ from cottax.pytree.path import NodePath, VarPath
 from cottax.core.driven import DriverContract, PerProblem, PerUnknown
 from cottax.core.realisation import implemented
 from cottax.relational import Eq, Relation, RelationalCondition, is_root_find
+from cottax.consumers.execution import GraphWithValues
 
 
 def v(name: str) -> VarPath:
@@ -118,7 +121,7 @@ STEPS  = purposes.Steps()(v('DiscA.close'))
 
 
 def run(graph, given) -> OrderedMap:
-    return run_graph(GraphWithValues(CallableGraph(graph), OrderedMap(given)))
+    return run_graph(GraphWithValues(graph, OrderedMap(given)))
 
 
 def driven(implementation=newton, *after) -> Plan:

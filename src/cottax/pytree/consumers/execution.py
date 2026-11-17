@@ -6,7 +6,7 @@ from typing import Any
 from ...core.frozen import OrderedMap, answers, dotted
 from ...consumers.execution.interface import DataStructure
 from ...consumers.execution.refusals import ForeignPlace
-from ...core import NestingGraph, ProvedGraph, mint_of
+from ...core import Graph, mint_of
 from ..crossings import check_pytree_readable, complete_at, leaf_paths, read_at, resolves, write_at
 from ..path import VarPath
 
@@ -42,13 +42,12 @@ class PytreeStructure(DataStructure[VarPath]):
         return write_at(data, {p.segments: v for p, v in values.items()})
 
 
-def completed(graph: NestingGraph[Any, VarPath] | ProvedGraph[Any, VarPath], tree: Any) -> Any:
+def completed(graph: Graph[Any, VarPath], tree: Any) -> Any:
     '''
     `tree` with `None` at each place of `graph` it lacks, a minted one aside, so a run has a
     slot for every value it writes back. Only a dict grows a key; a `None` the run must read,
     an input or a start, is still refused there by name.
     '''
-    nesting = graph.graph if isinstance(graph, ProvedGraph) else graph
-    places = tuple(p for p in nesting.graph.variables if mint_of(p) is None)
+    places = tuple(p for p in graph.variables if mint_of(p) is None)
     own(places)
     return complete_at(tree, [p.segments for p in places])

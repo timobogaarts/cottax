@@ -9,13 +9,14 @@ a structure (`at`), is the caller's.
 from collections.abc import Callable, Collection, Iterable, Mapping
 from typing import Any, NamedTuple
 
-from ...core import GraphWithValues, Label, NestingGraph, Place, ProvedGraph, answer_for_places, comparable
+from ...core import Label, Graph, Place, Rules, answer_for_places, comparable, dependencies, prove
 from ...core.driven import role_slots
 from ...core import is_driven
 from ...core.driven import PerUnknown
 from ...core.frozen import Frozen, OrderedMap
 from .interface import DataStructure
 from .refusals import NoneTakes, NoSlotFor, Unvalued, ValuedTwice
+from .valued import GraphWithValues
 
 
 class Inputs:
@@ -42,7 +43,7 @@ class Slot[V: Place, N: Label](NamedTuple):
                 f'({self.place!r})')
 
 
-def slots[N: Label, V: Place](graph: NestingGraph[N, V], at: Callable[[V], V]) -> tuple[Slot[V, N], ...]:
+def slots[N: Label, V: Place](graph: Graph[N, V], at: Callable[[V], V]) -> tuple[Slot[V, N], ...]:
     '''Every place a run of `graph` takes a value at, by what the caller calls it: each driver
     datum, also one it computes (a warm start), then each boundary input. A place two problems
     take is there twice.'''
@@ -50,10 +51,10 @@ def slots[N: Label, V: Place](graph: NestingGraph[N, V], at: Callable[[V], V]) -
                           for r in graph[n].driver.contract.takes)
     return (*(Slot(place, role, problem, unknown, None if unknown is None else at(unknown))
               for role in roles for place, problem, unknown in role_slots(graph, role)),
-            *(Slot(p, Inputs, at=p) for p in graph.graph.boundary_inputs))
+            *(Slot(p, Inputs, at=p) for p in dependencies(graph).boundary_inputs))
 
 
-def read_from[N: Label, V: Place](graph: NestingGraph[N, V], table: tuple[Slot[V, N], ...],
+def read_from[N: Label, V: Place](graph: Graph[N, V], table: tuple[Slot[V, N], ...],
                                   structures: Mapping[type, Any]) -> tuple[tuple[V, Any, str], ...]:
     '''
     Each value a structure of `structures` gives an open slot of `table`, where its key reads
@@ -62,7 +63,7 @@ def read_from[N: Label, V: Place](graph: NestingGraph[N, V], table: tuple[Slot[V
     `None` gives nothing. Refused: a per-problem role, a role no driver takes.
     '''
     structure = answer_for_places(DataStructure, graph)
-    open_ = set(graph.graph.boundary_inputs)
+    open_ = set(dependencies(graph).boundary_inputs)
     found = []
     for key, state in structures.items():
         if key is not Inputs and not issubclass(key, PerUnknown):
@@ -77,7 +78,7 @@ def read_from[N: Label, V: Place](graph: NestingGraph[N, V], table: tuple[Slot[V
     return tuple(found)
 
 
-def unasked[N: Label, V: Place](graph: NestingGraph[N, V], table: tuple[Slot[V, N], ...],
+def unasked[N: Label, V: Place](graph: Graph[N, V], table: tuple[Slot[V, N], ...],
                                 structures: Mapping[type, Any]) -> tuple[V, ...]:
     '''
     What `read_from` never asks of `structures`: each place one holds a value at that no open
@@ -85,7 +86,7 @@ def unasked[N: Label, V: Place](graph: NestingGraph[N, V], table: tuple[Slot[V, 
     does not, the same structure given under both, is asked.
     '''
     structure = answer_for_places(DataStructure, graph)
-    open_ = set(graph.graph.boundary_inputs)
+    open_ = set(dependencies(graph).boundary_inputs)
     held, asked = {}, set()
     for key, state in structures.items():
         ats = [s.at for s in table if s.key is key and s.place in open_]
@@ -123,19 +124,19 @@ class Assessed[N: Label, V: Place](Frozen):
     structures read from hold that no run takes (`unread`, `overwritten`), which is not refused.
     '''
 
-    graph      : NestingGraph[N, V] | ProvedGraph
-    proof      : type
+    graph      : Graph[N, V]
+    proof      : Rules
     table      : tuple[Slot[V, N], ...]
     candidates : tuple[tuple[V, Any, str], ...]
     structures : Mapping[type, Any]
 
     @property
-    def nesting(self) -> NestingGraph[N, V]:
-        return self.graph.graph if isinstance(self.graph, ProvedGraph) else self.graph
+    def nesting(self) -> Graph[N, V]:
+        return self.graph
 
     @property
     def _inputs(self) -> tuple[V, ...]:
-        return self.nesting.graph.boundary_inputs
+        return dependencies(self.nesting).boundary_inputs
 
     @property
     def _proposed(self) -> dict[V, tuple[str, ...]]:
@@ -161,7 +162,7 @@ class Assessed[N: Label, V: Place](Frozen):
         return OrderedMap((p, s[0]) for p, s in self._proposed.items())
 
     def _computed(self, place: V) -> bool:
-        return any(comparable(place, o) for o in self.nesting.graph.owned_variables)
+        return any(comparable(place, o) for o in self.nesting.owned_variables)
 
     @property
     def unread(self) -> tuple[V, ...]:
@@ -176,20 +177,21 @@ class Assessed[N: Label, V: Place](Frozen):
     def valued(self) -> GraphWithValues:
         '''The graph, proved, with its one value per input; refused as `Running.valued` says.'''
         found = valued_once(self.table, self._inputs, self.candidates)
-        return GraphWithValues(self.graph if isinstance(self.graph, self.proof) else self.proof(self.nesting), found)
+        prove(self.graph, self.proof)
+        return GraphWithValues(self.graph, found)
 
 
-def write_back[V: Place](graph: NestingGraph[Any, V], state: Any,
+def write_back[V: Place](graph: Graph[Any, V], state: Any,
                          values: Mapping[V, Any]) -> Any:
     '''`state` with each place `graph` computes written where the state holds it, its value
     from `values` (a run's); an input is never written.'''
     structure = answer_for_places(DataStructure, graph)
     return structure.write(state, OrderedMap(
-        (p, values[p]) for p in graph.graph.owned_variables
+        (p, values[p]) for p in graph.owned_variables
         if p in values and structure.holds(state, p)))
 
 
-def write_role[V: Place](graph: NestingGraph[Any, V], state: Any, values: Mapping[V, Any],
+def write_role[V: Place](graph: Graph[Any, V], state: Any, values: Mapping[V, Any],
                          role: type, at: Callable[[V], V]) -> Any:
     '''`state` with the value of each place a driver takes or reports a per-unknown `role` at,
     written at `at(unknown)` where the state holds it: a structure keyed as the unknowns are.

@@ -10,6 +10,8 @@ tolerance needs. What is pinned: the graph, its nodes and a condition map are st
 by value), the inputs and the context are traced, so one trace serves every value.
 '''
 
+from cottax.core import prove, steps
+
 import math
 
 import equinox as eqx
@@ -18,7 +20,7 @@ import jax.numpy as jnp
 import pytest
 from jax.tree_util import DictKey
 
-from cottax.core import FunctionalNode, GraphWithValues, Solve
+from cottax.core import FunctionalNode,  Solve
 from cottax.core.frozen import OrderedMap
 from cottax.core.driven import driven as with_driver
 from cottax.relational.contracts import RootFinding
@@ -30,6 +32,7 @@ from cottax.core.realisation import implemented
 from cottax.relational import Eq, Relation, RelationalCondition
 from cottax.relational.consumers.execution.jax_solvers import Newton
 from graphs import graph_of
+from cottax.consumers.execution import GraphWithValues
 
 
 @pytest.fixture(autouse=True)
@@ -71,11 +74,12 @@ def start(u: str) -> VarPath:
 
 
 # `u * u == z`, behind a short chain: a root find against zero.
-SQUARE = CallableGraph(graph_of(OrderedMap({
+SQUARE = graph_of(OrderedMap({
     N('mid'): call([V('u')], [V('w')], lambda u: u * 1.0),
     N('res'): call([V('w'), V('z')], [V('r')], lambda w, z: w * w - z),
     N('h')  : driven([Relation(V('r'), None, Eq)], [V('u')]),
-})))
+}))
+prove(SQUARE, CallableGraph)
 
 def exact_u(x):
     k = 1.0 + x
@@ -84,7 +88,7 @@ def exact_u(x):
 
 # `test_execution`'s model: `u * u = (1 + x) * (1 + u)` nested under the `x` making
 # `f = u + y` hit `t`, one outer iteration a whole inner solve.
-NESTED = CallableGraph(graph_of(OrderedMap({
+NESTED = graph_of(OrderedMap({
     N('Mesh')     : call([V('x')], [V('k')], lambda x: 1.0 + x),
     N('DiscA')    : call([V('u'), V('k'), V('y')], [V('r_u')], lambda u, k, y: u * u - k * y),
     N('close')    : driven([Relation(V('r_u'), None, Eq)], [V('u')]),
@@ -92,7 +96,8 @@ NESTED = CallableGraph(graph_of(OrderedMap({
     N('Objective'): call([V('u'), V('y')], [V('f')], lambda u, y: u + y),
     N('Aim')      : call([V('f'), V('t')], [V('g')], lambda f, t: f - t),
     N('target')   : driven([Relation(V('g'), None, Eq)], [V('x')]),
-}), OrderedMap({N('close'): N('target')})))
+}), OrderedMap({N('close'): N('target')}))
+prove(NESTED, CallableGraph)
 
 
 def jitted(graph, wanted):
@@ -141,7 +146,7 @@ def test_a_nested_solve_differentiates_through_the_inner_one_and_traces_once():
 
 def condition_map(graph, problem):
     '''The map `run` hands the driver of `problem`, outermost in `graph`.'''
-    (step,) = [s for s in graph.steps if isinstance(s, Solve) and s.problem == problem]
+    (step,) = [s for s in steps(graph) if isinstance(s, Solve) and s.problem == problem]
     return InteriorConditionMap.posing(graph[problem], step.interior)
 
 

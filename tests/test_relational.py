@@ -7,6 +7,8 @@ types said -- and two things they could not: a condition node whose unknowns are
 yet, and one that mixes an equality with an inequality.
 """
 
+from cottax.core import prove, dependencies
+
 import pytest
 from jax.tree_util import DictKey
 
@@ -37,7 +39,7 @@ from cottax.consumers.visualization.sequencing import entries
 from cottax.consumers.visualization.kinds import problem_type_of
 from cottax.relational.consumers.visualization import kind_of
 from graphs import graph_of
-from cottax.core.maths.nesting import NestingGraph
+from cottax.core.maths.graph import Graph
 
 
 def v(*names: str) -> VarPath:
@@ -77,7 +79,7 @@ def model() -> dict:
     )}
 
 
-def graph_with(statement: RelationalCondition) -> NestingGraph:
+def graph_with(statement: RelationalCondition) -> Graph:
     return graph_of(OrderedMap([*model().items(), (n('c'), statement)]))
 
 
@@ -400,7 +402,7 @@ def test_a_proof_refuses_a_statement_that_determines_nothing():
     g = graph_with(stated(Relation(v('r'), None, Eq)))
     assert enclosers(g.definitions) == ()
     with pytest.raises(ValueError, match='holds .* against nothing'):
-        ExecutableGraph(g)
+        prove(g, ExecutableGraph)
 
 
 def test_drawing_blocking_and_pruning_are_all_fine():
@@ -408,12 +410,12 @@ def test_drawing_blocking_and_pruning_are_all_fine():
     g = graph_with(stated(Relation(v('r'), None, Eq)))
     assert tuple(e.nodes for e in entries(g)) == ((n('m'),), (n('c'),))
     assert xdsm_struct(g)['problem_types'] == {'c': 'stated'}
-    assert g.graph.ancestors((g.graph.owners[v('cost')],)) == (n('m'),)
+    assert dependencies(g).ancestors((dependencies(g).owners[v('cost')],)) == (n('m'),)
 
 
 def test_deleting_it_is_how_a_graph_asserting_nothing_runs():
     p = Plan(graph_with(stated(Relation(v('r'), None, Eq)))) + Delete((n('c'),))
-    CallableGraph(p.graph)                                # builds
+    prove(p.graph, CallableGraph)                                # builds
 
 
 def test_a_problem_with_no_conditions_is_off_its_cycle():
@@ -428,4 +430,4 @@ def test_a_problem_with_no_conditions_is_off_its_cycle():
     p = p + assign(n('c'), RootFinding(steps=False))
     assert p.graph[n('c')].reads_inside == ()
     with pytest.raises(ValueError, match='in no cycle'):
-        ExecutableGraph(p.graph)
+        prove(p.graph, ExecutableGraph)

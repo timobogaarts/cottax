@@ -161,6 +161,168 @@ the `ConditionCarries` guard.
 Size: `Driven(` 6 in src / 30 in tests; `DrivenNode` 17 in src; `.contract` 38 / 23;
 `is_driven` + `condition_of` 19 / 5. processax: none found by grep.
 
+## 5b. Layering before the tower (branch `tower`, uncommitted, 2026-11-17)
+
+PR #9 (`driver-field`) is merged (`450739c`). Before the tower, core was re-layered so each
+layer can be reviewed on its own (the owner: "maths will be graph + functions that can be
+defined *just on the graph*, with nothing else"). Core, bottom up:
+
+- `frozen`, then `maths`: places, mints, definition, kinds (`FunctionalNode`,
+  `AbstractConditionalNode`), graph, nesting, dispatch, valued, executable, steps.
+- `plan/` (was `maths/plan/`): the op algebra and the primitive and place ops.
+- `conditional/` (was `maths/conditional.py`): `node.py` (`Condition`, `Attachment`,
+  `ConditionalNode`, `kind_of`, `is_driven`), `ops.py` (`SetOwnsInside` and its finals).
+- `mints` (was `maths/mints.py`): `Mint`, `Minting` and the purposes, core's one interface
+  over the places, beside the maths since nothing in maths, plan or conditional asks it.
+- `driven`, then `realisation`, as before.
+- The front door `cottax.core` gives maths, mints, plan and conditional; `refusal_kinds` holds
+  their kinds. `test_layering` names them `MATHS` < `MINTS`, `PLAN` < `DOOR`.
+
+Out of core, to `consumers/architectures/`:
+
+- **`Combine`** (`combine.py`), folding by `ModelReading.join(condition, other)`. `join = None`
+  on the interface; relational and ODE answer it with their condition's own `join`. No `+`
+  on a condition or node any more.
+- **The driver join is gone**: `Combine` refuses a driven node (`FoldsDriven`); undrive,
+  fold, drive the fold (test_ode_trajectory test 9 does this). Removed: `Condition.join`
+  / `__add__`, `ConditionalNode.__add__`, `Attachment.join_violations` / `joined`,
+  `Driver.join_violations` / `joined`, `DrivenOnOneSide`, `DriversDiffer`, `RoleAtTwoPlaces`.
+- **The ODE join was kept**, against the earlier plan to drop it: studies fold ODEs by hand
+  (test_ode, test_ode_trajectory test 9). `OdeModel.combines_as` stays `None`, so no
+  architecture folds them.
+- **`cut_rules.py`**, with its finals in `refusals.py`.
+- The surface `combine` verb (no callers) is removed. `Combine` and the cut rules are in
+  `cottax.assemblies.jax` as before.
+
+processax: `study.py:19` imports `GaussSeidelMinimal` from `cottax.core`; that now lives in
+`cottax.consumers.architectures.cut_rules` (or `cottax.assemblies.jax`). Owner's to change.
+
+## 5c. Tower piece 1: rules where they belong (uncommitted, on `tower` after `5b45a75`)
+
+The layering is committed as `5b45a75`. Piece 1 is built on top, uncommitted:
+
+- Maths asks nothing of an attribute: `Attribute.fits`, `check_attributes_fit`, `misfits`
+  and `AttributeDoesNotFit` are gone. `check_settable` keeps only `AttributeAlreadySet`.
+- `Attachment` is `reads`, `owns`, `relabel`; `ConditionalNode` has no checks of its own.
+- Driven layer: `check_driver_fits(name, node)` in `driven/proof.py`, beside `check_driven`;
+  `DrivenGraph.checks_node` asks both. `Assign` asks the fit through `driving_violations`.
+- Realised layer: `check_implementation_fits(name, node)` and the final
+  `ImplementationWithoutDriver` in `realisation/implemented.py`; `RealisedGraph.checks_node`
+  asks it after `check_implemented`, and `Implement.checks_graph` asks it of the result.
+- Decision 1 as built: a misfit node can be built by hand (`driven(...)`, `implemented(...)`)
+  and exists until its layer is proved.
+- **`Undrive` no longer refuses an implemented node**: the rule is the realised layer's and
+  `driven` is below it. The node it leaves is refused by `RealisedGraph`. Owner to confirm.
+- **The JSON reader asks both node rules of each node it reads**, so a file is still refused
+  as it is read.
+- `in_graph` is dropped from the tower: no kind needs it yet (owner agreed 2026-11-17).
+
+## 5d. Tower piece 2: rule groups replace the subclass chain (uncommitted)
+
+Built on piece 1, storage untouched (still eager; `WellFormed` is piece 3).
+
+- `core/maths/rules.py`: `Rules` (whole graph) and `NodeRules` (each node), fields `name`,
+  `rules`, `implies`; `unproved`, `prove` (returns `None`: nothing new is made, so it is a
+  statement, owner's choice 2026-11-17), `is_proved`, `proved(group, of=0, at='')`, `proves(fn_or_class)`, `carried`.
+  The memo is `_proved` in the graph's `__dict__`, outside equality, hash and pickle.
+  A node group may imply node groups only (`NodeRulesImplyWhole`).
+- Groups: `ExecutableGraph` (the seven rules); per node `DrivenNodes`, `RealisedNodes`,
+  `CallableNodes`, `JitKeyNodes` (implies `RealisedNodes`); composites `DrivenGraph`,
+  `RealisedGraph`, `CallableGraph`, `JitGraph` keep the old names and only imply.
+- `steps(graph)` replaces `SteppedExecutableGraph.steps`, remembered on the graph; each
+  interior is `carried` (node groups) and proved executable.
+- Gone: `ProvedGraph`, `SteppedExecutableGraph`, `checks_node`, `ProvedBelow` (a run proves
+  what it needs). `outline(graph)` replaces the proof's `__repr__`. Drawings take
+  `blocks=True` only.
+- What is proved is declared, not buried: `run` is `@checked(proved(CallableGraph,
+  at='graph'))`, `Traced.checks` and `steps` likewise; `proves(run) == (CallableGraph,)`.
+- `unchecked(...)` does not reach a group's rules (a skipped rule would be remembered as
+  proved); a test asks a smaller group instead.
+- `in_graph` dropped; `carried(also=)` exists but nothing passes `also` yet.
+- Open: `core/maths/dispatch.py` (`answer_for_places` / `answer_for_labels`) is a registry
+  lookup, not maths. Fold into `frozen/answer` as one function over a sequence (10 src call
+  sites, ~14 tests, 2 processax), or keep the two helpers beside their users. Owner to choose.
+
+processax, owner's to change: `JitGraph(graph)` -> `prove(graph, JitGraph)` then pass `graph` (study.py:170,
+benchmark capture.py:123, structure.py:33, preprocess wiring/graph.py:56, vmcon tests 83/138);
+`stepped.steps` -> `steps(graph)` (benchmark structure.py:22/41); `g.graph.graph.components`
+-> `g.graph.components` (preprocess test_milestone1.py:90). `cottax.assemblies.jax` exports
+`prove`, `steps`, `unproved`.
+
+## 5e. Tower piece 3, and the cleanups before it (uncommitted, 2026-11-17)
+
+Owner asked: memo cleanup, `dispatch` and `valued` out of maths, then piece 3. All green
+(default 1181 + slow 32).
+
+- **One memo mechanism.** `frozen.remembered`: a function of a `Frozen` value and hashable
+  arguments, remembered in the value's one memo slot (outside eq, hash, pickle), with
+  `known`, `answers` and `remember`. It replaces `_proved`, `_steps` and `NestingGraph._levels`.
+  `rules.broken(graph, group)` is a group's own violations, remembered. `closure(group)`,
+  `unproved`, `is_proved` (known, asks nothing) and `carried` are read off it.
+  `prove` returns `None` (owner's choice).
+- **Out of maths.** `dispatch.py` is now `core/answers.py`, a layer beside `mints` that is
+  in `DOOR` and `DEFINING`; `test_layering` has `ANSWERS`. `valued.py` is now
+  `consumers/execution/valued.py`, and its three refusals are in `execution/refusals.py`.
+  `GraphWithValues` comes from `cottax.consumers.execution`.
+- **Piece 3, as §6.3, with these choices:**
+  - One stored `NestingGraph(definitions, within=OrderedMap())` in `maths/graph.py`. It
+    holds the three nesting rules (eager) and the bindings' reads: `nodes`, `variables`,
+    `owned_variables`, `read_variables`, `readers`, `enclosers`, `outermost_enclosers`,
+    `enclosing`, `subgraph`. `AbstractGraph` is gone.
+  - `maths/dependencies.py` has `WellFormed` (the two binding rules, lazy) and the
+    `Dependencies` view, with `owners`, `components`, `cycles`, `topological_order`,
+    `ancestors`, `descendants`, `reach`, `boundary_*`, `feedback_variables` and
+    `closing_readers`. `dependencies(graph)` is remembered, and building the view is the proof.
+  - `maths/nesting.py` has the `Nesting` view (`cycle_of`, `interior`, `contract`) and
+    `nesting(graph)`. Levels and interiors carry `WellFormed` through
+    `carried(also=(WellFormed,))`, and so does `body_of`. `contract` proves `WellFormed` of
+    its result.
+  - `ExecutableGraph` implies `WellFormed`.
+  - `GraphOp.apply(graph, keeps=WellFormed)` proves `keeps` of the input and of the result.
+    Composed and staged ops apply their parts with `keeps=None`. Not on `Plan`: no
+    repository plan exists yet, so it would be an unused field.
+  - The doors prove `WellFormed` of what they build: `read_json` and `declare`.
+  - Not done: `run(graph, values)` (step 4), and the `in_graph` slot (nothing needs it).
+- processax, owner's to change:
+  - `GraphWithValues` is no longer in `cottax.core` but in `cottax.consumers.execution`:
+    benchmark `capture.py:15`, `study.py:19`, preprocess `wiring/graph.py:13`,
+    vmcon `tests/test_vmcon_scaling.py:15`.
+  - `graph.graph.owners` / `.boundary_inputs` become `dependencies(graph).…`, where `graph`
+    is the `NestingGraph`: `study.py:111`, process `graphs/kinds.py:109,118,137`,
+    preprocess `tests/test_coupled_reads.py:38,56,68`.
+  - `g.graph.graph.components` (`test_milestone1.py:90`) becomes `dependencies(g.graph).components`.
+  - `.graph.owned_variables` loses one `.graph`.
+- **After 5e (owner asked):**
+  - `Place` is a protocol with two attributes, `segments` and `prefixes`, and nothing else.
+    The maths only reads a place and never builds one. `places.prefixes()` is gone: the
+    rules read `p.prefixes`. The test toys take theirs from `tests/toy_places.Segmented`.
+  - `Attribute` is now `type Attribute = type`. The key of a node's `attributes` is a plain
+    class, and `text` is gone. A node's repr names the kinds it carries (` +Implementation`).
+    `Implementation` and the test `Note`s are plain classes.
+  - `attributes_text`, `with_attributes` and `without_attribute` are gone from maths. Node
+    reprs no longer show attributes. The five edit sites (`SetAttribute`, `RemoveAttribute`,
+    `implemented`, `Redefine`, the JSON writer) use `dataclasses.replace(node, attributes=…)`.
+    Maths keeps only the opaque `attributes` field and the `Attribute` alias.
+  - `NestingGraph` is renamed `Graph`. processax: `process/graphs/kinds.py`.
+  - **Memo settled (owner, after two agent reviews):**
+    - `frozen.remembered` is a 10-line `cached_property` for a function written outside the
+      class: no arguments, no `known`/`answers`/`remember`.
+    - Proofs are a set per graph (`rules.proofs`), written only by `unproved`.
+    - `carried`, `also=` and `NodeRulesImplyWhole` are gone. Nothing is copied to a
+      subgraph; an interior is proved when asked. This also fixes a history-dependent memo:
+      a node group proved before `steps` used to reach interiors, one proved after did not.
+    - `Nesting._levels` is a dict on the view.
+    - Inventory: `test_layering.REMEMBERED` pins every `@remembered` in src; `Graph`'s module
+      docstring lists them. The pin is a review aid, not a gate on outside users.
+    - Left as is: `Plan.__add__` primes `trunk` / `graph` (its own `cached_property`s;
+      without it each `+` rebuilds the chain).
+    - Offered, not done: `Solve` holding its interior's steps (one tree, no memo lookup in
+      host loops); `checked` precomputing its signature (~8 µs/call).
+  - `Graph` checks nothing at construction. The three nesting rules joined `WellFormed`
+    (now five rules), so ops (`apply` keeps it) and the doors still refuse at once.
+  - `readers_of` inlined into `Graph.readers`. `owners_of` stays: the binding check must not
+    read the view it guards.
+
 ## 6. Step 2 mapped: the tower becomes rule groups
 
 Design agreed on 2026-11-13, **nothing built**. Copied here from the older artifact and

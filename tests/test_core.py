@@ -7,6 +7,9 @@ to show the rules never learn what a real name is made of, and then holds the re
 to the laws the vocabulary states.
 '''
 
+from toy_places import Segmented
+from cottax.core import NodeRules, prove, unproved, dependencies, nesting
+
 import dataclasses
 import itertools
 import random
@@ -16,16 +19,16 @@ import pytest
 from jax.tree_util import GetAttrKey, SequenceKey
 
 from cottax.core.maths.places import comparable, is_prefix, overlaps
-from cottax.core.maths.graph import (
+from cottax.core.maths.dependencies import (
     OwnAroundOwner, OwnInsideOwner, OwnedTwice, OwnerInsideRead, ReadInsideOwner,
 )
 from cottax.core import (
-    AbstractGraph, NestingGraph, Condition, ConditionalNode, Cut, FunctionalNode,
+    Graph, Condition, ConditionalNode, Cut, FunctionalNode,
     Rename, Replace, SetOwnsInside, refusals,
-    Attribute, RemoveAttribute, SetAttribute, with_attributes,
+    RemoveAttribute, SetAttribute,
     Violation, NodeDefinition, Insert, Delete,
-    violations, comparables_in, first, prefixes,
-    answer_for_labels, answer_for_places, GraphWithValues,
+    violations, comparables_in, first,
+    answer_for_labels, answer_for_places, WellFormed, unproved,
 )
 from cottax.core.plan.primitive import (
     Nest, Unnest, check_delete_keeps_nesting_whole, check_nesting, check_unnesting,
@@ -33,17 +36,18 @@ from cottax.core.plan.primitive import (
 from cottax.core.refusal_kinds import DoesNotRead, ReadOnBothSides
 from cottax.core.maths.executable import ExecutableGraph
 from cottax.core.frozen import Answer, OrderedMap, answers
-from cottax.core.maths.nesting import (BoxOwnsNothing, NotAnEncloser, Unbound, check_blocks_own_something,
-                                      check_blocks_partition)
+from cottax.core.maths.graph import NotAnEncloser, Unbound
+from cottax.core.maths.nesting import BoxOwnsNothing, check_blocks_own_something, check_blocks_partition
 from cottax.pytree.path import VarPath
 from cottax.core import Attachment, Mint, Minting, relabelled
+from cottax.consumers.execution import GraphWithValues
 import purposes
 
 
 # ---------------------------------------------------------------- a toy place
 
 @dataclass(frozen=True)
-class Word:
+class Word(Segmented):
     '''
     A place as a word of plain strings. **The whole of `Place`**: one member, and a
     constructor taking a sequence of segments. Nothing here is a path, a pytree key or a
@@ -124,17 +128,14 @@ class Ports(Attachment):
     owns  : tuple = ()
     def relabel(self, renaming):
         return Ports(relabelled(self.reads, renaming), relabelled(self.owns, renaming))
-    def violations_on(self, node): return iter(())
 
 
-class Note(Attribute):
+class Note:
     '''An attribute with no opinion on the node carrying it: a title, a tag.'''
 
 
-class Shaped(Attribute):
-    '''An attribute written for a node's shape: it fits a node reading one place.'''
-    @classmethod
-    def fits(cls, value, node): return len(node.reads) == 1
+class Shaped:
+    '''An attribute written for a node's shape -- which the maths never asks it about.'''
 
 
 class SetNote(SetAttribute):        kind = Note
@@ -162,14 +163,14 @@ def driven(reads, owns, data=(), reports=()):
 
 def G(definitions, within=None):
     '''A nesting graph over two `OrderedMap`s: nothing on it is abstract.'''
-    return NestingGraph(AbstractGraph(OrderedMap(definitions)), OrderedMap(within or {}))
+    return Graph(OrderedMap(definitions), OrderedMap(within or {}))
 
 
 def proof(graph, op, define):
     '''Why `op` of `define` does not apply to `graph`, and the rules of the bindings that
     would result, as data.'''
     return list(refusals(op(OrderedMap(define)), graph)) + \
-           list(violations(AbstractGraph, OrderedMap(graph.definitions | define)))
+           list(unproved(Graph(OrderedMap(graph.definitions | define)), WellFormed))
 
 
 def on_insert(new, standing=None):
@@ -228,8 +229,8 @@ def test_a_lone_node_may_own_the_whole_structure():
 def test_components_ready_at_once_run_in_binding_order(bound, run):
     """Dependency order first, binding order among what is ready: a graph bound in
     dependency order runs as bound."""
-    g = AbstractGraph(OrderedMap({Word(n): declared(*io) for n, io in bound.items()}))
-    assert [c[0] for c in g.components] == [Word(n) for n in run]
+    g = Graph(OrderedMap({Word(n): declared(*io) for n, io in bound.items()}))
+    assert [c[0] for c in dependencies(g).components] == [Word(n) for n in run]
 
 
 def test_a_rule_yields_data_and_never_a_sentence():
@@ -275,19 +276,19 @@ def test_an_ownership_violation_names_each_owner():
     found = proof(G({a: toy([], ['y'])}), Insert, {c: toy([], ['y'])})
     assert found == [OwnedTwice(place=Word('y'), node=c, other=a)]
     three = {a: toy([], ['y']), b: toy([], ['y']), c: toy([], ['y'])}
-    assert list(violations(AbstractGraph, OrderedMap(three))) == [
+    assert list(unproved(Graph(OrderedMap(three)), WellFormed)) == [
         OwnedTwice(place=Word('y'), node=b, other=a), OwnedTwice(place=Word('y'), node=c, other=a)]
     around = {a: toy([], ['s.u']), b: toy([], ['s.v']), c: toy([], ['s'])}
-    assert list(violations(AbstractGraph, OrderedMap(around))) == [
+    assert list(unproved(Graph(OrderedMap(around)), WellFormed)) == [
         OwnAroundOwner(Word('s'), Word('s.u'), c, a), OwnAroundOwner(Word('s'), Word('s.v'), c, b)]
 
 
 def test_a_nesting_with_a_bad_end_is_listed_not_raised():
     """A pair with a bad end is the one rule's that names it."""
     a, t = Word('a'), Word('t')
-    graph = AbstractGraph(OrderedMap({a: states([], ['x']), t: toy([], ['y'])}))
-    assert [type(v) for v in violations(NestingGraph, graph, OrderedMap({Word('zz'): a}))] == [Unbound]
-    assert [type(v) for v in violations(NestingGraph, graph, OrderedMap({t: a}))] == [NotAnEncloser]
+    graph = Graph(OrderedMap({a: states([], ['x']), t: toy([], ['y'])}))
+    assert [type(v) for v in unproved(Graph(graph.definitions, OrderedMap({Word('zz'): a})), WellFormed)] == [Unbound]
+    assert [type(v) for v in unproved(Graph(graph.definitions, OrderedMap({t: a})), WellFormed)] == [NotAnEncloser]
 
 
 def test_a_contraction_refuses_a_block_owning_nothing():
@@ -295,7 +296,7 @@ def test_a_contraction_refuses_a_block_owning_nothing():
     g = G({a: states(['x'], []), b: states(['y'], [])})
     assert list(check_blocks_own_something(g, ((a, b),))) == [BoxOwnsNothing((a, b))]
     with pytest.raises(ValueError, match='owns nothing'):
-        g.contract(((a, b),))
+        nesting(g).contract(((a, b),))
 
 
 class Said(Answer):
@@ -347,7 +348,7 @@ def test_what_a_node_carries_is_carried_through_an_edit_by_the_op_and_not_the_ki
     """`Forgets.relabel` builds a fresh node and says nothing of attributes: `Redefine` puts
     back what the node carried. `Replace` hands a definition over, attributes and all."""
     a = Word('a')
-    g = G({a: with_attributes(Forgets(places(['p']), places(['q'])), OrderedMap({Note: 'n'}))})
+    g = G({a: dataclasses.replace(Forgets(places(['p']), places(['q'])), attributes=OrderedMap({Note: 'n'}))})
     assert g[a].relabel({Word('p'): Word('r')}).attributes == OrderedMap()      # the kind forgets
     renamed = Rename(a, ((Word('p'), Word('r')),)).apply(g)
     assert renamed[a].reads == places(['r']) and renamed[a].attributes == g[a].attributes
@@ -355,16 +356,14 @@ def test_what_a_node_carries_is_carried_through_an_edit_by_the_op_and_not_the_ki
     assert replaced[a].reads == places(['p', 's']) and replaced[a].attributes == OrderedMap()
 
 
-def test_an_attribute_says_which_nodes_it_fits():
-    """Core cannot read an attribute, so it asks its key, of the node: one that does not
-    fit is never built, by hand or by an op -- which says so as data, before the graph is
-    touched -- and a key with no opinion fits every node."""
+def test_the_maths_asks_an_attribute_nothing():
+    """Core cannot read an attribute, and asks nothing of one: any goes on any node, by hand
+    or by an op, and is carried through a rename. Whether one fits its node is the rule of
+    the layer defining it (an implementation's: `test_realisation`)."""
     a, b = Word('a'), Word('b')
     g = G({a: toy(['p'], ['q']), b: toy(['p', 's'], ['t'])})
-    with pytest.raises(TypeError, match='Shaped does not fit'):
-        with_attributes(g[b], OrderedMap({Shaped: 1}))
-    assert [(type(v).__name__, v.attribute) for v in refusals(SetShaped(OrderedMap({b: 1})), g)] \
-        == [('AttributeDoesNotFit', 'Shaped')]
+    assert dataclasses.replace(g[b], attributes=OrderedMap({Shaped: 1})).attributes == OrderedMap({Shaped: 1})
+    assert list(refusals(SetShaped(OrderedMap({b: 1})), g)) == []
     shaped = SetShaped(OrderedMap({a: 1})).apply(g)
     assert Rename(a, ((Word('p'), Word('r')),)).apply(shaped)[a].attributes == OrderedMap({Shaped: 1})
     assert SetNote(OrderedMap({b: 'n'})).apply(g)[b].attributes == OrderedMap({Note: 'n'})
@@ -408,7 +407,6 @@ def test_every_case_a_rule_can_name_has_wording():
     seen(violations(Cut, Word('x'), (), lambda w: w))                       # a copy nothing reads
     seen(violations(SetOwnsInside, a, places(['u', 'u'])))                  # a place owned inside twice
     seen(violations(SetNote, OrderedMap()))                                            # names no node
-    seen(violations(Toy, places(['p', 'r']), places(['q']), attributes=OrderedMap({Shaped: 1})))   # does not fit
 
     # `checks_graph`: what an op needs of the graph, asked before it computes anything --
     # and asked for, which is what `refusals` is, so nothing here is built by hand.
@@ -422,40 +420,40 @@ def test_every_case_a_rule_can_name_has_wording():
     seen(refusals(Cut(Word('free'), (b,), hat), g))                     # nothing produces it
     seen(refusals(Cut(Word('x'), (a,), onto), g))                       # the minted name is taken
     seen(refusals(Cut(Word('x'), (b,), hat), g))                        # `b` produces it, reads nothing
-    noted = G({a: with_attributes(states(['y'], ['u']), OrderedMap({Note: 'n'})), b: states(['z'], ['v']),
-               t: with_attributes(toy(['p'], ['q']), OrderedMap({Shaped: 1}))})
+    noted = G({a: dataclasses.replace(states(['y'], ['u']), attributes=OrderedMap({Note: 'n'})), b: states(['z'], ['v']),
+               t: dataclasses.replace(toy(['p'], ['q']), attributes=OrderedMap({Shaped: 1}))})
     seen(refusals(SetNote(OrderedMap({a: 'm'})), noted))                # carries one under that key already
     seen(refusals(DropNote((b,)), noted))                               # carries none to take off
 
     cyc = {a: states(['y'], ['x']), b: states(['x'], ['y']), t: toy(['x'], ['w'])}
-    with pytest.raises(KeyError, match='not a node of this graph'):     # `check_nesting_ends_bound`, at construction
-        G({a: states([], ['x'])}, {a: b})
+    with pytest.raises(KeyError, match='not a node of this graph'):     # `check_nesting_ends_bound`
+        prove(G({a: states([], ['x'])}, {a: b}), WellFormed)
     seen(check_delete_keeps_nesting_whole(Delete((a,)), G(cyc, {a: b})))  # one end lost
-    seen(violations(NestingGraph, G({a: states([], ['x'])}).graph, OrderedMap({a: b})))   # unbound
-    seen(violations(NestingGraph, G(cyc).graph, OrderedMap({a: t})))            # t not a problem
+    seen(unproved(Graph(G({a: states([], ['x'])}).definitions, OrderedMap({a: b})), WellFormed))   # unbound
+    seen(unproved(Graph(G(cyc).definitions, OrderedMap({a: t})), WellFormed))            # t not a problem
     seen(check_nesting(Nest(a, b), G(cyc, {a: b})))                             # already
-    seen(violations(NestingGraph, G(cyc).graph, OrderedMap({a: a})))            # inside itself
+    seen(unproved(Graph(G(cyc).definitions, OrderedMap({a: a})), WellFormed))            # inside itself
     seen(check_nesting(Nest(a, b), G(cyc, {b: a})))                             # loop
-    seen(violations(ExecutableGraph, G({a: states([], ['x']), b: states([], ['y'])}, {a: b})))   # unreachable
+    seen(unproved(G({a: states([], ['x']), b: states([], ['y'])}, {a: b}), ExecutableGraph))   # unreachable
     seen(check_blocks_own_something(G({a: states(['x'], []), b: states(['y'], [])}), ((a, b),)))  # a box owning nothing
     seen(check_blocks_partition(G({a: toy([], ['x']), b: toy([], ['y'])}), ((a,), (a, b))))  # a short block, a node twice
     S = G
-    seen(violations(ExecutableGraph, S({a: body(['u'], ['x']), b: body(['x'], ['u'])})))     # coupled, no problem
-    seen(violations(ExecutableGraph, S({a: body(['u'], ['x']), b: body(['x'], ['u']),
-                                        t: driven(['x'], ['w'])})))                          # a-b still cyclic
-    seen(violations(ExecutableGraph, S({t: driven(['x'], ['w']), a: body([], ['x'])})))   # every condition constant: off the cycle
-    seen(violations(ExecutableGraph, S({t: driven([], ['w'])})))                   # no condition at all: off the cycle
-    seen(violations(ExecutableGraph, S({a: states([], ['x']), b: states([], ['y'])})))
-    seen(violations(ExecutableGraph, S({a: body([], ['x']), b: states(['x'], [])})))         # a bare condition
-    seen(violations(ExecutableGraph, S({t: driven(['k', 'y'], ['u']), a: body(['u'], ['y'])})))   # one constant
-    seen(violations(ExecutableGraph, S({t: driven(['x'], ['u'], ['g']), a: body(['u'], ['x', 'g'])})))   # g, read unheld, produced on t's cycle
-    seen(violations(ExecutableGraph, S({t: driven(['x'], ['u'], reports=['r']), a: body(['u', 'r'], ['x'])})))  # r, owned unanswered, read on t's cycle
-    seen(violations(ExecutableGraph, S({a: body(['u'], ['x']), b: body(['x'], ['u'])})))        # a cycle nobody answers
-    seen(violations(ExecutableGraph, S(cyc)))                                                   # unresolved: two outermost
-    seen(violations(ExecutableGraph, S({a: body(['u', 'w'], ['x']), b: body(['x'], ['u']),
-                                 t: driven(['x'], ['w'])})))                              # a-b still cyclic inside t
+    seen(unproved(S({a: body(['u'], ['x']), b: body(['x'], ['u'])}), ExecutableGraph))     # coupled, no problem
+    seen(unproved(S({a: body(['u'], ['x']), b: body(['x'], ['u']),
+                                        t: driven(['x'], ['w'])}), ExecutableGraph))                          # a-b still cyclic
+    seen(unproved(S({t: driven(['x'], ['w']), a: body([], ['x'])}), ExecutableGraph))   # every condition constant: off the cycle
+    seen(unproved(S({t: driven([], ['w'])}), ExecutableGraph))                   # no condition at all: off the cycle
+    seen(unproved(S({a: states([], ['x']), b: states([], ['y'])}), ExecutableGraph))
+    seen(unproved(S({a: body([], ['x']), b: states(['x'], [])}), ExecutableGraph))         # a bare condition
+    seen(unproved(S({t: driven(['k', 'y'], ['u']), a: body(['u'], ['y'])}), ExecutableGraph))   # one constant
+    seen(unproved(S({t: driven(['x'], ['u'], ['g']), a: body(['u'], ['x', 'g'])}), ExecutableGraph))   # g, read unheld, produced on t's cycle
+    seen(unproved(S({t: driven(['x'], ['u'], reports=['r']), a: body(['u', 'r'], ['x'])}), ExecutableGraph))  # r, owned unanswered, read on t's cycle
+    seen(unproved(S({a: body(['u'], ['x']), b: body(['x'], ['u'])}), ExecutableGraph))        # a cycle nobody answers
+    seen(unproved(S(cyc), ExecutableGraph))                                                   # unresolved: two outermost
+    seen(unproved(S({a: body(['u', 'w'], ['x']), b: body(['x'], ['u']),
+                                 t: driven(['x'], ['w'])}), ExecutableGraph))                              # a-b still cyclic inside t
     seen(violations(answer_for_labels, Said, G({})))                                          # no node to ask
-    seen(violations(GraphWithValues, ExecutableGraph(G({a: body(['k'], ['x'])})),
+    seen(violations(GraphWithValues, G({a: body(['k'], ['x'])}),
                     OrderedMap({Word('x'): 1.0, Word('z'): 2.0})))      # k missing, x owned, z none
 
     def finals(cls):
@@ -508,7 +506,7 @@ def test_is_prefix_agrees_with_prefixes():
     # derived from the same single member, and they must agree.
     names = _random_paths(120)
     for a, b in itertools.islice(itertools.product(names, names), 8000):
-        assert is_prefix(a, b) == (a == b or a in list(prefixes(b)))
+        assert is_prefix(a, b) == (a == b or a in b.prefixes)
 
 
 def test_the_lookup_agrees_with_the_definition():
@@ -546,9 +544,9 @@ def test_overlaps_reports_the_same_pairs_either_way_round():
 def test_components_are_computed_from_ports_alone():
     '''`components` is a fact of the abstract graph, over its projection. So the
     projection is what to pin -- an edge is `owns` meeting `reads`, on toys.'''
-    from cottax.core.maths.graph import nx_dependencies
+    from cottax.core.maths.dependencies import nx_dependencies
     a, b, c = Word('a'), Word('b'), Word('c')
     defs = {a: toy(['y'], ['x']), b: toy(['x'], ['y']), c: toy(['y'], ['z'])}
     assert set(nx_dependencies(defs).edges) == {(a, b), (b, a), (b, c)}
-    assert G(defs).graph.components == ((a, b), (c,))
-    assert G({b: defs[b], a: defs[a]}).graph.components == ((b, a),)      # members in the order given
+    assert dependencies(G(defs)).components == ((a, b), (c,))
+    assert dependencies(G({b: defs[b], a: defs[a]})).components == ((b, a),)      # members in the order given

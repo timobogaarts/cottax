@@ -21,7 +21,7 @@ from abc import abstractmethod
 from collections.abc import Iterable
 from typing import Any
 
-from ...core import AbstractConditionalNode, Condition, GraphOp, Label, NestingGraph, Place, Violation
+from ...core import AbstractConditionalNode, Condition, GraphOp, Label, Graph, Place, Violation
 from .cut_rules import ToCut
 from ...core.frozen import Answer, Choice, Frozen
 
@@ -41,13 +41,13 @@ class ModelReading(Answer):
     condition by its own.'''
 
     @abstractmethod
-    def not_implicit[N: Label, V: Place](self, graph: NestingGraph[N, V], problem: N
+    def not_implicit[N: Label, V: Place](self, graph: Graph[N, V], problem: N
                                          ) -> Iterable[Violation]:
         '''Why the problem bound at `problem` is no implicit model in its language; nothing
         if it is.'''
 
     @abstractmethod
-    def body[N: Label, V: Place](self, graph: NestingGraph[N, V], problem: N) -> tuple[N, ...]:
+    def body[N: Label, V: Place](self, graph: Graph[N, V], problem: N) -> tuple[N, ...]:
         '''The function nodes that are its own, in binding order: what an architecture boxes
         with it, and never cuts inside.'''
 

@@ -470,3 +470,25 @@ def test_a_choice_mark_refuses_an_abstract_level():
     with pytest.raises(TypeError) as found:
         choice(Way)(Sideways)
     assert str(found.value) == ChoiceAbstract(f'{__name__}.Sideways', 'Way', ('step',)).message
+
+
+def test_a_remembered_answer_is_of_the_value_and_outside_it():
+    '''Asked once per value, as a `cached_property` is; equality, the hash and a copy leave
+    it out, so a copy comes back cold.'''
+    import copy
+    from cottax.core.frozen import remembered
+    asked = []
+
+    class Pair(Frozen):
+        a : int
+
+    @remembered
+    def doubled(p):
+        asked.append(p.a)
+        return 2 * p.a
+
+    p = Pair(2)
+    assert doubled(p) == doubled(p) == 4 and asked == [2]
+    assert p == Pair(2) and hash(p) == hash(Pair(2))
+    cold = copy.deepcopy(p)
+    assert cold == p and doubled(cold) == 4 and asked == [2, 2]

@@ -6,13 +6,13 @@ from collections.abc import Callable, Iterator
 from typing import Any
 
 from ...core import (
-    AbstractGraph, FunctionalNode, Label, NestingGraph, NodeDefinition, Place, Violation,
-    answer_for_labels, answer_for_places,
+    FunctionalNode, Label, Graph, NodeDefinition, Place, Violation,
+    answer_for_labels, answer_for_places, first, WellFormed, prove,
 )
 from ...core.frozen import Frozen, OrderedMap, answer, answered, answers, checked, dotted, violations
-from ...core import Condition, ConditionalNode, is_driven, kind_of, with_attributes
-from ...core.driven import Driver
-from ...core.realisation import Implementation, implementation_of, implemented
+from ...core import Condition, ConditionalNode, is_driven, kind_of
+from ...core.driven import Driver, check_driver_fits
+from ...core.realisation import Implementation, check_implementation_fits, implementation_of, implemented
 
 
 from .interface import LabelCodec, PlaceCodec, Spelling
@@ -47,7 +47,7 @@ def by_word[A: Spelling | PlaceCodec | LabelCodec](interface: type[A], word: str
 
 # ---------------------------------------------------------------- reading and writing
 
-def read_json(data: dict, resolve: Callable[[str], object] = loaded) -> NestingGraph:
+def read_json(data: dict, resolve: Callable[[str], object] = loaded) -> Graph:
     '''
     The graph `data` spells, every rule asked of it: places and node names by the codecs
     registered under the file's tags, each node by the spelling registered for its kind; a
@@ -67,10 +67,12 @@ def read_json(data: dict, resolve: Callable[[str], object] = loaded) -> NestingG
         r    = NodeReader(places, labels, resolve, labels.read_label(entry['name'], names))
         definitions.append((r.name, r.node(entry['definition'])))
     within = ((names.label(i), names.label(o)) for i, o in data['within'])
-    return NestingGraph(AbstractGraph(OrderedMap(definitions)), OrderedMap(within))
+    graph  = Graph(OrderedMap(definitions), OrderedMap(within))
+    prove(graph, WellFormed)                    # the file is refused at the door, as a graph
+    return graph
 
 
-def check_codec[N: Label, V: Place](graph: NestingGraph[N, V], implementations: bool) -> Iterator[Violation]:
+def check_codec[N: Label, V: Place](graph: Graph[N, V], implementations: bool) -> Iterator[Violation]:
     '''One registered codec writes every node name, and one every place. A graph with no
     node has no place either, so it is refused once.'''
     yield from violations(answer_for_labels, LabelCodec, graph)
@@ -78,7 +80,7 @@ def check_codec[N: Label, V: Place](graph: NestingGraph[N, V], implementations: 
         yield from violations(answer_for_places, PlaceCodec, graph)
 
 
-def check_nodes_write[N: Label, V: Place](graph: NestingGraph[N, V], implementations: bool) -> Iterator[Violation]:
+def check_nodes_write[N: Label, V: Place](graph: Graph[N, V], implementations: bool) -> Iterator[Violation]:
     '''Each node writes: the check is the writing, so the two cannot disagree.'''
     if any(True for _ in check_codec(graph, implementations)):
         return
@@ -90,7 +92,7 @@ def check_nodes_write[N: Label, V: Place](graph: NestingGraph[N, V], implementat
             yield refused.violation
 
 
-def _json_for_node[N: Label, V: Place](graph: NestingGraph[N, V], name: N, places: PlaceCodec[V],
+def _json_for_node[N: Label, V: Place](graph: Graph[N, V], name: N, places: PlaceCodec[V],
                                        labels: LabelCodec[N], implementations: bool) -> Json:
     '''The binding at `name`; raises `_Refused` where it does not write.'''
     w = NodeWriter(places, labels, implementations, name)
@@ -98,7 +100,7 @@ def _json_for_node[N: Label, V: Place](graph: NestingGraph[N, V], name: N, place
 
 
 @checked(check_codec, check_nodes_write)
-def write_json[N: Label, V: Place](graph: NestingGraph[N, V], implementations: bool = True) -> dict:
+def write_json[N: Label, V: Place](graph: Graph[N, V], implementations: bool = True) -> dict:
     '''A graph written as JSON, ready for `json.dump`: each binding its name and its
     definition, places by the registered codecs. With `implementations=False`, the structure
     alone. Each node is written twice: once by the check, once here.'''
@@ -152,7 +154,7 @@ class NodeWriter[N: Label, V: Place](Frozen):
         if node.attributes:
             if others := [k.__name__ for k in node.attributes if k is not Implementation]:
                 raise self.refuse(', '.join(others), 'an attribute this format has no spelling for')
-            bare = self.node(with_attributes(node, OrderedMap()))
+            bare = self.node(dataclasses.replace(node, attributes=OrderedMap()))
             if not self.implementations:
                 return bare
             return {'kind': IMPLEMENTED, 'node': bare,
@@ -216,9 +218,13 @@ class NodeReader[N: Label, V: Place](Frozen):
 
     def node(self, data: dict) -> NodeDefinition[V]:
         if data['kind'] == IMPLEMENTED:
-            return implemented(self.node(data['node']), self.implementation(data['implementation']))
+            node = implemented(self.node(data['node']), self.implementation(data['implementation']))
+            first(check_implementation_fits(self.name, node))   # a file is refused as it is read
+            return node
         if data['kind'] == DRIVEN:
-            return self.driven(data)
+            node = self.driven(data)
+            first(check_driver_fits(self.name, node))
+            return node
         if (spelling := by_word(Spelling, 'kind').get(data['kind'])) is None:
             raise UnknownKind(self.name, data['kind']).raised
         read = spelling.read(data, self)

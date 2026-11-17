@@ -4,6 +4,8 @@ with their defaults. Sellar is the end-to-end case, on a plain dict and on a str
 tree.
 '''
 
+from cottax.core import prove, unproved, dependencies
+
 import dataclasses
 import enum
 import inspect
@@ -119,12 +121,11 @@ def test_the_syntax_is_the_key_kind_and_any_other_key_a_dict_key():
 
 
 def test_a_builder_handed_where_a_path_is_read_says_so():
-    from cottax.core import prefixes
     with pytest.raises(AttributeError, match='pass it to `place`'):
-        list(prefixes(V['y1']))
+        V['y1'].prefixes
     graph = sellar()
     for lookup in (lambda: N['disc2'] in graph, lambda: graph[N['disc2']],
-                   lambda: V['y2'] in graph.graph.variables):
+                   lambda: V['y2'] in graph.variables):
         with pytest.raises(TypeError, match='pass it to `place`'):
             lookup()
 
@@ -232,9 +233,9 @@ def test_a_function_yet_to_be_written_is_declared_by_its_parameters():
     sketch = flat.function(cx.Unimplemented(('x', 'k')), 'y', reads={'k': 2.0})     # `x` by name
     body   = cx.absolute.declare({'scale': sketch}).graph[n('scale')]
     assert type(body) is FunctionalNode and body.reads == (v('x'), cx.absolute.place(cx.given.beside(V['y'], 'k')))
-    ExecutableGraph(cx.absolute.declare({'scale': sketch}).graph)
+    prove(cx.absolute.declare({'scale': sketch}).graph, ExecutableGraph)
     assert NoImplementation in [type(f) for f in
-                                violations(RealisedGraph, cx.absolute.declare({'scale': sketch}).graph)]
+                                unproved(cx.absolute.declare({'scale': sketch}).graph, RealisedGraph)]
     written = flat.function(lambda x, k: x * k, 'y', reads={'k': 2.0})
     assert cx.absolute.declare({'scale': written}).graph.nodes == cx.absolute.declare({'scale': sketch}).graph.nodes
     residual = flat.residual(cx.Unimplemented(('u', 'y')), 'u')         # the paired kinds too
@@ -610,7 +611,7 @@ def test_a_fixed_point_cut_closes_every_cut_at_one_problem():
     out = (Plan(explicit) + op).graph
     assert op.at == cx.absolute.node(N.mda)
     assert out[op.at].condition.unknowns == (cx.absolute.place(cx.copy(V['y1'])), cx.absolute.place(cx.copy(V['y2'])))
-    assert out.graph.is_acyclic is False and out[n('disc2')].reads[-1] == cx.absolute.place(cx.copy(V['y1']))
+    assert dependencies(out).is_acyclic is False and out[n('disc2')].reads[-1] == cx.absolute.place(cx.copy(V['y1']))
 
 
 
@@ -684,7 +685,8 @@ def test_the_mda_runs_on_a_dict_to_sellars_reference_values(x64):
     g    = sellar()
     plan = Plan(g) + cx.absolute.assign(cx.absolute.node(cx.solve(N['disc1'])), RootFinding(steps=False))
     plan = plan + ImplementDrivers({RootFinder: newton()})
-    graph = JitGraph(plan.graph)
+    graph = plan.graph
+    prove(graph, JitGraph)
     tree  = flat.run(graph, {cx.Inputs: {'z1': 5.0, 'z2': 2.0, 'x1': 1.0},
                              cx.Start: {'y1': 1.0}})
     assert tree['y1'] == pytest.approx(25.5883, abs=1e-3)
@@ -1003,8 +1005,9 @@ def test_a_model_runs_its_values_and_refuses_a_run_without_them(x64):
                           ) + cx.flat.drive(ScipyMinimize())
     two, three = model(2.0), model(3.0)
     assert two == three                                  # one plan; the values are data
+    prove(two.graph, JitGraph)
     with pytest.raises(KeyError) as refused:                # the graph alone holds no bound
-        flat.run(JitGraph(two.graph), {cx.Start: {'z': 0.0}})
+        flat.run(two.graph, {cx.Start: {'z': 0.0}})
     assert refused.value.args[0] == Unvalued(f"`values[Inputs]` at {flat.place(cx.upper('z'))!r}").message
 
     traces = []
@@ -1254,7 +1257,8 @@ def test_a_structured_model_runs_by_its_scoped_names(x64):
     plan  = (Plan(g) + cx.absolute.assign(at, RootFinding(steps=False))
              + ImplementDrivers({RootFinder: newton()}))
 
-    out = here.run(JitGraph(plan.graph), {cx.Inputs: {'target': 9.0}, cx.Start: {'ip': 1.0}})
+    prove(plan.graph, JitGraph)
+    out = here.run(plan.graph, {cx.Inputs: {'target': 9.0}, cx.Start: {'ip': 1.0}})
     assert out['ip'] == pytest.approx(3.0, rel=1e-10)               # read under `.plasma`
     assert out[V.plasma.tau] == pytest.approx(6.0, rel=1e-10)
 
@@ -1273,8 +1277,9 @@ def test_an_input_has_one_source():
     from cottax.relational.consumers.execution.jax_solvers import Newton
     graph   = cx.absolute.declare(flat.residual(square, 'u')).graph
     problem = cx.absolute.node(cx.solve(N['square']))
-    solved  = JitGraph((Plan(graph) + cx.absolute.assign(problem, RootFinding(steps=False))
-                        + cx.absolute.implement({problem: Newton(rtol=1e-10, atol=1e-10)})).graph)
+    solved = (Plan(graph) + cx.absolute.assign(problem, RootFinding(steps=False))
+                        + cx.absolute.implement({problem: Newton(rtol=1e-10, atol=1e-10)})).graph
+    prove(solved, JitGraph)
     start   = purposes.Start()(flat.place('u'))          # `Start`'s place, after its role
     with pytest.raises(ValueError) as refused:
         flat.run(solved, {cx.Inputs: {'z': 9.0, start: 2.0}, cx.Start: {'u': 1.0}})

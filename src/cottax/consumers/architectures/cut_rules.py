@@ -7,7 +7,7 @@ from abc import abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
 from functools import cached_property
 
-from ...core import AbstractGraph, FunctionalNode, Label, NestingGraph, Place, Violation, first
+from ...core import FunctionalNode, Label, Graph, Place, Violation, dependencies, first
 from ...core.frozen import Frozen
 from .refusals import CycleTooLarge, KeyRepeats, NoRule, OrderMismatch, SeveralRules
 
@@ -23,7 +23,7 @@ class CutRule[N: Label, V: Place](Frozen):
     group per closure.'''
 
     @abstractmethod
-    def to_cuts(self, graph: AbstractGraph[N, V]) -> tuple[ToCut[N, V], ...]:
+    def to_cuts(self, graph: Graph[N, V]) -> tuple[ToCut[N, V], ...]:
         '''One group per closure.'''
 
 
@@ -32,20 +32,20 @@ type Opened[N: Label, V: Place] = tuple[tuple[N, ...], tuple[ToCut[N, V], ...]]
 '''One cycle opened: its members in binding order, and the groups the rule cut it into.'''
 
 
-def cuts_per_cycle[N: Label, V: Place](graph: NestingGraph[N, V], rule: CutRule[N, V]
+def cuts_per_cycle[N: Label, V: Place](graph: Graph[N, V], rule: CutRule[N, V]
                                        ) -> tuple[Opened[N, V], ...]:
     '''
     The rule asked of each functional cycle: the condition nodes dropped, and each
     *cyclic* component of what is left handed to the rule, alone. Per cycle, its members
     and its groups.
     '''
-    bodies = graph.graph.subgraph(n for n, d in graph.definitions.items()
-                                  if isinstance(d, FunctionalNode))
+    bodies = graph.subgraph(n for n, d in graph.definitions.items()
+                            if isinstance(d, FunctionalNode))
     return tuple((component, rule.to_cuts(bodies.subgraph(component)))
-                 for component in bodies.components if len(component) > 1)
+                 for component in dependencies(bodies).components if len(component) > 1)
 
 
-def per_functional_cycle[N: Label, V: Place](graph: NestingGraph[N, V], rule: CutRule[N, V]
+def per_functional_cycle[N: Label, V: Place](graph: Graph[N, V], rule: CutRule[N, V]
                                              ) -> tuple[ToCut[N, V], ...]:
     '''`cuts_per_cycle`'s groups, every cycle's in a row.'''
     return tuple(group for _, groups in cuts_per_cycle(graph, rule) for group in groups)
@@ -53,24 +53,24 @@ def per_functional_cycle[N: Label, V: Place](graph: NestingGraph[N, V], rule: Cu
 
 # ---------------------------------------------------------------- Coupling helpers and CutRule implementation
 
-def coupling_reads[N: Label, V: Place](graph: AbstractGraph[N, V]) -> ToCut[N, V]:
+def coupling_reads[N: Label, V: Place](graph: Graph[N, V]) -> ToCut[N, V]:
     '''Every read of every variable owned in the graph handed, holding nothing back.'''
-    return {var: readers for var in graph.owners if (readers := graph.readers.get(var, ()))}
+    return {var: readers for var in dependencies(graph).owners if (readers := graph.readers.get(var, ()))}
 
 
-def gauss_seidel[N: Label, V: Place](graph: AbstractGraph[N, V],
+def gauss_seidel[N: Label, V: Place](graph: Graph[N, V],
                                      order: Sequence[N]) -> ToCut[N, V]:
     '''`coupling_reads` with every reader that follows its owner in `order` dropped:
     only the back edges are opened.'''
     at = {n: i for i, n in enumerate(order)}
     out: dict[V, tuple[N, ...]] = {}
     for var, readers in coupling_reads(graph).items():
-        if back := tuple(r for r in readers if at[r] < at[graph.owners[var]]):
+        if back := tuple(r for r in readers if at[r] < at[dependencies(graph).owners[var]]):
             out[var] = back
     return out
 
 
-def minimal_feedback_order[N: Label, V: Place](graph: AbstractGraph[N, V],
+def minimal_feedback_order[N: Label, V: Place](graph: Graph[N, V],
                                                limit: int) -> tuple[N, ...]:
     '''
     The order of `graph`'s nodes a Gauss-Seidel sweep opens the fewest variables in.
@@ -88,7 +88,7 @@ def minimal_feedback_order[N: Label, V: Place](graph: AbstractGraph[N, V],
         mask = 0
         for reader in readers:
             mask |= 1 << index[reader]
-        owned[index[graph.owners[var]]].append(mask)
+        owned[index[dependencies(graph).owners[var]]].append(mask)
     best: list = [None] * (1 << n)          # (cost, last node) per subset placed as a prefix
     best[0] = (0, -1)
     for subset in range(1 << n):
@@ -131,7 +131,7 @@ class ByName[N: Label, V: Place](CutRule[N, V]):
     def _index(self) -> dict[N, CutRule[N, V]]:
         return dict(self.rules)
 
-    def to_cuts(self, graph: AbstractGraph[N, V]) -> tuple[ToCut[N, V], ...]:
+    def to_cuts(self, graph: Graph[N, V]) -> tuple[ToCut[N, V], ...]:
         keyed = tuple(n for n in graph.nodes if n in self._index)
         first(() if len(keyed) == 1
               else (NoRule(tuple(str(n) for n in graph.nodes)),) if not keyed
@@ -145,7 +145,7 @@ class ByName[N: Label, V: Place](CutRule[N, V]):
 class NoCuts[N: Label, V: Place](CutRule[N, V]):
     '''Nothing opened, said rather than fallen into.'''
 
-    def to_cuts(self, graph: AbstractGraph[N, V]) -> tuple[ToCut[N, V], ...]:
+    def to_cuts(self, graph: Graph[N, V]) -> tuple[ToCut[N, V], ...]:
         return ()
 
     def __repr__(self) -> str:
@@ -156,7 +156,7 @@ class Jacobi[N: Label, V: Place](CutRule[N, V]):
     '''Every coupling, for every reader, in one closure: each node runs from the
     previous iterate alone.'''
 
-    def to_cuts(self, graph: AbstractGraph[N, V]) -> tuple[ToCut[N, V], ...]:
+    def to_cuts(self, graph: Graph[N, V]) -> tuple[ToCut[N, V], ...]:
         group = coupling_reads(graph)
         return (group,) if group else ()
 
@@ -169,10 +169,10 @@ class Sweep[N: Label, V: Place](CutRule[N, V]):
     forward edge keeps this sweep's value.'''
 
     @abstractmethod
-    def order_of(self, graph: AbstractGraph[N, V]) -> tuple[N, ...]:
+    def order_of(self, graph: Graph[N, V]) -> tuple[N, ...]:
         '''The order this graph is swept in, naming its nodes exactly once each.'''
 
-    def to_cuts(self, graph: AbstractGraph[N, V]) -> tuple[ToCut[N, V], ...]:
+    def to_cuts(self, graph: Graph[N, V]) -> tuple[ToCut[N, V], ...]:
         group = gauss_seidel(graph, self.order_of(graph))
         return (group,) if group else ()
 
@@ -180,7 +180,7 @@ class Sweep[N: Label, V: Place](CutRule[N, V]):
 class GaussSeidel[N: Label, V: Place](Sweep[N, V]):
     '''In binding order.'''
 
-    def order_of(self, graph: AbstractGraph[N, V]) -> tuple[N, ...]:
+    def order_of(self, graph: Graph[N, V]) -> tuple[N, ...]:
         return graph.nodes
 
     def __repr__(self) -> str:
@@ -193,7 +193,7 @@ class GaussSeidelMinimal[N: Label, V: Place](Sweep[N, V]):
     limit : int
     '''Above this many nodes on one cycle the exact search (`2^n n`) is refused.'''
 
-    def order_of(self, graph: AbstractGraph[N, V]) -> tuple[N, ...]:
+    def order_of(self, graph: Graph[N, V]) -> tuple[N, ...]:
         return minimal_feedback_order(graph, self.limit)
 
     def __repr__(self) -> str:
@@ -206,7 +206,7 @@ class GaussSeidelOrdered[N: Label, V: Place](Sweep[N, V]):
 
     order : tuple[N, ...]
 
-    def order_of(self, graph: AbstractGraph[N, V]) -> tuple[N, ...]:
+    def order_of(self, graph: Graph[N, V]) -> tuple[N, ...]:
         first(() if len(self.order) == len(graph.nodes) and set(self.order) == set(graph.nodes)
               else (OrderMismatch(tuple(str(n) for n in self.order),
                                   tuple(str(n) for n in graph.nodes)),))

@@ -11,13 +11,15 @@ The refusals themselves (an array, a bound method, a `functools.partial`) are
 `test_jax_jit.py`'s.
 '''
 
+from cottax.core import prove
+
 import equinox as eqx
 import jax.numpy as jnp
 import jax.tree_util as jtu
 import pytest
 from jax.tree_util import DictKey as D
 
-from cottax.core import FunctionalNode, GraphWithValues
+from cottax.core import FunctionalNode
 from cottax.core.frozen import OrderedMap
 from cottax.consumers.execution import run as run_graph
 from cottax.assemblies.jax import flat
@@ -29,6 +31,7 @@ from cottax.consumers.execution.jax_jit import JitGraph
 from cottax.pytree.path import NodePath, VarPath
 from cottax.core.realisation import implementation_of, implemented
 from graphs import graph_of
+from cottax.consumers.execution import GraphWithValues
 
 
 def var(name: str) -> VarPath:
@@ -72,7 +75,8 @@ def test_a_re_assembled_graph_traces_once():
     @eqx.filter_jit
     def run(graph, z):
         traces.append(1)
-        return run_graph(GraphWithValues(JitGraph(graph), OrderedMap({var('z'): z})))
+        prove(graph, JitGraph)
+        return run_graph(GraphWithValues(graph, OrderedMap({var('z'): z})))
 
     for i in range(3):
         out = run(build(), jnp.asarray(float(i)))
@@ -92,7 +96,7 @@ def test_a_callable_value_is_a_body_when_it_compares_by_value():
 
     graph = lambda: to_graph({'sized': flat.function(Sized(3), 'y')})
     assert graph() == graph()
-    JitGraph(graph())
+    prove(graph(), JitGraph)
 
 
 # ---------------------------------------------------------------- the ratchet
@@ -101,9 +105,11 @@ def _proved(implementation):
     '''The ratchet is a jit fact, so it is asked where the jit cache key is built: a
     node carrying anything at all is a legitimately implemented function, and `JitGraph`
     is what refuses what jit cannot re-assemble.'''
-    return JitGraph(graph_of(OrderedMap({
+    graph = graph_of(OrderedMap({
         node('one'): implemented(FunctionalNode((var('z'),), (var('q'),)),
-                                 implementation)})))
+                                 implementation)}))
+    prove(graph, JitGraph)
+    return graph
 
 
 def test_a_jtu_partial_is_refused():

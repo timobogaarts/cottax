@@ -8,7 +8,7 @@ fixtures and helpers here are shared with `test_mdao_architectures.py`.
 import pytest
 from jax.tree_util import GetAttrKey
 
-from cottax.core import FunctionalNode, is_encloser
+from cottax.core import FunctionalNode, is_encloser, nesting
 from cottax.relational import Min, Objective
 from cottax.core.maths.executable import ExecutableGraph
 from cottax.core.plan import Cut, Nest, Plan
@@ -74,7 +74,7 @@ def blocks(g):
 
 def cyc(g, *nodes):
     '''A block as the graph a rule reads: owns and reads, no nesting.'''
-    return g.graph.subgraph(nodes)
+    return g.subgraph(nodes)
 
 
 def bodies(g):
@@ -178,8 +178,8 @@ def test_coupling_reads_holds_nothing_back(implicit):
     cycle = cyc(implicit, D1, N('h1'), D2, N('h2'))
     assert coupling_reads(cycle) == {V('r1'): (N('h1'),), V('y1'): (D1, D2),
                                      V('r2'): (N('h2'),), V('y2'): (D1, D2)}
-    folded = implicit.contract(((N('h1'), D1), (N('h2'), D2)))
-    assert coupling_reads(folded.graph) == {V('z'): (D1, D2, N('obj')),
+    folded = nesting(implicit).contract(((N('h1'), D1), (N('h2'), D2)))
+    assert coupling_reads(folded) == {V('z'): (D1, D2, N('obj')),
                                             V('y1'): (D2, N('obj'), N('con')),
                                             V('y2'): (D1, N('obj')),
                                             V('f'): (OPT,), V('g'): (OPT,)}
@@ -232,8 +232,8 @@ def test_the_minimal_order_opens_fewest():
         N('a'): call(['vc'], ['va']),
         N('b'): call(['va'], ['vb']),
     }))
-    assert len(gauss_seidel(g.graph, g.nodes)) == 2
-    assert len(gauss_seidel(g.graph, minimal_feedback_order(g.graph, 18))) == 1
+    assert len(gauss_seidel(g, g.nodes)) == 2
+    assert len(gauss_seidel(g, minimal_feedback_order(g, 18))) == 1
     (group,) = per_functional_cycle(g, GaussSeidelMinimal(18))
     assert len(group) == 1
     with pytest.raises(ValueError, match='exact order search'):

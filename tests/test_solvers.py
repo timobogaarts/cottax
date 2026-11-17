@@ -4,6 +4,8 @@ optimistix implementation answering its contract, called directly and run throug
 `execution`. Float64, as a solve to a tight tolerance needs.
 '''
 
+from cottax.core import prove
+
 import math
 
 import equinox as eqx
@@ -12,7 +14,7 @@ import jax.numpy as jnp
 import pytest
 from jax.tree_util import DictKey
 
-from cottax.core import FunctionalNode, GraphWithValues
+from cottax.core import FunctionalNode
 from cottax.relational import Min, Objective
 from cottax.core.frozen import OrderedMap
 from cottax.core.driven import driven as with_driver
@@ -28,6 +30,7 @@ from cottax.relational.consumers.execution.jax_solvers.canonical_nlp import Cano
 from cottax.relational.consumers.execution.jax_solvers import BFGS, Newton, Picard
 from cottax.relational.consumers.execution.jax_solvers.canonical_nlp import next_values
 from graphs import graph_of
+from cottax.consumers.execution import GraphWithValues
 
 
 @pytest.fixture(autouse=True)
@@ -178,19 +181,22 @@ def driven(condition, driver, implementation, reports=()) -> 'ConditionalNode':
 
 def cosine(driver, implementation, reports=()) -> CallableGraph:
     '''`u = a * cos(u)`, a contraction for `a < 1`.'''
-    return CallableGraph(graph_of(OrderedMap({
+    graph = graph_of(OrderedMap({
         N('g')  : call([V('u'), V('a')], [V('gu')], lambda u, a: a * jnp.cos(u)),
         N('fix'): driven(RelationalCondition((Relation(V('u'), V('gu'), Eq),), (), (V('u'),), ()),
                          driver, implementation, reports),
-    })))
+    }))
+    prove(graph, CallableGraph)
+    return graph
 
 
 # `(u - a)^2 + 1`, least at `u = a`.
-BOWL = CallableGraph(graph_of(OrderedMap({
+BOWL = graph_of(OrderedMap({
     N('f')  : call([V('u'), V('a')], [V('f')], lambda u, a: (u - a) ** 2 + 1.0),
     N('opt'): driven(RelationalCondition((), (Objective(V('f'), Min),), (V('u'),), ()),
                      Minimisation(steps=True), BFGS(**TIGHT), [V('n')]),
-})))
+}))
+prove(BOWL, CallableGraph)
 
 
 def jitted(graph, wanted):
@@ -234,10 +240,10 @@ def test_a_bfgs_minimises_the_objective_tracing_once():
 
 def test_the_proof_refuses_a_solver_on_a_contract_it_does_not_implement():
     with pytest.raises(TypeError, match='implements a RootFinder'):
-        CallableGraph(graph_of(OrderedMap({
+        prove(graph_of(OrderedMap({
             N('f')  : call([V('u'), V('a')], [V('f')], lambda u, a: (u - a) ** 2),
             N('opt'): driven(RelationalCondition((), (Objective(V('f'), Min),), (V('u'),), ()),
                              Minimisation(steps=False), Newton()),
-        })))
+        })), CallableGraph)
     with pytest.raises(TypeError, match='implements a FixedPointIterator'):
         cosine(RootFinding(steps=False), Picard())

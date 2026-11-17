@@ -3,7 +3,7 @@ it; a driven one implemented by the first implementing its contract.'''
 
 from collections.abc import Callable
 
-from ...core import NestingGraph, ComposedOp, GraphOp
+from ...core import Graph, ComposedOp, GraphOp
 from ...core.frozen import OrderedMap
 from ...core.driven import Assign
 from ...core import is_driven, kind_of
@@ -25,7 +25,7 @@ class Drive(ComposedOp):
     contracts       : tuple[DriverContract, ...]
     places          : Callable[[object, tuple, DriverContract], tuple[tuple, tuple]]
 
-    def composed(self, graph: NestingGraph) -> tuple[GraphOp, ...]:
+    def composed(self, graph: Graph) -> tuple[GraphOp, ...]:
         undriven = {p for p in graph.enclosers if not is_driven(graph[p])}
         picked = OrderedMap((p, self.chosen(p, node) if p in undriven
                              else self.covering(p, node.driver.contract))

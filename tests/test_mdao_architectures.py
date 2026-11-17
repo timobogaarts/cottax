@@ -5,6 +5,8 @@ graph on every fixture it is meant for, a study's own final is a few lines on a 
 and MDF and IDF driven agree. Fixtures and helpers are `test_cutting.py`'s.
 '''
 
+from cottax.core import prove, unproved, nesting
+
 import pytest
 
 from cottax.core import FunctionalNode
@@ -43,7 +45,7 @@ def test_a_sweep_over_bodies_does_not_depend_on_where_a_problem_is_bound(implici
     orders = ([D1, N('h1'), D2, N('h2')], [D1, D2, N('h1'), N('h2')],
               [N('h1'), N('h2'), D1, D2])
     rebound = [graph_of(OrderedMap({k: implicit[k] for k in o})).subgraph(o) for o in orders]
-    raw = {frozenset(GaussSeidel().to_cuts(g.graph)[0].items()) for g in rebound}
+    raw = {frozenset(GaussSeidel().to_cuts(g)[0].items()) for g in rebound}
     assert len(raw) == 3
     assert [per_functional_cycle(g, GaussSeidel()) for g in rebound] == [()] * 3
     folded = [per_functional_cycle_boxed(g, Solves(H12), GaussSeidel()) for g in rebound]
@@ -52,10 +54,10 @@ def test_a_sweep_over_bodies_does_not_depend_on_where_a_problem_is_bound(implici
 
 def test_a_box_is_a_problem_with_its_body(implicit):
     '''The owners of the problem's conditions and nothing else: no block is computed.
-    The contraction is `NestingGraph.contract`'s, bound at the block's first member in
+    The contraction is `Graph.contract`'s, bound at the block's first member in
     binding order, the body here.'''
     assert body_of_problem(implicit, N('h1')) == (D1,)
-    folded = implicit.contract(((N('h1'), D1), (N('h2'), D2)))
+    folded = nesting(implicit).contract(((N('h1'), D1), (N('h2'), D2)))
     assert folded[D1] == FunctionalNode((V('z'), V('y2')), (V('r1'), V('y1')))
     assert folded[D2] == FunctionalNode((V('z'), V('y1')), (V('r2'), V('y2')))
     assert N('h1') not in folded and folded.nodes == (OPT, D1, D2, N('obj'), N('con'))
@@ -70,9 +72,9 @@ def test_disciplines_is_every_problem_of_the_graph_handed(implicit, through_expl
     '''Under an architecture the graph handed is the top's interior, so this is every
     implicit model beneath the top. `hA` is a box even though its loop runs through
     `A2`: the box is `A1` with `hA`, `A2` stays outside, and the loop is still cut.'''
-    assert Disciplines().folded(implicit.interior(OPT)) == H12
-    assert Disciplines().folded(through_explicit.interior(OPT)) == (N('hA'), N('hB'))
-    assert per_functional_cycle_boxed(through_explicit.interior(OPT), Disciplines(), GaussSeidel()) == \
+    assert Disciplines().folded(nesting(implicit).interior(OPT)) == H12
+    assert Disciplines().folded(nesting(through_explicit).interior(OPT)) == (N('hA'), N('hB'))
+    assert per_functional_cycle_boxed(nesting(through_explicit).interior(OPT), Disciplines(), GaussSeidel()) == \
         ({V('a2'): (N('A1'),)},)
 
 
@@ -85,7 +87,7 @@ def test_one_folded_and_one_not_finds_nothing_and_the_proof_says_why(implicit):
     class Partial(MultidisciplinaryFeasible):
         boxes = Solves((N('h1'),))
     g = (Plan(implicit) + Partial(GaussSeidel(), CLOSING, OPT)).graph
-    assert [type(v).__name__ for v in violations(ExecutableGraph, g)] == ['SeveralOutermost']
+    assert [type(v).__name__ for v in unproved(g, ExecutableGraph)] == ['SeveralOutermost']
 
 
 def test_a_fixed_point_folds_as_a_root_find_does():
@@ -98,14 +100,14 @@ def test_a_fixed_point_folds_as_a_root_find_does():
         N('h2') : fixed_point((V('v2'),), (V('y2'),)),
         N('obj'): call(['z', 'y1', 'y2'], ['f']),
     }))
-    assert per_functional_cycle_boxed(g.interior(OPT), Disciplines(), GaussSeidel()) == ({V('y2'): (D1,)},)
+    assert per_functional_cycle_boxed(nesting(g).interior(OPT), Disciplines(), GaussSeidel()) == ({V('y2'): (D1,)},)
     m = (Plan(g) + mdf()).graph
     assert dict(m.within) == {Y2_MDA: OPT, N('h1'): Y2_MDA, N('h2'): Y2_MDA}
-    ExecutableGraph(m)
+    prove(m, ExecutableGraph)
     lone = graph_of(OrderedMap({OPT: optimise(V('f'), (V('z'),)),
                              D1: call(['z', 'u'], ['v']), N('h'): fixed_point((V('v'),), (V('u'),)),
                              N('obj'): call(['z', 'u'], ['f'])}))
-    assert per_functional_cycle_boxed(lone.interior(OPT), Disciplines(), GaussSeidel()) == ()
+    assert per_functional_cycle_boxed(nesting(lone).interior(OPT), Disciplines(), GaussSeidel()) == ()
 
 
 # ================================================================ the one kind of model
@@ -123,10 +125,10 @@ def test_a_loop_through_an_explicit_and_a_state_coupling_at_once(sellar):
         N('hB') : root_find((V('rb'),), (V('ub'),)),
         N('obj'): call(['z', 'b1'], ['f']),
     }))
-    (group,) = per_functional_cycle_boxed(mixed.interior(OPT), Disciplines(), GaussSeidel())
+    (group,) = per_functional_cycle_boxed(nesting(mixed).interior(OPT), Disciplines(), GaussSeidel())
     assert group == {V('a2'): (N('A1'),), V('ub'): (N('A1'),)}
     for arch in (mdf(), idf(), sand()):
-        ExecutableGraph((Plan(mixed) + arch).graph)
+        prove((Plan(mixed) + arch).graph, ExecutableGraph)
     m = (Plan(mixed) + mdf()).graph
     a = MINT_MDA(N('A1'))
     assert dict(m.within) == {a: OPT, N('hA'): a, N('hB'): a}
@@ -168,7 +170,7 @@ def test_a_problem_lying_inside_anothers_body_is_nested_in_it():
     for arch in (mdf(), idf()):
         placed = (Plan(inside) + arch).graph
         assert dict(placed.within) == {N('h'): N('H'), N('H'): OPT}
-        ExecutableGraph(placed)
+        prove(placed, ExecutableGraph)
     analysis = inside.subgraph(n for n in inside.nodes if n != OPT)
     assert dict((Plan(analysis) + MDA(GaussSeidel(), CLOSING)).graph.within) == {N('h'): N('H')}
     apart = graph_of(OrderedMap({**model, N('D3'): call(['u3'], ['r3']),
@@ -237,7 +239,8 @@ def test_a_nested_model_is_refused(implicit):
 
 def test_mdf_nests_the_coupling_in_the_optimiser(sellar):
     g = (Plan(sellar) + mdf()).graph
-    top, = entries(ExecutableGraph(g).graph)
+    prove(g, ExecutableGraph)
+    top, = entries(g)
     assert isinstance(top, Solve) and top.problem == OPT
     inner = entries(top.interior)
     assert isinstance(inner[0], Solve) and inner[0].problem == Y2_MDA
@@ -285,7 +288,7 @@ def test_every_shipped_final_is_executable_where_it_is_meant(sellar, implicit, t
     `through_explicit` needs `hA` left as bodies.'''
     for g in (sellar, implicit, through_explicit, two_cycles):
         for arch in (mdf(), idf(), sand()):
-            ExecutableGraph((Plan(g) + arch).graph)
+            prove((Plan(g) + arch).graph, ExecutableGraph)
 
 
 def test_the_three_on_implicit_disciplines(implicit):
@@ -301,21 +304,22 @@ def test_the_three_on_implicit_disciplines(implicit):
     assert s[OPT].condition.relations == (Relation(V('g'), None, Le),
                                 Relation(V('r1'), None, Eq),
                                 Relation(V('r2'), None, Eq))
-    assert HAT(V('y2')) not in s.graph.variables
+    assert HAT(V('y2')) not in s.variables
 
 
 def test_a_declared_problem_nests_in_the_mda_on_its_cycle_else_in_the_optimiser(through_explicit):
     g = (Plan(through_explicit) + mdf()).graph
     a = MINT_MDA(N('A1'))
     assert dict(g.within) == {a: OPT, N('hA'): a, N('hB'): OPT}
-    assert HAT(V('a2')) in g.graph.variables
+    assert HAT(V('a2')) in g.variables
     i = (Plan(through_explicit) + idf()).graph
     assert dict(i.within) == {N('hA'): OPT, N('hB'): OPT}
 
 
 def test_two_cycles_are_two_solves_under_mdf(two_cycles):
     g = (Plan(two_cycles) + mdf()).graph
-    top, = entries(ExecutableGraph(g).graph)
+    prove(g, ExecutableGraph)
+    top, = entries(g)
     solves = [e for e in entries(top.interior) if isinstance(e, Solve)]
     assert [names(e.nodes) for e in solves] == [['.A1', '.A2', '^closure.A1'], ['.B1', '.B2', '^closure.B1']]
 
@@ -337,7 +341,7 @@ def test_sand_absorbs_a_declared_fixed_point_as_written():
     s = (Plan(g) + sand()).graph
     assert s[OPT].condition.relations == (Relation(V('u'), V('v'), Eq),)
     assert s[OPT].condition.unknowns  == (V('z'), V('u'))
-    ExecutableGraph(s)
+    prove(s, ExecutableGraph)
 
 
 class AbsorbedMDF(Monolithic):
@@ -365,7 +369,7 @@ def test_mdf_with_the_models_absorbed_into_the_mda(implicit):
     assert g[Y2_MDA].condition.relations == (Relation(HAT(V('y2')), V('y2'), Eq),
                                    Relation(V('r1'), None, Eq),
                                    Relation(V('r2'), None, Eq))
-    ExecutableGraph(g)
+    prove(g, ExecutableGraph)
 
 
 class KeepSolves(Monolithic):
@@ -393,7 +397,7 @@ def test_a_study_keeps_one_solve_and_absorbs_the_rest(implicit, sellar):
     assert N('h2') not in g
     assert g[OPT].condition.unknowns == (V('z'), V('y2'))
     assert Relation(V('r2'), None, Eq) in g[OPT].condition.relations
-    ExecutableGraph(g)
+    prove(g, ExecutableGraph)
     # a declared fixed point beside sellar's disciplines, kept while the coupling is
     # absorbed
     own = purposes.Solve()(N('con'))
@@ -403,7 +407,7 @@ def test_a_study_keeps_one_solve_and_absorbs_the_rest(implicit, sellar):
     k = (Plan(with_fp) + KeepSolves(GaussSeidel(), CLOSING, OPT, (own,))).graph
     assert dict(k.within) == {own: OPT}
     assert HAT(V('y2')) in k[OPT].condition.unknowns and V('u') not in k[OPT].condition.unknowns
-    ExecutableGraph(k)
+    prove(k, ExecutableGraph)
 
 
 def test_a_requirement_the_design_reaches_is_absorbed(sellar):
@@ -416,7 +420,7 @@ def test_a_requirement_the_design_reaches_is_absorbed(sellar):
     g = (Plan(with_req) + mdf()).graph
     assert N('req') not in g
     assert Relation(V('m'), None, Le) in g[OPT].condition.relations
-    ExecutableGraph(g)
+    prove(g, ExecutableGraph)
 
 
 def test_a_requirement_the_design_does_not_reach_is_refused(sellar):
@@ -429,7 +433,7 @@ def test_a_requirement_the_design_does_not_reach_is_refused(sellar):
     g = (Plan(with_req) + mdf()).graph
     assert N('req') in g
     with pytest.raises(ValueError, match='determine it by a variable on its cycle'):
-        ExecutableGraph(g)
+        prove(g, ExecutableGraph)
 
 
 def test_a_problem_reached_only_through_a_requirement_is_combined():
@@ -441,12 +445,12 @@ def test_a_problem_reached_only_through_a_requirement_is_combined():
         N('lim'): call(['y1'], ['c']),
         N('req'): requirement(V('c')),
     }))
-    assert per_functional_cycle_boxed(g.interior(OPT), Disciplines(), GaussSeidel()) == ()      # off the optimiser's cycle
+    assert per_functional_cycle_boxed(nesting(g).interior(OPT), Disciplines(), GaussSeidel()) == ()      # off the optimiser's cycle
     out = (Plan(g) + mdf()).graph
     assert N('req') not in out
     assert Relation(V('c'), None, Le) in out[OPT].condition.relations
     assert dict(out.within) == {Y2_MDA: OPT}
-    ExecutableGraph(out)
+    prove(out, ExecutableGraph)
 
 
 def test_the_combining_is_written_by_hand_the_same_way(implicit):
@@ -478,7 +482,7 @@ def test_a_combining_the_graph_cannot_answer_is_refused_by_the_proof(implicit):
                     for p in (*c.closures, *c.declared)]
     g = (Plan(implicit) + Beside(GaussSeidel(), CLOSING, OPT)).graph
     with pytest.raises(ValueError):
-        ExecutableGraph(g)
+        prove(g, ExecutableGraph)
 
 
 def test_top_names_a_bound_problem(sellar):
@@ -510,7 +514,7 @@ def test_two_closures_on_one_cycle_are_one_mda_under_mdf(implicit):
     class AtVariable(At):
         def __call__(self, cycle, group):
             return purposes.Closure()(NodePath(next(iter(group)).segments))
-    assert len(per_functional_cycle_boxed(implicit.interior(OPT), Disciplines(), OnePerVariable())) == 2
+    assert len(per_functional_cycle_boxed(nesting(implicit).interior(OPT), Disciplines(), OnePerVariable())) == 2
     with pytest.raises(ValueError, match='two closures bound at'):
         Plan(implicit) + mdf(OnePerVariable())
     apart = FixedPointClosing(HAT, AtVariable())
@@ -518,10 +522,10 @@ def test_two_closures_on_one_cycle_are_one_mda_under_mdf(implicit):
     mda, = [p for p in m.enclosers if p not in implicit.enclosers]
     assert dict(m.within) == {mda: OPT, N('h1'): mda, N('h2'): mda}
     assert set(m[mda].condition.unknowns) == {HAT(V('y1')), HAT(V('y2'))}
-    ExecutableGraph(m)
+    prove(m, ExecutableGraph)
     i = (Plan(implicit) + IDF(OnePerVariable(), apart, OPT)).graph
     assert HAT(V('y1')) in i[OPT].condition.unknowns and HAT(V('y2')) in i[OPT].condition.unknowns
-    ExecutableGraph(i)
+    prove(i, ExecutableGraph)
 
 
 def test_a_closure_written_before_the_architecture_is_refused(sellar):
@@ -572,11 +576,11 @@ def test_a_cycle_off_the_top_is_resolved_by_an_mda(sellar):
     assert dict(r.graph.within) == {N('h1'): Y2_MDA, N('h2'): Y2_MDA}
     assert r.closures == () and r.combining == ()
     for arch in (mdf(), idf(), sand()):
-        ExecutableGraph((Plan(g) + arch).graph)
+        prove((Plan(g) + arch).graph, ExecutableGraph)
     assert mdf().resolution(sellar).outside == ()
     named = MDF(GaussSeidel(), CLOSING, OPT, analysis=AbsorbedMDA(GaussSeidel(), CLOSING)).resolution(g)
     assert named.graph[N('h1')].condition.unknowns == (V('y1'), V('y2')) and not named.graph.within
-    ExecutableGraph(named.graph)
+    prove(named.graph, ExecutableGraph)
 
 
 # ================================================================ an analysis, no top
@@ -593,10 +597,10 @@ def test_mda_is_mdf_without_the_top(implicit, sellar):
     r = MDA(GaussSeidel(), CLOSING).resolution(disciplines)
     assert r.absorbed == () and [c.at for c in r.closures] == [Y2_MDA]
     assert dict(r.graph.within) == {N('h1'): Y2_MDA, N('h2'): Y2_MDA}
-    ExecutableGraph(r.graph)
+    prove(r.graph, ExecutableGraph)
     explicit = (Plan(without_top(sellar)) + MDA(GaussSeidel(), CLOSING)).graph
     assert explicit.enclosers == (Y2_MDA,) and not explicit.within
-    ExecutableGraph(explicit)
+    prove(explicit, ExecutableGraph)
     assert repr(MDA(GaussSeidel(), CLOSING)) == 'mda(disciplines, gauss_seidel, closing(^copy, at_first_member(^closure)))'
 
 
@@ -606,8 +610,8 @@ def test_the_bare_op_and_the_mda_differ_exactly_on_state_coupling(implicit):
     disciplines = without_top(implicit)
     bare = (Plan(disciplines) + CloseFunctionalCycles(GaussSeidel(), CLOSING)).graph
     assert bare == disciplines
-    assert [type(v).__name__ for v in violations(ExecutableGraph, bare)] == ['SeveralOutermost']
-    ExecutableGraph((Plan(disciplines) + MDA(GaussSeidel(), CLOSING)).graph)
+    assert [type(v).__name__ for v in unproved(bare, ExecutableGraph)] == ['SeveralOutermost']
+    prove((Plan(disciplines) + MDA(GaussSeidel(), CLOSING)).graph, ExecutableGraph)
 
 
 class AbsorbedMDA(Coupled):
@@ -630,8 +634,8 @@ def test_an_absorbed_mda_needs_no_copy(implicit):
     assert r.closures == ()
     assert r.graph.enclosers == (N('h1'),) and N('h2') not in r.graph
     assert r.graph[N('h1')].condition.unknowns == (V('y1'), V('y2'))
-    assert HAT(V('y2')) not in r.graph.graph.variables
-    ExecutableGraph(r.graph)
+    assert HAT(V('y2')) not in r.graph.variables
+    prove(r.graph, ExecutableGraph)
 
 
 def test_an_analysis_refuses_a_design(implicit):
@@ -645,7 +649,7 @@ def test_an_analysis_refuses_a_design(implicit):
 def test_two_cycles_are_two_closures_under_mda(two_cycles):
     g = (Plan(without_top(two_cycles)) + MDA(GaussSeidel(), CLOSING)).graph
     assert names(g.enclosers) == ['^closure.A1', '^closure.B1']
-    ExecutableGraph(g)
+    prove(g, ExecutableGraph)
 
 
 # ---------------------------------------------------------------- the same optimum
@@ -693,7 +697,8 @@ def test_mdf_and_idf_reach_the_same_optimum():
 
     def ran(plan):
         # One start for both: under MDF the MDA owns the copy of `y2`, under IDF the top.
-        graph = CallableGraph((plan + backend).graph)
+        graph = (plan + backend).graph
+        prove(graph, CallableGraph)
         with jax.enable_x64(True):
             return flat.run(graph, guess)
 

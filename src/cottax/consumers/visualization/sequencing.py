@@ -9,18 +9,17 @@ from collections.abc import Iterator, Sequence
 from functools import cached_property
 
 from ...core.frozen import AbstractVar, Frozen, OrderedMap
-from ...core import AbstractGraph, ExecutableGraph, Plan, Label, NestingGraph, body_of
+from ...core import Plan, Label, Graph, body_of, dependencies, nesting
 
 
-def graph_drawn(handed: NestingGraph | ExecutableGraph | Plan) -> NestingGraph:
-    '''The graph a drawing draws of what it is handed: a `Plan`'s graph, a proof's graph,
-    or the graph itself.'''
-    if isinstance(handed, (Plan, ExecutableGraph)):
+def graph_drawn(handed: Graph | Plan) -> Graph:
+    '''The graph a drawing draws of what it is handed: a `Plan`'s graph, or the graph
+    itself.'''
+    if isinstance(handed, Plan):
         return handed.graph
-    if isinstance(handed, NestingGraph):
+    if isinstance(handed, Graph):
         return handed
-    raise TypeError(f'a drawing draws a NestingGraph, an ExecutableGraph or a Plan; '
-                    f'got {type(handed).__name__}')
+    raise TypeError(f'a drawing draws a Graph or a Plan; got {type(handed).__name__}')
 
 
 # ---------------------------------------------------------------- what a component is
@@ -31,8 +30,8 @@ class Entry(Frozen):
     drawing reads it, its kind the final (`Run`, `Cycle`, `Solve`, `Unresolved`). Built by
     `entries`.
     '''
-    subgraph : NestingGraph
-    held     : AbstractVar[NestingGraph | None]
+    subgraph : Graph
+    held     : AbstractVar[Graph | None]
     '''The part of the component drawn inside its ring and read as a graph of its own (its
     own entries, its own order); the nodes not in it are drawn on the ring itself. `None`
     where the component is drawn whole.'''
@@ -56,14 +55,14 @@ class Cycle(Entry):
 class Solve(Entry):
     '''
     A component with exactly one outermost problem, which answers it. Inside its ring is
-    its interior, the component without that problem (`NestingGraph.interior`), where the
+    its interior, the component without that problem (`Graph.interior`), where the
     problem's children are the outermost problems.
     '''
     problem  : Label
-    interior : NestingGraph
+    interior : Graph
 
     @property
-    def held(self) -> NestingGraph:
+    def held(self) -> Graph:
         return self.interior
 
 
@@ -75,7 +74,7 @@ class Unresolved(Entry):
     problems : tuple[Label, ...]
 
     @cached_property
-    def held(self) -> NestingGraph | None:
+    def held(self) -> Graph | None:
         '''
         The rest of the cycle once some of its outermost problems are removed. Those removed
         are drawn on the grey ring itself, and what they own is an input to the rest, so the
@@ -94,20 +93,20 @@ class Unresolved(Entry):
         return self.subgraph.subgraph(n for n in self.nodes if n not in removed)
 
 
-def entries(g: NestingGraph) -> tuple[Entry, ...]:
+def entries(g: Graph) -> tuple[Entry, ...]:
     '''
     Each component of `g` as an `Entry`, in dependency order, the members of each in
     binding order.
     '''
     out : list[Entry] = []
-    for component in g.graph.components:
+    for component in dependencies(g).components:
         sub   = g.subgraph(component)
         found = sub.outermost_enclosers
         if len(found) > 1:
             out.append(Unresolved(sub, found))
         elif found:
             problem, = found
-            out.append(Solve(sub, problem, sub.interior(problem)))
+            out.append(Solve(sub, problem, nesting(sub).interior(problem)))
         else:
             # a component of one node is acyclic (a node may not read what it owns);
             # of more it is a cycle, exactly
@@ -132,7 +131,7 @@ class Block(Frozen):
         return self.entry.nodes
 
     @property
-    def held(self) -> NestingGraph | None:
+    def held(self) -> Graph | None:
         '''What is ringed inside it: the entry's `held` where that holds a problem, else
         `None`, so a solve whose interior holds no problem rings nothing inside.'''
         held = self.entry.held
@@ -146,18 +145,18 @@ class Block(Frozen):
     @property
     def solved(self) -> bool:
         '''Whether it contains a cycle: a solve ring, else a run.'''
-        return not self.entry.subgraph.graph.is_acyclic
+        return not dependencies(self.entry.subgraph).is_acyclic
 
 
-def walk(graph: NestingGraph) -> tuple[Block, ...]:
+def walk(graph: Graph) -> tuple[Block, ...]:
     '''
     Every block a drawing rings, at every depth: the graph's entries, each followed by the
     blocks of what it holds, so an inner ring comes after (paints over) the ring around it.
     '''
-    def blocks(g: NestingGraph, depth: int, open_: tuple[Label, ...]) -> Iterator[Block]:
+    def blocks(g: Graph, depth: int, open_: tuple[Label, ...]) -> Iterator[Block]:
         # `open_`: the outermost problems of the grey ring directly around `g`, if any
         for entry in entries(g):
-            ringed = isinstance(entry, Solve) and not entry.subgraph.graph.is_acyclic
+            ringed = isinstance(entry, Solve) and not dependencies(entry.subgraph).is_acyclic
             block  = Block(entry, depth, ringed and entry.problem in open_)
             yield block
             if block.held is not None:
@@ -168,19 +167,19 @@ def walk(graph: NestingGraph) -> tuple[Block, ...]:
 
 # ---------------------------------------------------------------- the order
 
-def draws_feedback(order: Sequence[Label], subgraph: NestingGraph) -> bool:
+def draws_feedback(order: Sequence[Label], subgraph: Graph) -> bool:
     '''
     Whether some node in `order` reads a variable a later one owns: an edge drawn above
     the diagonal.
     '''
-    at, owners = {name: i for i, name in enumerate(order)}, subgraph.graph.owners
+    at, owners = {name: i for i, name in enumerate(order)}, dependencies(subgraph).owners
     return any(at[owner] > i
                for i, name in enumerate(order)
                for var in subgraph[name].reads
                if (owner := owners.get(var)) is not None)
 
 
-def sequence(graph: NestingGraph) -> tuple[Label, ...]:
+def sequence(graph: Graph) -> tuple[Label, ...]:
     '''
     The graph's nodes in an order for one diagonal, entry by entry in dependency order. An
     entry holding something (`Entry.held`): the nodes drawn on its ring first (a `Solve`'s
@@ -201,14 +200,14 @@ def sequence(graph: NestingGraph) -> tuple[Label, ...]:
             outside_body = [n for n in entry.nodes if n not in body.definitions]
             order        = [n for n in entry.nodes if n in body.definitions]
             if order and draws_feedback(order, body):
-                order = list(body.graph.components_order)
+                order = list(dependencies(body).components_order)
             out.extend((*outside_body, *order))
     return tuple(out)
 
 
-def ordered_graph(handed: NestingGraph | ExecutableGraph | Plan) -> NestingGraph:
+def ordered_graph(handed: Graph | Plan) -> Graph:
     '''The graph rebound in `sequence` order, no node merged and no edge changed: what a
     drawing puts on its diagonal.'''
     graph = graph_drawn(handed)
-    return NestingGraph(AbstractGraph(OrderedMap((n, graph[n]) for n in sequence(graph))),
+    return Graph(OrderedMap((n, graph[n]) for n in sequence(graph)),
                         graph.within)

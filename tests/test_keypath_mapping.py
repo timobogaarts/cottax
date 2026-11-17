@@ -11,7 +11,7 @@ from jax.tree_util import GetAttrKey
 
 from cottax.core.frozen import OrderedMap
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core import FunctionalNode
+from cottax.core import FunctionalNode, dependencies
 from cottax.core.realisation import implemented
 from graphs import graph_of
 
@@ -39,7 +39,7 @@ def test_a_graph_is_the_same_graph():
     g = graph_of(OrderedMap({N('b'): call(['x'], ['y']), N('a'): call([], ['x'])}))
     assert isinstance(g.definitions, OrderedMap)
     assert g.nodes == (N('b'), N('a'))                    # binding order, not sorted
-    assert g.graph.topological_order == (N('a'), N('b'))
+    assert dependencies(g).topological_order == (N('a'), N('b'))
     assert hash(g) == hash(graph_of(OrderedMap(dict(g.definitions))))
 
 
@@ -48,7 +48,7 @@ def test_a_graph_is_the_same_graph():
 def test_the_container_refuses_a_duplicate_key_itself():
     '''Not only `OrderedMap`. A repeated key is the one thing `OrderedMap` cannot represent
     honestly -- `__iter__` would yield the name twice while `__getitem__` returned the
-    last value -- so the type defends it, and `NestingGraph`, which only checks the type, cannot
+    last value -- so the type defends it, and `Graph`, which only checks the type, cannot
     be handed a dishonest one.'''
     with pytest.raises(ValueError, match='duplicate key'):
         OrderedMap([(N('a'), 1), (N('a'), 2)])

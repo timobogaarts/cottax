@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping
-from ...core import NestingGraph, ExecutableGraph, Plan
+from ...core import Graph, Plan
 
 from .interface import Formatter
 from .lookup import spell_plain  # noqa: F401  (imported from here by the docs)
@@ -106,9 +106,9 @@ def stylesheet(sty: Style, *, follow_system: bool, css: str, font: str | None,
 
 
 def render_xdsm_svg(
-    graph : NestingGraph | ExecutableGraph | Plan | dict,
+    graph : Graph | Plan | dict,
     *,
-    blocks : bool | ExecutableGraph = False,
+    blocks : bool = False,
     file_name      : str = 'xdsm',
     outdir         : str = '.',
     style          : Style | str = TERRACOTTA,
@@ -150,10 +150,10 @@ def render_xdsm_svg(
     result leaving to the bottom-right one. Returns an `SvgDoc`, whose `.cell` is the widest
     step column and tallest row used and `.size` the drawing's `(width, height)`.
 
-    `graph`: a `NestingGraph`, a `Plan` (its graph), a proof (its graph, ringed as proved)
+    `graph`: a `Graph`, a `Plan` (its graph), a proof (its graph, ringed as proved)
     or an `xdsm_struct` already built.
-    `blocks`: ring every solve, and order the diagonal to run order (an `ExecutableGraph`:
-    ring as that proof has it); otherwise the diagonal is binding order.
+    `blocks`: ring every solve, and order the diagonal to run order; otherwise the diagonal
+    is binding order.
     `file_name`, `outdir`, `write`: with `write=True`, also write
     `<outdir>/<file_name>.svg` (`.path`).
     `style`: a `Style` or a name in `STYLES`.

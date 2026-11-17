@@ -7,6 +7,8 @@ installed everywhere. What is tested is the seam these two share with the XDSMs:
 not that name.
 '''
 
+from cottax.core import prove, dependencies
+
 import re
 import sys
 import types
@@ -16,7 +18,7 @@ import pytest
 from jax.tree_util import DictKey, GetAttrKey
 
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core import ExecutableGraph, FunctionalNode, SteppedExecutableGraph
+from cottax.core import ExecutableGraph, FunctionalNode, ExecutableGraph
 from cottax.core.plan import Cut, Plan
 from cottax.core.realisation import implemented
 from cottax.core.frozen import OrderedMap
@@ -299,22 +301,25 @@ def test_the_drawings_graph_is_not_the_algebras(sellar):
     # A caller may decorate what it is handed; the core's bare projection is never it.
     handed = networkx_graph(sellar)
     handed.nodes[N('obj')]['pos'] = (0, 0)
-    assert 'pos' not in sellar.graph._nx_dependencies.nodes[N('obj')]
-    assert 'kind' not in sellar.graph._nx_dependencies.nodes[N('obj')]
+    assert 'pos' not in dependencies(sellar)._nx_dependencies.nodes[N('obj')]
+    assert 'kind' not in dependencies(sellar)._nx_dependencies.nodes[N('obj')]
 
 
-def test_every_picture_draws_a_graph_a_plan_and_any_proof_alike(sellar):
-    '''A `Plan` is drawn as its graph and a proof as its graph, ringed as proved in an XDSM.'''
+def test_every_picture_draws_a_graph_a_plan_and_a_proved_graph_alike(sellar):
+    '''A `Plan` is drawn as its graph, and a proved graph is the graph: a proof changes no
+    picture, and an XDSM rings as `blocks=True` asks.'''
     closed = FixedPointCut((Cut(V('y2'), (N('d1'),), purposes.Copy()),), purposes.Solve()(N('y2')))
     graph = closed(sellar)
-    handed = (graph, Plan(sellar) + closed, ExecutableGraph(graph), SteppedExecutableGraph(graph))
+    proved = closed(sellar)
+    prove(proved, ExecutableGraph)
+    handed = (graph, Plan(sellar) + closed, proved)
     for each in handed:
         assert to_dot(each, blocks=True) == to_dot(graph, blocks=True)
         assert render_matrix_svg(each) == render_matrix_svg(graph)
         assert 'cx-wrap' in render_html(each)
-    assert render_xdsm_svg(handed[1]) == render_xdsm_svg(graph)
-    for proof in handed[2:]:
-        assert render_xdsm_svg(proof) == render_xdsm_svg(graph, blocks=True)
+    for each in handed:
+        assert render_xdsm_svg(each) == render_xdsm_svg(graph)
+        assert render_xdsm_svg(each, blocks=True) == render_xdsm_svg(graph, blocks=True)
     with pytest.raises(TypeError, match='got dict'):
         to_dot({})
 

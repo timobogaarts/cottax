@@ -4,6 +4,8 @@
 every depth. A graph always has entries; a blocking exists where they are executable.
 """
 
+from cottax.core import is_proved, outline, prove, dependencies
+
 from itertools import permutations
 
 import pytest
@@ -23,7 +25,7 @@ from cottax.consumers.visualization.xdsm import xdsm_struct
 from cottax.consumers.visualization.kinds import block_type
 from graphs import (NESTED, NESTED_BESIDE_P, NOTHING_NESTED, UNORDERED_IN_P, graph_of,
                     three_problems)
-from cottax.core.maths.nesting import NestingGraph
+from cottax.core.maths.graph import Graph
 
 
 def V(k): return VarPath((GetAttrKey(k),))
@@ -62,19 +64,26 @@ def cycle_nobody_solves():
     }))
 
 
-def test_a_blocking_wraps_a_graph_and_nothing_else():
-    assert [f for f in ExecutableGraph.__dataclass_fields__] == ['graph']
+def test_a_proof_is_of_a_graph_and_adds_nothing_to_it(two_problems):
+    '''Proved, the graph is the same value: equal, the same hash, and copied cold.'''
+    import copy
+    nested = (Plan(two_problems) + Nest(N('h'), N('opt'))).graph
+    before = hash(nested)
+    prove(nested, ExecutableGraph)
+    assert is_proved(nested, ExecutableGraph) and hash(nested) == before
+    assert not is_proved(copy.deepcopy(nested), ExecutableGraph)
+    assert copy.deepcopy(nested) == nested
 
 
 def test_a_graph_has_entries_where_a_blocking_refuses(two_problems, cycle_nobody_solves):
     for g, message, kind in ((two_problems, 'several problems', Unresolved),
                              (cycle_nobody_solves, 'no problem', Cycle)):
         with pytest.raises(ValueError, match=message):
-            ExecutableGraph(g)
-        assert [e.nodes for e in entries(g)] == list(g.graph.components)
+            prove(g, ExecutableGraph)
+        assert [e.nodes for e in entries(g)] == list(dependencies(g).components)
         # No single problem is answered at the coupled component's level: nothing to
         # answer, or two with nothing saying which -- an entry that says so, not a refusal.
-        coupled, = [e for e in entries(g) if not e.subgraph.graph.is_acyclic]
+        coupled, = [e for e in entries(g) if not dependencies(e.subgraph).is_acyclic]
         assert isinstance(coupled, kind)
 
 
@@ -92,7 +101,7 @@ def test_an_entry_is_the_components_type(two_problems, cycle_nobody_solves):
     nested = (Plan(two_problems) + Nest(N('h'), N('opt'))).graph
     (solve,) = entries(nested)
     assert isinstance(solve, Solve) and solve.problem == N('opt')
-    assert isinstance(solve.interior, NestingGraph)
+    assert isinstance(solve.interior, Graph)
     assert [type(e).__name__ for e in entries(solve.interior)] == ['Solve', 'Run']
     assert entries(solve.interior)[0].problem == N('h')
     # `walk`: every block a drawing rings, outermost first, with the depth it sits at --
@@ -105,11 +114,11 @@ def test_a_blocking_is_runs_and_solves_all_the_way_down(two_problems):
     '''That is what the executable rules say: every entry at every depth a `Run` or a
     `Solve`. The graph is the same graph -- the proof adds no data.'''
     nested = (Plan(two_problems) + Nest(N('h'), N('opt'))).graph
-    b = ExecutableGraph(nested)
-    assert b.graph is nested
-    assert all(isinstance(blk.entry, (Run, Solve)) for blk in walk(b.graph))
+    prove(nested, ExecutableGraph)
+    assert all(isinstance(blk.entry, (Run, Solve)) for blk in walk(nested))
     # three deep: a solve per level, each holding its interior; the innermost's body runs
-    deep = ExecutableGraph(three_problems(*NESTED)).graph
+    deep = three_problems(*NESTED)
+    prove(deep, ExecutableGraph)
     assert drawn(deep) == [('Solve', N('p'), 0, EVERY),
                            ('Solve', N('q'), 1, EVERY[1:]),
                            ('Run', None, 2, (N('a'),)),
@@ -154,13 +163,13 @@ def test_an_unresolved_diagonal_is_its_problems_then_its_body(two_problems):
 
 def test_a_proof_spells_where_a_rewrite_stands(two_problems):
     nested = (Plan(two_problems) + Nest(N('h'), N('opt'))).graph
-    assert repr(ExecutableGraph(nested)) == 'ExecutableGraph(solve(.opt)[.opt, .h, .d, .obj])'
+    assert outline(nested) == 'solve(.opt)[.opt, .h, .d, .obj]'
 
 
 def test_the_drawing_takes_a_graph_or_a_blocking(two_problems):
     nested = (Plan(two_problems) + Nest(N('h'), N('opt'))).graph
     by_graph    = xdsm_struct(nested, blocks=True)
-    by_blocking = xdsm_struct(nested, blocks=ExecutableGraph(nested))
+    by_blocking = xdsm_struct(nested, blocks=True)
     assert by_graph['blocks'] == by_blocking['blocks']
     # and the un-nested graph is still drawn, its coupled component ringed as unanswered
     struct = xdsm_struct(two_problems, blocks=True)
@@ -185,7 +194,7 @@ def test_a_ring_is_drawn_only_where_a_statement_encloses_another(two_problems):
 def test_the_diagonal_is_the_entries_in_run_order_problem_first(two_problems):
     nested = (Plan(two_problems) + Nest(N('h'), N('opt'))).graph
     assert [n.spelling for n in sequence(nested)] == ['.opt', '.h', '.d', '.obj']
-    assert ordered_graph(nested).nodes == ordered_graph(ExecutableGraph(nested)).nodes == sequence(nested)
+    assert ordered_graph(nested).nodes == ordered_graph(nested).nodes == sequence(nested)
 
 
 # ---------------------------------------------------------------- inside a grey ring

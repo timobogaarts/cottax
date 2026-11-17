@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import networkx as nx
 
-from ...core import ExecutableGraph, NestingGraph, Plan
+from ...core import Graph, Plan, dependencies
 from ...core import is_driven
 from ...core.realisation import is_implemented
 from .lookup import spelling
@@ -53,28 +53,28 @@ def _palette(style: 'Style | str', kinds: dict[str, tuple[str, str]]) -> dict:
 _BOUNDARY = ('free', 'sink')
 
 
-def networkx_graph(graph: NestingGraph, *, boundary: bool = False) -> nx.DiGraph:
+def networkx_graph(graph: Graph, *, boundary: bool = False) -> nx.DiGraph:
     '''
     The graph as a drawing sees it: a vertex per node (`node`, its definition) and, with
     `boundary`, one per boundary variable (`kind` `'free'` or `'sink'`); each edge carries
     the variables along it (`vars`). Refuses a boundary variable spelt as a node is.
     '''
-    owner = graph.graph.owners
+    owner = dependencies(graph).owners
     g = nx.DiGraph()
     for name in graph.nodes:
         g.add_node(name, node=graph[name])
 
     if boundary:
         labels = {spelling(name) for name in graph.nodes}
-        clash  = {spelling(var) for var in graph.graph.boundary_inputs + graph.graph.boundary_outputs} & labels
+        clash  = {spelling(var) for var in dependencies(graph).boundary_inputs + dependencies(graph).boundary_outputs} & labels
         if clash:
             raise ValueError(
                 f'boundary variable(s) {sorted(clash)} are written the same as a node; '
                 f'they cannot both be drawn'
             )
-        for var in graph.graph.boundary_inputs:
+        for var in dependencies(graph).boundary_inputs:
             g.add_node(var, kind='free', node=None)
-        for var in graph.graph.boundary_outputs:
+        for var in dependencies(graph).boundary_outputs:
             g.add_node(var, kind='sink', node=None)
 
     for name in graph.nodes:
@@ -92,7 +92,7 @@ def networkx_graph(graph: NestingGraph, *, boundary: bool = False) -> nx.DiGraph
 
     if boundary:
         # One edge per sink, never merged: a sink vertex *is* one variable.
-        for var in graph.graph.boundary_outputs:
+        for var in dependencies(graph).boundary_outputs:
             g.add_edge(owner[var], var, vars=(var,))
     return g
 
@@ -250,7 +250,7 @@ def layered_pos(g: nx.DiGraph, *, horizontal: bool = True, sweeps: int = 4) -> d
 
 
 def draw(
-    graph            : NestingGraph | ExecutableGraph | Plan | nx.DiGraph,
+    graph            : Graph | Plan | nx.DiGraph,
     ax               = None,
     *,
     boundary         : bool = True,
@@ -266,7 +266,7 @@ def draw(
     formatter        : Formatter = PlainFormat(),
 ):
     '''
-    Draw a `NestingGraph`, a `Plan`, a proof (each as `graph_drawn` reads it) or an
+    Draw a `Graph`, a `Plan`, a proof (each as `graph_drawn` reads it) or an
     already-built `nx.DiGraph` onto a matplotlib axis (a new one if `ax` is `None`);
     returns the axis.
 
@@ -361,7 +361,7 @@ def draw(
 
 
 def _dot_source(g: nx.DiGraph, *, rankdir: str, formatter: Formatter,
-                style: 'Style | str' = TERRACOTTA, nesting: NestingGraph | None = None,
+                style: 'Style | str' = TERRACOTTA, nesting: Graph | None = None,
                 font: str | None = None, font_size: int = 10, edge_font_size: int = 9,
                 nodesep: float = 0.35, ranksep: float = 0.6, node_margin: str = '0.14,0.08',
                 margin: float | None = None) -> tuple[str, dict[str, object]]:
@@ -426,7 +426,7 @@ def _dot_source(g: nx.DiGraph, *, rankdir: str, formatter: Formatter,
     return '\n'.join(lines), ids
 
 
-def _clusters(graph: NestingGraph, g: nx.DiGraph, vertex, placed: set,
+def _clusters(graph: Graph, g: nx.DiGraph, vertex, placed: set,
               kinds: dict[str, Kind], sty: Style) -> list[str]:
     '''
     Every solve of `graph` as a `cluster`, nested as the solves nest: filled in its band,
@@ -471,7 +471,7 @@ def _clusters(graph: NestingGraph, g: nx.DiGraph, vertex, placed: set,
 
 
 def to_dot(
-    graph            : NestingGraph | ExecutableGraph | Plan | nx.DiGraph,
+    graph            : Graph | Plan | nx.DiGraph,
     *,
     boundary         : bool = True,
     collapse_boundary: bool = False,
@@ -521,7 +521,7 @@ def to_dot(
                        margin=margin)[0]
 
 
-def render(graph: NestingGraph | ExecutableGraph | Plan | nx.DiGraph, **kw):
+def render(graph: Graph | Plan | nx.DiGraph, **kw):
     '''
     `to_dot(graph, **kw)` as a `graphviz.Source`, which Jupyter displays inline as SVG.
     '''

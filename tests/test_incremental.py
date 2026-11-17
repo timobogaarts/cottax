@@ -1,6 +1,6 @@
 '''
 Construction by edits: what must stay true of a graph built by `Insert`, `Delete`, `Rewire` and
-`NestingGraph.subgraph` from an already-valid parent, against the same graph built whole.
+`Graph.subgraph` from an already-valid parent, against the same graph built whole.
 
 Every operation is pinned three ways -- the result equals the graph built the long way
 through the public constructor (warm or cold), every derived query agrees *in order*, and
@@ -15,7 +15,7 @@ from typing import Any, NamedTuple
 import pytest
 from jax.tree_util import GetAttrKey, SequenceKey
 
-from cottax.core import AbstractGraph, NestingGraph, Rename
+from cottax.core import Graph, Rename, Rules, WellFormed, dependencies, is_proved
 from cottax.core.plan import ComposedOp, GraphOp, Nest, Primitive, Rebind, StagedOp, Unnest
 from cottax.consumers.architectures import Combine
 from cottax.core.plan import Delete, Insert, Redefine
@@ -79,7 +79,7 @@ COND_NODE = COND(N('y1'))
 
 # ---------------------------------------------------------------- the fixture graphs
 
-def chain() -> NestingGraph:
+def chain() -> Graph:
     '''`.a -> .b -> .c`, bound out of order, so binding order is not dependency order.'''
     return graph_of(OrderedMap({
         N('c'): call([B], [Y]),
@@ -88,7 +88,7 @@ def chain() -> NestingGraph:
     }))
 
 
-def deep() -> NestingGraph:
+def deep() -> Graph:
     '''Nested paths, three keys deep, and one nested node name.'''
     return graph_of(OrderedMap({
         N('mesh'): source(MESH),
@@ -97,7 +97,7 @@ def deep() -> NestingGraph:
     }))
 
 
-def wide() -> NestingGraph:
+def wide() -> Graph:
     '''A node with several inputs and several outputs.'''
     return graph_of(OrderedMap({
         N('src')  : source(Z, M),
@@ -106,7 +106,7 @@ def wide() -> NestingGraph:
     }))
 
 
-def repeated() -> NestingGraph:
+def repeated() -> Graph:
     '''`fn(x, x)` is legitimate; `readers` de-duplicates it and `read` does too.'''
     return graph_of(OrderedMap({
         N('src')  : source(X),
@@ -115,7 +115,7 @@ def repeated() -> NestingGraph:
     }))
 
 
-def implicit() -> NestingGraph:
+def implicit() -> Graph:
     '''A problem inside a cycle: `.prob` owns `.u`, `.body` produces the residual.'''
     return graph_of(OrderedMap({
         N('z')   : source(Z),
@@ -125,7 +125,7 @@ def implicit() -> NestingGraph:
     }))
 
 
-def minted() -> NestingGraph:
+def minted() -> Graph:
     '''A cut already opened: `^copy.y1` guessed from outside, `^cond.y1` the comparison.'''
     return graph_of(OrderedMap({
         N('d1')  : call([Y2],          [Y1]),
@@ -139,16 +139,16 @@ def minted() -> NestingGraph:
 
 class Case(NamedTuple):
     id       : str
-    graph    : NestingGraph        # the parent, already valid
-    produced : NestingGraph        # what the operation made of it
-    expected : NestingGraph        # the same thing, built the long way
+    graph    : Graph        # the parent, already valid
+    produced : Graph        # what the operation made of it
+    expected : Graph        # the same thing, built the long way
 
 
-def op_case(id: str, graph: NestingGraph, op: Any, expected: NestingGraph) -> Case:
+def op_case(id: str, graph: Graph, op: Any, expected: Graph) -> Case:
     return Case(id, graph, op(graph), expected)
 
 
-def sub_case(id: str, graph: NestingGraph, keep, expected: NestingGraph) -> Case:
+def sub_case(id: str, graph: Graph, keep, expected: Graph) -> Case:
     return Case(id, graph, graph.subgraph(keep), expected)
 
 
@@ -389,12 +389,19 @@ QUERIES = ('nodes', 'owners', 'readers', 'owned_variables', 'read_variables',
 
 TUPLE_QUERIES = ('nodes', 'owned_variables', 'read_variables', 'variables', 'boundary_inputs', 'boundary_outputs')
 
+ON_THE_EDGES = {'owners', 'boundary_inputs', 'boundary_outputs'}
+'''The queries the dependency view answers; the rest are read off the stored graph.'''
 
-def ask_everything(g: NestingGraph) -> None:
+
+def ask(g: Graph, name: str):
+    return getattr(dependencies(g) if name in ON_THE_EDGES else g, name)
+
+
+def ask_everything(g: Graph) -> None:
     '''Answer every query, so every layer of cache is warm.'''
     for name in QUERIES:
-        getattr(g.graph, name)
-    g.graph.components, g.graph.is_acyclic, enclosers(g.definitions)
+        ask(g, name)
+    dependencies(g).components, dependencies(g).is_acyclic, enclosers(g.definitions)
 
 
 # ---------------------------------------------------------------- the result itself
@@ -402,7 +409,7 @@ def ask_everything(g: NestingGraph) -> None:
 @pytest.mark.parametrize('case', CASES, ids=IDS)
 def test_the_result_equals_the_graph_built_the_long_way(case):
     '''An incrementally built graph must be indistinguishable from the constructed one,
-    down to binding order -- `NestingGraph` equality is order-sensitive, and it must be --
+    down to binding order -- `Graph` equality is order-sensitive, and it must be --
     and stays so once every query has warmed its caches.'''
     assert case.produced == case.expected
     assert hash(case.produced) == hash(case.expected)
@@ -415,7 +422,7 @@ def test_every_derived_query_agrees_in_binding_order(case):
     '''Order is load-bearing everywhere in this package, so the tuple queries are
     compared as sequences and never as sets.'''
     for name in QUERIES:
-        got, exp = getattr(case.produced.graph, name), getattr(case.expected.graph, name)
+        got, exp = ask(case.produced, name), ask(case.expected, name)
         assert got == exp, name
         if name in TUPLE_QUERIES:
             assert isinstance(got, tuple) and list(got) == list(exp), name
@@ -523,20 +530,23 @@ def test_a_rewire_owning_inside_an_existing_read_is_refused():
 # ---------------------------------------------------------------- the induction
 
 '''
-Every primitive builds its graph through the checked constructors, so a rule a final adds,
-which no op can name, is asked of every result.
+`apply` keeps `WellFormed`: every result is proved it, once, so a rule it holds, which no op
+can name, is asked of every result.
 '''
 
-def _probe_asked_during(action) -> int:
-    '''How often a rule a final adds, on `AbstractGraph.checks`, runs during
-    `action`.'''
-    real  = AbstractGraph.checks
+def _probe_asked_during(action, graph) -> int:
+    '''How often `WellFormed` is asked of a graph other than `graph` during `action`.'''
+    real  = Rules.asked
     calls = []
-    AbstractGraph.checks = (lambda g: calls.append(1), *real)
+    def counting(self, g):
+        if self is WellFormed and g is not graph:
+            calls.append(1)
+        return real(self, g)
+    Rules.asked = counting
     try:
         action()
     finally:
-        AbstractGraph.checks = real
+        Rules.asked = real
     return len(calls)
 
 
@@ -551,7 +561,7 @@ EDITS = [
 @pytest.mark.parametrize('edit', EDITS)
 def test_a_rule_a_final_adds_is_asked_of_every_result(edit):
     graph = chain()
-    assert _probe_asked_during(lambda: edit(graph)) == 1
+    assert _probe_asked_during(lambda: edit(graph), graph) == 1
 
 
 PRIMITIVES = (Rebind, Nest, Unnest)
@@ -569,3 +579,16 @@ def test_every_op_is_a_primitive_or_composes_them():
     assert ours(GraphOp) == {Primitive, ComposedOp, StagedOp}
     assert ours(Primitive) == set(PRIMITIVES)
     assert ours(Rebind) == {Insert, Delete, Redefine, Combine}
+
+
+def test_an_op_keeps_the_graph_well_formed_and_says_so_where_it_breaks_it():
+    '''`apply` proves what it keeps of the graph and of the result: a second producer of a
+    place is refused by the op that binds it, not by whatever next reads an edge.
+    `keeps=None` keeps nothing, as an op inside a composed one does.'''
+    twice = Insert(OrderedMap({N('d'): source(Y)}))
+    with pytest.raises(ValueError, match='owned by both'):
+        twice.apply(chain())
+    kept = Insert(OrderedMap({N('d'): call([Y], [W])})).apply(chain())
+    assert is_proved(kept, WellFormed)
+    loose = twice.apply(chain(), keeps=None)
+    assert not is_proved(loose, WellFormed) and N('d') in loose

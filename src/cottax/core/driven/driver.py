@@ -74,7 +74,8 @@ class Driver[V: Place](Attachment[V]):
     '''
     The contract answering a condition node, and where each of its roles sits on that node.
     What it takes is read outside the node's cycle, what it reports owned outside; whether
-    the slots fit the node is asked by `violations_on`, a role's arity read off the node.
+    the slots fit the node is asked by `violations_on` -- the driven layer's rule
+    (`proof.check_driver_fits`) -- a role's arity read off the node.
     '''
 
     contract : DriverContract[V]

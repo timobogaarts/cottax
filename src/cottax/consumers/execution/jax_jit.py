@@ -13,11 +13,12 @@ import jax
 import numpy as np
 from jax.tree_util import tree_leaves
 
-from ...core import GraphWithValues, Label, NodeDefinition, Place, Violation
+from ...core import Label, Graph, NodeDefinition, NodeRules, Place, Rules, Violation, proved
 from ...core.frozen import Frozen, OrderedMap
-from ...core.realisation import implementation_of, is_implemented
-from .run import CallableGraph, blamed, check_callable, run
+from ...core.realisation import RealisedNodes, implementation_of, is_implemented
+from .run import CallableGraph, blamed, run
 from .refusals import BodyByIdentity, PartialBody, TraceFailed, Unhashable
+from .valued import GraphWithValues
 
 
 def check_hashable[N: Label, V: Place](name: N, node: NodeDefinition[V]
@@ -70,10 +71,12 @@ def check_reassembles[N: Label, V: Place](name: N, node: NodeDefinition[V]
         yield PartialBody(name, implementation)
 
 
-class JitGraph[N: Label, V: Place](CallableGraph[N, V]):
-    '''A callable graph whose every node is a jit cache key.'''
+JitKeyNodes = NodeRules('JitKeyNodes', (check_hashable, check_reassembles), implies=(RealisedNodes,))
+'''Every node a jit cache key: it hashes, and what runs it compares by value. Asks only that
+what runs it is there, not that it is callable.'''
 
-    checks_node = (check_hashable, check_reassembles)
+JitGraph = Rules('JitGraph', implies=(CallableGraph, JitKeyNodes))
+'''A callable graph whose every node is a jit cache key.'''
 
 
 # ============================================================================ traced
@@ -83,10 +86,6 @@ def _shaped(leaf: Any) -> Any:
     if isinstance(leaf, (jax.Array, np.ndarray, np.generic)):
         return jax.ShapeDtypeStruct(np.shape(leaf), leaf.dtype)
     return leaf
-
-
-def check_traced_callable(traced: 'Traced') -> Iterator[Violation]:
-    yield from check_callable(traced.valued)
 
 
 def check_traces(traced: 'Traced') -> Iterator[Violation]:
@@ -110,9 +109,9 @@ class Traced[N: Label, V: Place](Frozen):
         traced.shapes, traced.jaxpr
     '''
 
-    valued : GraphWithValues[CallableGraph[N, V], V]
+    valued : GraphWithValues[Graph[N, V], V]
 
-    checks = (check_traced_callable, check_traces)
+    checks = (proved(CallableGraph, at='valued.graph'), check_traces)
 
     @functools.cached_property
     def _traced(self) -> tuple[Any, OrderedMap[V, Any]]:

@@ -4,7 +4,7 @@ import dataclasses
 from collections.abc import Iterator, Mapping
 
 from ..frozen import AbstractVar, Violation
-from .definition import NodeDefinition, Renaming, attributes_text, relabelled
+from .definition import NodeDefinition, Renaming, relabelled
 from .places import Label, Place, overlaps
 
 # ---------------------------------------------------------------- the two branches
@@ -35,13 +35,12 @@ class FunctionalNode[V: Place](NodeDefinition[V]):
 
     def __repr__(self) -> str:
         return (f'FunctionalNode({", ".join(str(v) for v in self.reads)} -> '
-                f'{", ".join(str(v) for v in self.owns)}){attributes_text(self)}')
+                f'{", ".join(str(v) for v in self.owns)})')
 
 
 def check_states_something(c: 'AbstractConditionalNode') -> Iterator[Violation]:
     '''A condition owns or reads something inside: one with neither has no edges to a
-    cycle, and is in no graph's structure. It reads only the four names, so whatever has them
-    may ask it (`conditional.Condition` does).
+    cycle, and is in no graph's structure. 
 
     O^in_n ≠ ∅  or  I^in_n ≠ ∅  ∀ n ∊ N_C
     '''

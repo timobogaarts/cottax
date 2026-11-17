@@ -92,20 +92,21 @@ def _is_answer_module(module: str) -> bool:
 
 MATHS = ('cottax.core.maths', 'cottax.core.frozen')
 MINTS = (*MATHS, 'cottax.core.mints')
+ANSWERS = (*MATHS, 'cottax.core.answers')
 PLAN = (*MATHS, 'cottax.core.plan')
-DOOR = (*MINTS, 'cottax.core.plan', 'cottax.core.conditional')
-'''What the front door `cottax.core` gives: the maths, the mints over its places, the plan
+DOOR = (*MINTS, 'cottax.core.answers', 'cottax.core.plan', 'cottax.core.conditional')
+'''What the front door `cottax.core` gives: the maths, the mints over its places, the answers for a graph, the plan
 over the maths, the condition node over the plan, and `frozen`.'''
-DEFINING = ('cottax.core.maths', 'cottax.core.mints', 'cottax.core.plan', 'cottax.core.conditional')
+DEFINING = ('cottax.core.maths', 'cottax.core.mints', 'cottax.core.answers', 'cottax.core.plan', 'cottax.core.conditional')
 '''The layers whose names the front door gives, and whose refusal kinds `refusal_kinds` holds.'''
 CORE = (('cottax.core.maths', MATHS), ('cottax.core.frozen', ('cottax.core.frozen',)),
-        ('cottax.core.mints', MINTS), ('cottax.core.plan', PLAN),
+        ('cottax.core.mints', MINTS), ('cottax.core.answers', ANSWERS), ('cottax.core.plan', PLAN),
         ('cottax.core.conditional', (*PLAN, 'cottax.core.conditional')),
         ('cottax.core.refusal_kinds', (*DOOR, 'cottax.core.refusal_kinds')),
         ('cottax.core.driven', (*DOOR, 'cottax.core.driven')),
         ('cottax.core.realisation', (*DOOR, 'cottax.core.driven', 'cottax.core.realisation')))
-'''Each layer of core and what of cottax it may import, in order: the maths; the mints and
-the plan, each over it alone; the condition node; `refusals`, their kinds. `driven` and `realisation` may also take names from
+'''Each layer of core and what of cottax it may import, in order: the maths; the mints, the
+answers and the plan, each over it alone; the condition node; `refusals`, their kinds. `driven` and `realisation` may also take names from
 the front door `cottax.core`, which is `DOOR`.'''
 
 
@@ -143,6 +144,55 @@ def test_core_refusals_holds_every_kind_the_maths_defines():
                if isinstance(v, type) and issubclass(v, Violation) and v.__module__ == m}
     assert sorted(refusals.__all__) == sorted(defined)
     assert {n: getattr(refusals, n) for n in refusals.__all__} == defined
+
+
+REMEMBERED = {
+    ('cottax.core.maths.rules', 'closure'),
+    ('cottax.core.maths.rules', 'proofs'),
+    ('cottax.core.maths.dependencies', 'dependencies'),
+    ('cottax.core.maths.nesting', 'nesting'),
+    ('cottax.core.maths.steps', 'steps'),
+}
+'''Every function `remembered` on a value, by module: what a value keeps besides its fields
+and its own `cached_property`s, written from outside its class. One added is added here.'''
+
+
+def _remembered_uses(tree: ast.AST) -> tuple[set[str], list[str]]:
+    '''The functions `tree` decorates with a bare `@remembered`, and every other use of the
+    name: a call, an alias on import, or the name passed or bound anywhere else.'''
+    decorated, other = set(), []
+    plain = set()                                   # the decorator nodes themselves
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for d in node.decorator_list:
+                if isinstance(d, ast.Name) and d.id == 'remembered':
+                    decorated.add(node.name)
+                    plain.add(id(d))
+        elif isinstance(node, ast.alias) and node.name == 'remembered' and node.asname:
+            other.append(f'imported as {node.asname}')
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and node.id == 'remembered' and id(node) not in plain:
+            other.append(f'line {node.lineno}')
+        elif isinstance(node, ast.Attribute) and node.attr == 'remembered':
+            other.append(f'line {node.lineno}: .remembered')
+    return decorated, other
+
+
+def test_what_is_remembered_on_a_value_is_listed_in_one_place():
+    '''`remembered` is used as a bare decorator on a `def` and nothing else -- no call, no
+    alias, no attribute access -- so every use is seen here, and every use is listed.'''
+    src = pathlib.Path(__file__).parent.parent / 'src'
+    found, misuse = set(), {}
+    for path in src.rglob('*.py'):
+        module = '.'.join(path.relative_to(src).with_suffix('').parts).removesuffix('.__init__')
+        if module == 'cottax.core.frozen.base':
+            continue                                # where it is defined
+        decorated, other = _remembered_uses(ast.parse(path.read_text()))
+        found |= {(module, name) for name in decorated}
+        if other:
+            misuse[module] = other
+    assert misuse == {}
+    assert found == REMEMBERED
 
 
 def test_a_name_the_core_door_gives_is_imported_from_it():

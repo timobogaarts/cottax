@@ -6,40 +6,44 @@ node (`conditional/`): a condition node is read through `AbstractConditionalNode
 Dependency:
 
 places      frozen/          (places: Place, Label, PlaceToPlace, the prefix order;
- ||          ||               frozen/: the frozen values, and what a check yields)
+ ||          ||               frozen/: the frozen values, what a check yields, `remembered`)
  \/          \/
 definition <-'               (NodeDefinition; Attribute, what a node carries opaquely)
- ||-----------
- \/          \/
-kinds       graph            (kinds: FunctionalNode; AbstractConditionalNode, what every rule
- ||          ||               reads of a condition node: its four names;
- ||          ||               graph: the bindings and the theory over them; no kind named)
- \/          \/
-nesting <----'               (has a graph, and the nesting over it; `contract`, which builds
-                              a `FunctionalNode` per block; ProvedGraph, a proof's base)
- ||-------> dispatch         (the one `Answer` for a graph's places, or its node names)
- ||-------> valued           (GraphWithValues: a proved graph and a value at each input)
  ||
  \/
-executable                   (the structural proof -- cycles, problems, and every
- ||                           problem's edges against its cycle)
+kinds                        (FunctionalNode; AbstractConditionalNode, what every rule reads
+ ||                           of a condition node: its four names)
  \/
-steps                        (SteppedExecutableGraph: the steps, every interior the same
-                              proof; a level below it checks each node)
+graph                        (Graph, the one stored graph: definitions and `within`, checked
+ ||                           at nothing; what is read off the bindings; the nesting's rules)
+ \/
+rules                        (Rules, NodeRules: what is proved of a graph, as values;
+ ||                           unproved / prove / proved, a set remembered on the graph)
+ \/
+dependencies                 (WellFormed, the nesting's and the bindings' rules; `dependencies(graph)`, the
+ ||                           view of owners, edges, components, order, reachability)
+ \/
+nesting                      (`nesting(graph)`, the view of a problem's cycle and interior;
+ ||                           `contract`)
+ \/
+executable                   (the structural proof, a group implying WellFormed: cycles,
+ ||                           problems, and every problem's edges against its cycle; outline)
+ \/
+steps                        (steps(graph): Run and Solve, every interior proved
+                              executable and holding the graph's node groups)
 
 '''
 
 from .places import (
-    Label, Place, PlaceToPlace, comparable, comparables_in, prefixes,
+    Label, Place, PlaceToPlace, comparable, comparables_in,
 )
 from .definition import (
-    Attribute, NodeDefinition, Renaming, relabelled, misfits, with_attributes,
-    without_attribute,
+    Attribute, NodeDefinition, Renaming, relabelled,
 )
 from .kinds import AbstractConditionalNode, FunctionalNode, is_encloser, enclosers
-from .graph import AbstractGraph
-from .nesting import NestingGraph, ProvedGraph
-from .dispatch import answer_for_labels, answer_for_places
-from .valued import GraphWithValues
-from .executable import ExecutableGraph, body_of
-from .steps import Run, Solve, Step, SteppedExecutableGraph
+from .graph import Graph
+from .rules import NodeRules, Rules, is_proved, proved, proves, prove, unproved
+from .dependencies import Dependencies, WellFormed, dependencies
+from .nesting import Nesting, nesting
+from .executable import ExecutableGraph, body_of, outline
+from .steps import Run, Solve, Step, steps

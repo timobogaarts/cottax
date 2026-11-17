@@ -4,6 +4,7 @@ formulation that reads back equal. Each export is a value: its checks whether it
 writes, `data` what it writes.
 '''
 
+from toy_places import Segmented
 import dataclasses
 import json
 import pickle
@@ -25,7 +26,7 @@ from cottax.consumers.json.interface import PlaceCodec
 from cottax.consumers.json.refusals import SpelledTwice
 from cottax.consumers.json.refusals import UnknownKind, Unexportable
 from cottax.core.frozen.answer import Unanswered
-from cottax.core.maths.dispatch import NothingToAsk
+from cottax.core.answers import NothingToAsk
 import cottax.assemblies.jax as cx
 from cottax.assemblies.jax import N as NAME, flat
 from cottax.relational.consumers.execution.jax_solvers import Newton
@@ -215,7 +216,7 @@ def test_the_codecs_are_the_ones_registered_for_the_places_and_the_node_names():
     assert (written(g)['places'], written(g)['labels']) == ('pytree', 'pytree')
 
 
-class Word(str):
+class Word(str, Segmented):
     '''A place no codec is registered for: its class names it.'''
 
     @property
@@ -271,7 +272,7 @@ def test_a_place_the_codec_found_cannot_write_is_refused_by_name():
 
 
 @dataclasses.dataclass(frozen=True)
-class Lookalike:
+class Lookalike(Segmented):
     '''Not a `VarPath` or a `NodePath`, with the segments of one.'''
     segments : tuple
 

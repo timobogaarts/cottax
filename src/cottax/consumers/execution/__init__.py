@@ -12,7 +12,7 @@ interface      refusals          (interface: what a feature registers, of a plac
 run <-----------'                 refusals: every refusal kind)
  ||                              (run: CallableGraph over realisation.RealisedGraph, every
  ||                               implementation callable, a driver's one of it; run,
- ||                               refusing a graph proved below a CallableGraph; walk, its
+ ||                               proving the graph a CallableGraph; walk, its
  ||                               loop over the steps with an Env and a Solve handed to an
  ||                               AtSolve; InteriorConditionMap,
  ||                               a problem posed by its interior)
@@ -38,14 +38,15 @@ part <-- declaration.interface   (part: Driving, `drive` as a surface's method, 
                                   and places the fields it holds; Running, a model valued and
                                   run by name or from a caller's structures)
 
-Imported by name, not here: `jax_jit`; `run`'s `blamed` and `check_callable`.
+Imported by name, not here: `jax_jit`; `run`'s `blamed`.
 
 '''
 
+from .valued import GraphWithValues
 from .run import CallableGraph, run
 from .structures import Assessed, Inputs, read_from, slots, unasked, unvalued, valued_once, write_back, write_role
 from .drive import Drive
 from .part import Driving, Results, Running
 
-__all__ = ['CallableGraph', 'run', 'Inputs', 'read_from', 'slots', 'unasked', 'unvalued', 'valued_once', 'write_back', 'write_role', 'Drive', 'Driving',
+__all__ = ['GraphWithValues', 'CallableGraph', 'run', 'Inputs', 'read_from', 'slots', 'unasked', 'unvalued', 'valued_once', 'write_back', 'write_role', 'Drive', 'Driving',
            'Running', 'Results', 'Assessed']

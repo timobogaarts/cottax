@@ -6,6 +6,9 @@ coupled to it from the start) or by the contract handed to `Drive`. Declared thr
 surface joining the vocabularies, as `tests/test_ode.py` is; run with `-s` for the numbers.
 '''
 
+import dataclasses
+from cottax.core import is_proved, prove, unproved, dependencies
+
 import math
 import re
 
@@ -17,7 +20,7 @@ import pytest
 import cottax.assemblies.jax as cx
 import purposes
 
-from cottax.core import ConditionalNode, ExecutableGraph, GraphWithValues
+from cottax.core import ConditionalNode, ExecutableGraph
 from cottax.consumers.architectures.cut_rules import GaussSeidel
 from cottax.consumers.architectures import Combine
 from cottax.core.frozen import OrderedMap, answer, choice, violations
@@ -43,6 +46,7 @@ from cottax.ode.contracts import (
 )
 from cottax.ode.consumers.declaration import NotAState, Rate, RecordUnpaired
 from cottax.ode.consumers.visualization import INTEGRATE
+from cottax.consumers.execution import GraphWithValues
 import cottax.ode.consumers  # noqa: F401  registers its answers
 import cottax.pytree.consumers  # noqa: F401  a tree's structure
 
@@ -81,7 +85,9 @@ def per_problem(purpose, at: str) -> VarPath:
 
 
 def driven(*models, implementation, **kw) -> CallableGraph:
-    return CallableGraph((Plan(declare(*models).graph) + drive(implementation, **kw)).graph)
+    built = (Plan(declare(*models).graph) + drive(implementation, **kw)).graph
+    prove(built, CallableGraph)
+    return built
 
 
 def values(**by_name) -> OrderedMap:
@@ -140,10 +146,9 @@ def test_a_history_declares_the_ode_driven_its_initial_values_and_span_on_the_co
 def test_a_renamed_ode_keeps_its_driver_and_what_it_carries():
     '''`OdeCondition` rebuilds itself from scratch when relabelled; the driver's places are
     renamed alike and the attributes stay, since `relabel` is the node's.'''
-    from cottax.core import Attribute, with_attributes
-    class Note(Attribute): ...
-    ode   = with_attributes(declare(oscillator).graph[problem('oscillator')],
-                            OrderedMap({Note: 'n'}))
+    class Note: ...
+    ode   = dataclasses.replace(declare(oscillator).graph[problem('oscillator')],
+                            attributes=OrderedMap({Note: 'n'}))
     moved = ode.relabel({s.place('times'): s.place('ts'), s.place('x0'): s.place('x_init')})
     assert moved.driver.data == ((s.place('ts'),),) and moved.attributes == ode.attributes
     assert moved.condition.reads_outside == (s.place('x_init'), s.place('v0'), s.place('span'))
@@ -251,11 +256,12 @@ def remembering(y, ys):
 
 def test_4_the_history_couples_its_reader_to_the_ode_from_the_declaration():
     g = declare(decay, area).graph
-    print(f'\n[4] area reads from {[str(n) for n in g.graph.ancestors((node("area"),))]}')
-    assert g.graph.ancestors((node('area'),)) == (node('decay'), problem('decay'), node('area'))
-    assert g.graph.owners[s.place('xs')] == problem('decay')
-    assert ExecutableGraph(g).graph == g and DrivenGraph(g).graph == g
-    kinds = [type(v).__name__ for v in violations(ExecutableGraph, declare(remembering).graph)]
+    print(f'\n[4] area reads from {[str(n) for n in dependencies(g).ancestors((node("area"),))]}')
+    assert dependencies(g).ancestors((node('area'),)) == (node('decay'), problem('decay'), node('area'))
+    assert dependencies(g).owners[s.place('xs')] == problem('decay')
+    prove(g, DrivenGraph)
+    assert is_proved(g, ExecutableGraph)
+    kinds = [type(v).__name__ for v in unproved(declare(remembering).graph, ExecutableGraph)]
     print(f'    a rate reading its own history: {kinds}')
     assert kinds == ['OwnReadInsideCycle']
 
@@ -280,11 +286,11 @@ def test_5_an_architecture_first_then_drive_fits_the_rate_to_the_history(final):
     from cottax.relational.consumers.execution.jax_solvers import BFGS
     plan = Plan(fitted().graph) + final(GaussSeidel(), CLOSING, node('opt'))
     assert dict(plan.graph.within) == {problem('decay'): node('opt')}
-    ExecutableGraph(plan.graph)
+    prove(plan.graph, ExecutableGraph)
     plan += drive(BFGS(rtol=1e-10, atol=1e-10), diffrax_run())
     ts = jnp.linspace(0.0, 2.0, 9)
     state = {'k': 0.1, 'x0': 1.0, 'span': (0.0, 2.0), 'times': ts, 'data': jnp.exp(-0.7 * ts)}
-    tree = s.run(CallableGraph(plan.graph), read_from={cx.Inputs: state, Start: state})
+    tree = s.run(plan.graph, read_from={cx.Inputs: state, Start: state})
     print(f'\n[5] {final.__name__}: k={float(tree["k"])!r} (0.7), f={float(tree["f"]):.2e}')
     assert tree['k'] == pytest.approx(0.7, rel=1e-6)
 
@@ -307,9 +313,10 @@ def test_6_the_flagged_contract_handed_to_drive_or_assigned_by_hand():
                          s.place(cx.span('x')): (0.0, 2.0), per_problem(cx.times, 'bare'): ts})
     by_drive = driven(bare, area_of_bare, implementation=diffrax_run(), contracts=(RECORDING,))
     at, g = problem('bare'), declare(bare, area_of_bare).graph
-    by_hand = CallableGraph((Plan(g) + Assign(at, RECORDING, *s.role_places(
-        at, g[at].owns_inside, RECORDING)) + Implement(OrderedMap({at: diffrax_run()}))).graph)
-    assert by_drive.graph == by_hand.graph
+    by_hand = (Plan(g) + Assign(at, RECORDING, *s.role_places(
+        at, g[at].owns_inside, RECORDING)) + Implement(OrderedMap({at: diffrax_run()}))).graph
+    prove(by_hand, CallableGraph)
+    assert by_drive == by_hand
     out = run(GraphWithValues(by_drive, inputs))
     exact = (1 - math.exp(-1.0)) / 0.5
     print(f'\n[6] area={float(out[s.place("area")])!r}, exact {exact!r}')
@@ -386,9 +393,9 @@ class Bisection(DriverImplementation[RootFinder]):
 
 def test_8_an_implementation_without_the_report_is_refused_by_the_proof():
     g = (Plan(declare(decay).graph) + Drive((EndOnly(10),), (), s.role_places)).graph
-    assert [type(v) for v in violations(CallableGraph, g)] == [ReportUnavailable]
-    assert CallableGraph((Plan(declare(bare).graph)
-                          + Drive((EndOnly(10),), ODE_CONTRACTS, s.role_places)).graph)
+    assert [type(v) for v in unproved(g, CallableGraph)] == [ReportUnavailable]
+    prove((Plan(declare(bare).graph)
+           + Drive((EndOnly(10),), ODE_CONTRACTS, s.role_places)).graph, CallableGraph)
 
 
 def test_8_drive_on_a_contracted_problem_nothing_given_implements_is_refused():
@@ -431,7 +438,7 @@ def test_9_two_odes_recording_alike_join_as_one_driven_problem():
     assert g[at].driver.data == ((s.place('times'),),)
     assert g[at].driver.reports == ((s.place('xs'), s.place('vs')),)
     ts = jnp.linspace(0.0, 1.5, 7)
-    out = run(GraphWithValues(CallableGraph((Plan(g) + drive(diffrax_run())).graph), values(
+    out = run(GraphWithValues((Plan(g) + drive(diffrax_run())).graph, values(
         w=2.0, x0=1.0, v0=0.0, span=(0.0, 1.5), times=ts)))
     assert jnp.allclose(out[s.place('xs')], jnp.cos(2 * ts), atol=1e-8)
     assert jnp.allclose(out[s.place('vs')], -2 * jnp.sin(2 * ts), atol=1e-8)

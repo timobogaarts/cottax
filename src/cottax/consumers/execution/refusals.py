@@ -105,13 +105,6 @@ class TraceFailed(Violation):
                 'trace, or shapes that do not match')
 
 
-class ProvedBelow(Violation):
-    proof : str
-    error    = TypeError
-    template = ('a run takes a `CallableGraph`, and the graph is a {proof}: prove it a '
-                '`CallableGraph`')
-
-
 class Unhashable(Violation):
     node   : object
     kind   : str
@@ -212,11 +205,33 @@ class NoneTakes(Violation):
     template = '{role} by structure: no driver of the graph takes or reports a {role}'
 
 
+# ---------------------------------------------------------------- the values a run is handed
+
+class InputMissing(Violation):
+    places : tuple
+    error    = KeyError
+    template = 'no value given at {places!r}, which the graph reads and nothing in it computes'
+
+
+class OwnedGiven(Violation):
+    places : tuple
+    error    = ValueError
+    template = ('a value given at {places!r}, which the graph computes: an owned place only '
+                'ever means the value the run computes')
+
+
+class NotAPlace(Violation):
+    places : tuple
+    error    = KeyError
+    template = 'a value given at {places!r}, which the graph neither reads nor computes'
+
+
 __all__ = [
+    'InputMissing', 'NotAPlace', 'OwnedGiven',
     'ForeignPlace', 'NotCallable', 'NotADriverImplementation',
     'ImplementsAnother', 'DataMissing', 'ReportUnavailable', 'NoneAccepts', 'NoneImplements',
     'NoDefaultContract',
-    'ReturnedUnlike', 'TraceFailed', 'ProvedBelow', 'Unhashable',
+    'ReturnedUnlike', 'TraceFailed', 'Unhashable',
     'BodyByIdentity', 'PartialBody',
     'NotDriverData', 'NotAnUnknown', 'TakesNoValue', 'NotAnInput', 'ValuedTwice', 'Unvalued', 'NoSlotFor', 'NoRoleAt',
     'NoneTakes',

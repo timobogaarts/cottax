@@ -6,6 +6,8 @@ kinds with `declares` and a contract cottax does not ship, joined to the relatio
 conventions reading a term their way.
 '''
 
+from cottax.core import prove
+
 import dataclasses
 import inspect
 import math
@@ -13,7 +15,7 @@ import pydoc
 
 import pytest
 
-from cottax.core import ConditionalNode, GraphWithValues, Mint, minted
+from cottax.core import ConditionalNode,  Mint, minted
 import purposes
 from cottax.core.frozen import OrderedMap, answer, choice
 from cottax.core.plan import Plan
@@ -46,6 +48,7 @@ from cottax.relational import (
 )
 from cottax.consumers.visualization.kinds import problem_type_of
 from test_answers import T, Tok, Toks
+from cottax.consumers.execution import GraphWithValues
 
 
 def toy(*parts, conventions=Shipped()):
@@ -289,7 +292,7 @@ def test_a_second_vocabulary_joins_and_its_problems_are_driven_by_its_own_contra
     assert assigned[0].data == ((T('^lo.x'),), (T('^hi.x'),))
 
     graph = (Plan(d.graph) + drive).graph
-    out = run(GraphWithValues(CallableGraph(graph), OrderedMap({
+    out = run(GraphWithValues(graph, OrderedMap({
         T('k'): 2.0, T('^lo.x'): 0.0, T('^hi.x'): 2.0, T('^start.u'): 1.0})))
     assert math.isclose(out[T('x')], math.sqrt(2.0), rel_tol=1e-12)
     assert math.isclose(out[T('u')], math.sqrt(2.0), rel_tol=1e-12)

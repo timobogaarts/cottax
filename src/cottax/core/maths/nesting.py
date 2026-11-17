@@ -1,72 +1,25 @@
 '''
-Nesting graph: Graph + nesting forest
+The nesting read with the edges: the cycle a problem is on, what one iteration of it runs,
+blocks contracted into boxes. A view of a well-formed graph, as `dependencies` is.
 '''
 
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Iterator
 from dataclasses import replace
-from typing import Self
+
 from functools import cached_property
 
-from ..frozen import Frozen, OrderedMap, Violation, first
+from ..frozen import Frozen, OrderedMap, Violation, first, remembered
 from .definition import NodeDefinition
-from .graph import AbstractGraph
-from .kinds import FunctionalNode, is_encloser, enclosers
+from .dependencies import WellFormed, dependencies
+from .graph import Graph
+from .kinds import FunctionalNode, is_encloser
 from .places import Label, Place
+from .rules import prove, proved
 
 
-# ---------------------------------------------------------------- the rules: what a nesting obeys
+# ---------------------------------------------------------------- the rules
 
-def check_nesting_ends_bound(g: 'NestingGraph') -> Iterator[Violation]:
-    '''Check the within edge has both nodes in the graph.
-
-    W ⊆ N × N
-    '''
-    for inner, outer in g.within.items():
-        if inner not in g.definitions or outer not in g.definitions:
-            yield Unbound(inner, outer)
-
-
-def check_nesting_ends_are_enclosers(g: 'NestingGraph') -> Iterator[Violation]:
-    '''
-    Nesting can only be between enclosers.
-
-    W ⊆ N_P × N_P
-    '''
-    for inner, outer in g.within.items():
-        if missing := tuple(e for e in (inner, outer)
-                            if e in g.definitions and not is_encloser(g.definitions[e])):
-            yield NotAnEncloser(missing)
-
-
-def check_no_nesting_loops(g: 'NestingGraph') -> Iterator[Violation]:
-    '''
-    Nesting can not be looped: this would imply nesting within itself in some form.
-
-    (N_P, W) is a forest
-
-    Only the acyclicity is checked here: `within` is a mapping, so one outer per inner
-    ((n,m), (n,m') ∊ W ⟹ m = m') holds by construction, and acyclic with out-degree
-    at most one is a forest.
-    '''
-    seen : set = set()
-    for start in g.within:
-        if start in seen:
-            continue
-        chain : list = []
-        at = start
-        while at is not None and at not in seen:
-            if at in chain:
-                if g.within[at] == at:
-                    yield SelfNested(at)
-                else:
-                    yield NestingLoop(at, g.within[at], tuple(chain[chain.index(at):]))
-                break
-            chain.append(at)
-            at = g.within.get(at)
-        seen.update(chain)
-
-
-def check_nesting_ends_on_one_cycle(g: 'NestingGraph') -> Iterator[Violation]:
+def check_nesting_ends_on_one_cycle(g: 'Graph') -> Iterator[Violation]:
     '''
     Both ends of a nesting are on one cycle: the inner lies in the outer's cycle. The
     inner's output is required for the outer's inputs and vice-versa -- otherwise the
@@ -77,19 +30,19 @@ def check_nesting_ends_on_one_cycle(g: 'NestingGraph') -> Iterator[Violation]:
 
     A pair with an end unbound or not an encloser is skipped: those are other rules'.
 
-    Not a rule of `NestingGraph`: nothing that reads a nesting needs it, so a plan may cut
+    Not a rule of `Graph`: nothing that reads a nesting needs it, so a plan may cut
     a nested pair apart and `Unnest` it after. `ExecutableGraph` asks it.
     '''
     for inner, outer in g.within.items():
         if not all(e in g.definitions and is_encloser(g.definitions[e]) for e in (inner, outer)):
             continue
-        if inner not in g.cycle_of(outer):
+        if inner not in nesting(g).cycle_of(outer):
             yield Unreachable(inner, outer)
 
 
-def check_blocks_partition(g: 'NestingGraph', blocks: Iterable[Iterable]) -> Iterator[Violation]:
+def check_blocks_partition(g: 'Graph', blocks: Iterable[Iterable]) -> Iterator[Violation]:
     '''Each block is at least two nodes, and no node is in two.'''
-    position, seen, twice = g.graph._position, set(), {}
+    position, seen, twice = g._position, set(), {}
     for block in blocks:
         if len(set(block)) < 2:
             yield BlockTooSmall(tuple(block))
@@ -101,77 +54,29 @@ def check_blocks_partition(g: 'NestingGraph', blocks: Iterable[Iterable]) -> Ite
         yield NodeInTwoBlocks(tuple(sorted(twice, key=position.__getitem__)))
 
 
-def check_blocks_own_something(g: 'NestingGraph', blocks: Iterable[Iterable]) -> Iterator[Violation]:
+def check_blocks_own_something(g: 'Graph', blocks: Iterable[Iterable]) -> Iterator[Violation]:
     '''A block contracts into a computation, so it owns something.'''
     for block in blocks:
         if not any(g.definitions[n].owns for n in block):
             yield BoxOwnsNothing(tuple(block))
 
 
-# ---------------------------------------------------------------- the graph, nested
+# ---------------------------------------------------------------- the view
 
-class NestingGraph[N: Label, V: Place](Frozen):
+class Nesting[N: Label, V: Place](Frozen):
     '''
-    A graph plus nesting decision: `within`, inner -> outer
+    The cycles of a well-formed graph's problems, read with the nesting. Built from a graph
+    proved `WellFormed`: getting the view is the proof.
     '''
 
-    graph  : AbstractGraph[N, V]
-    within : OrderedMap[N, N]
-    checks = (check_nesting_ends_bound, check_no_nesting_loops,
-              check_nesting_ends_are_enclosers)
-    '''What makes a nesting readable.'''
+    graph : Graph[N, V]
 
-    # ------------------------------------------------------------ the bindings, its own
-
-    @property
-    def definitions(self) -> Mapping[N, NodeDefinition[V]]:
-        return self.graph.definitions
-
-    @property
-    def nodes(self) -> tuple[N, ...]:
-        return self.graph.nodes
-
-    def __getitem__(self, name: N) -> NodeDefinition[V]:
-        return self.graph[name]
-
-    __iter__ = None
-    '''Not iterable: `nodes` is the sequence and `definitions` the mapping.'''
-
-    def __contains__(self, name: N) -> bool:
-        return name in self.graph
-
-    # ------------------------------------------------------------ the nesting
+    checks = (proved(WellFormed, at='graph'),)
 
     @cached_property
-    def enclosers(self) -> tuple[N, ...]:
-        '''The enclosers, in binding order: the ends a nesting pair may have.'''
-        return enclosers(self.definitions)
-
-    @cached_property
-    def outermost_enclosers(self) -> tuple[N, ...]:
-        '''Enclosers that are not nested in any other'''
-        return tuple(s for s in self.enclosers if self.within.get(s) is None)
-
-    def enclosing(self, problem: N) -> tuple[N, ...]:
-        '''The enclosers `problem` is nested in transitively: A(q), every encloser with a
-        path from q in (N_P, W).'''
-
-        if problem not in self.definitions:
-            raise KeyError(f'not a node of this graph: {problem!r}')
-        if not is_encloser(self.definitions[problem]):
-            raise ValueError(f'{problem!r} is not a problem, so it is nested in nothing and '
-                             f'iterates nothing -- enclosing, cycle_of and interior are a problem\'s')
-        chain : list[N] = []
-        at = self.within.get(problem)
-        while at is not None and at != problem and at not in chain:
-            chain.append(at)
-            at = self.within.get(at)
-        return tuple(chain)
-
-    @cached_property
-    def _levels(self) -> dict[frozenset, AbstractGraph]:
-        '''The graph with each set of enclosers taken out, built once per set: the
-        enclosers nested alike share their level.'''
+    def _levels(self) -> dict[frozenset, Graph[N, V]]:
+        '''The graph with each set of enclosers taken out, built once per set: the enclosers
+        nested alike share their level, and its dependencies.'''
         return {}
 
     def cycle_of(self, problem: N) -> tuple[N, ...]:
@@ -181,104 +86,59 @@ class NestingGraph[N: Label, V: Place](Frozen):
 
         S_p = {k ∊ N \\ A(p) : k ~ p in N \\ A(p)}   (~ in the induced subgraph, not in G)
         '''
-        out = frozenset(self.enclosing(problem))
+        out = frozenset(self.graph.enclosing(problem))
         if (level := self._levels.get(out)) is None:
-            level = self._levels[out] = self.graph.subgraph(set(self.nodes) - out)
-        below = set(level.descendants([problem]))
-        return tuple(n for n in level.ancestors([problem]) if n in below)
+            level = self._levels[out] = self.graph.subgraph(set(self.graph.nodes) - out)
+        deps  = dependencies(level)
+        below = set(deps.descendants([problem]))
+        return tuple(n for n in deps.ancestors([problem]) if n in below)
 
-    def interior(self, problem: N) -> Self:
+    def interior(self, problem: N) -> Graph[N, V]:
         '''
-        What one iteration of `problem` runs: its cycle with it taken out.
+        What one iteration of `problem` runs: its cycle with it taken out. A value of its
+        own: what is proved of it is asked of it.
         '''
-        return self.subgraph(n for n in self.cycle_of(problem) if n != problem)
+        return self.graph.subgraph(n for n in self.cycle_of(problem) if n != problem)
 
-    # ------------------------------------------------------------ restriction
-
-    def subgraph(self, keep: Iterable[N]) -> Self:
-        '''
-        Keep only those nodes in `keep`, with their definitions and the edges among them,
-        dropping pairs with one end not kept.
-        '''
-        kept  = set(keep)
-        return self._carried(graph=self.graph.subgraph(kept),
-                             within=OrderedMap((i, o) for i, o in self.within.items() if i in kept and o in kept))
-
-    def contract(self, blocks: tuple[tuple[N, ...], ...]) -> Self:
+    def contract(self, blocks: tuple[tuple[N, ...], ...]) -> Graph[N, V]:
         '''
         Each block of at least two nodes contracted into one `FunctionalNode` at its first
         member's place: reading what the block reads from outside, owning what it owns.
-        Every pair with an end in a block is dropped, since a box is no encloser. The
-        result is built through the checked constructors: every rule is asked of it.
+        Every pair with an end in a block is dropped, since a box is no encloser. Every rule
+        is asked of the result: the nesting's by its constructor, then `WellFormed`.
         '''
         position = self.graph._position
         members = [n for block in blocks for n in block]
         if unknown := [n for n in members if n not in position]:
             raise KeyError(f'not node(s) of this graph: {unknown!r}')
-        first(check_blocks_partition(self, blocks))
+        first(check_blocks_partition(self.graph, blocks))
         orders = [tuple(sorted(block, key=position.__getitem__)) for block in blocks]
-        first(check_blocks_own_something(self, orders))
+        first(check_blocks_own_something(self.graph, orders))
 
         boxed : dict[N, NodeDefinition[V]] = {}
         for order in orders:
-            inside = [self.definitions[m] for m in order]
+            inside = [self.graph.definitions[m] for m in order]
             owns  = tuple(dict.fromkeys(v for d in inside for v in d.owns))
             owned = set(owns)
             reads = tuple(dict.fromkeys(v for d in inside for v in d.reads if v not in owned))
             boxed[order[0]] = FunctionalNode(reads, owns)
         gone = set(members) - set(boxed)
-        definitions = OrderedMap((n, boxed.get(n, d)) for n, d in self.definitions.items() if n not in gone)
-        return replace(self, graph=replace(self.graph, definitions=definitions),
-                       within=OrderedMap((i, o) for i, o in self.within.items()
-                                         if i not in members and o not in members))
+        definitions = OrderedMap((n, boxed.get(n, d)) for n, d in self.graph.definitions.items() if n not in gone)
+        result = replace(self.graph, definitions=definitions,
+                         within=OrderedMap((i, o) for i, o in self.graph.within.items()
+                                           if i not in members and o not in members))
+        prove(result, WellFormed)
+        return result
 
 
-# ---------------------------------------------------------------- a proof about one
 
-class ProvedGraph[N: Label, V: Place](Frozen):
-    '''
-    Wraps a nesting graph and forwards the methods. Additional checks can be put on here. 
-    '''
-
-    graph : NestingGraph[N, V]
-
-    @property
-    def definitions(self) -> Mapping[N, NodeDefinition[V]]:      return self.graph.definitions
-    @property
-    def nodes(self) -> tuple[N, ...]:                            return self.graph.nodes
-    @property
-    def within(self) -> Mapping[N, N]:                           return self.graph.within
-    @property
-    def enclosers(self) -> tuple[N, ...]:                         return self.graph.enclosers
-    @property
-    def outermost_enclosers(self) -> tuple[N, ...]:               return self.graph.outermost_enclosers
-    def __getitem__(self, name: N) -> NodeDefinition[V]:          return self.graph[name]
-    def __contains__(self, name: N) -> bool:                      return name in self.graph
-    def enclosing(self, problem: N) -> tuple[N, ...]:             return self.graph.enclosing(problem)
-    def cycle_of(self, problem: N) -> tuple[N, ...]:              return self.graph.cycle_of(problem)
-    def interior(self, problem: N) -> NestingGraph[N, V]:         return self.graph.interior(problem)
-    def subgraph(self, keep: Iterable[N]) -> NestingGraph[N, V]:  return self.graph.subgraph(keep)
-
-    __iter__ = None
-    '''Not iterable: `nodes` is the sequence and `definitions` the mapping.'''
+@remembered
+def nesting[N: Label, V: Place](graph: Graph[N, V]) -> Nesting[N, V]:
+    '''The nesting view of `graph`, proving it `WellFormed`; one per graph.'''
+    return Nesting(graph)
 
 
 # ----------------------------------------------------------------- violation finals
-
-class Unbound(Violation):
-    inner : Label
-    outer : Label
-    error    = KeyError
-    template = 'nesting {inner!r} in {outer!r}: an end is not a node of this graph'
-
-
-class NotAnEncloser(Violation):
-    nodes : tuple[Label, ...]
-    error    = ValueError
-    template = ('{nodes} determines nothing, so no iteration of it answers anything -- an end '
-                 'of a nesting is a problem: determine it, naming the unknowns it fixes, or '
-                 '`Unnest` it first so the plan says the nesting went')
-
 
 class Unreachable(Violation):
     inner : Label
@@ -287,21 +147,6 @@ class Unreachable(Violation):
     template = ('{inner!r} and {outer!r} are not on one cycle, so no iteration of the one '
                  're-runs the other and there is nothing for the nesting to mean -- '
                  '`Unnest` it, or keep the pair on one cycle')
-
-
-class SelfNested(Violation):
-    inner : Label
-    error    = ValueError
-    template = '{inner!r} inside itself -- an iteration does not answer the problem it is'
-
-
-class NestingLoop(Violation):
-    inner : Label
-    outer : Label
-    chain : tuple[Label, ...]
-    error    = ValueError
-    template = ('{outer!r} is already answered inside {inner!r} ({chain}), so nesting the one '
-                 'in the other closes a loop -- nesting is a forest')
 
 
 class BlockTooSmall(Violation):

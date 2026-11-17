@@ -7,7 +7,7 @@ from abc import abstractmethod
 from collections.abc import Mapping
 from typing import Any, Protocol
 
-from ...core import ConditionalNode, NestingGraph, Place
+from ...core import ConditionalNode, Graph, Place
 from ...core.frozen import Frozen
 from ...core.driven import Role
 
@@ -15,7 +15,7 @@ from ...core.driven import Role
 class Model(Protocol):
     '''A declared model as a run takes it: its plan's graph and the values given with it.'''
 
-    graph : NestingGraph
+    graph : Graph
     given : Mapping[Place, Any]
 
 

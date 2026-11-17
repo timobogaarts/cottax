@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 from collections.abc import Callable, Iterable, Mapping, Sequence
 
-from ...core import NestingGraph, Label
+from ...core import Graph, Label, dependencies
 from ...core import is_driven
 from .lookup import minted_from, namespace_of
 from .sequencing import Block, graph_drawn, ordered_graph, walk
@@ -55,7 +55,7 @@ def _as_group(g: str | Group | None) -> Group:
     return () if g is None else (g,) if isinstance(g, str) else tuple(g)
 
 
-def _grouping(graph: NestingGraph, groups: Grouping | None) -> dict[Label, Group]:
+def _grouping(graph: Graph, groups: Grouping | None) -> dict[Label, Group]:
     '''Every node's group, `()` for none.'''
     if groups is None:
         return {n: () for n in graph.nodes}
@@ -90,14 +90,14 @@ def _palette(at: Mapping[Label, Group], order: Sequence[Label], sty: Style,
 
 # ---------------------------------------------------------------------------- orders
 
-def _structure(graph: NestingGraph) -> tuple[list[Label], tuple[Block, ...]]:
+def _structure(graph: Graph) -> tuple[list[Label], tuple[Block, ...]]:
     '''The run order at every level, each solve contiguous and its problem first -- the
     XDSMs' diagonal -- and the blocks of the graph ordered so.'''
     ordered = ordered_graph(graph)
     return list(ordered.nodes), walk(ordered)
 
 
-def _order(graph: NestingGraph, order, at: Mapping[Label, Group],
+def _order(graph: Graph, order, at: Mapping[Label, Group],
            structure: list[Label]) -> list[Label]:
     if order == 'structure':
         return structure
@@ -174,7 +174,7 @@ def matrix_struct(graph, *, order: str | Sequence[Label] = 'structure',
                      'minted': minted_from(n) is not None, 'depth': depth[n],
                      'reads': reads, 'nr': nr, 'writes': writes, 'nw': nw})
 
-    owners = g.graph.owners
+    owners = dependencies(g).owners
     flows: dict[tuple[int, int], list] = {}
     for n in names:
         for v in dict.fromkeys(g[n].reads):
@@ -445,7 +445,7 @@ def render_matrix_svg(graph, *, order: str | Sequence[Label] = 'structure',
                       formatter: Formatter = PlainFormat(), write: bool = False,
                       file_name: str = 'matrix', outdir: str = '.') -> SvgDoc:
     '''
-    The N2 matrix of `graph` (a `NestingGraph`, an `ExecutableGraph` or a `Plan`) as a
+    The N2 matrix of `graph` (a `Graph` or a `Plan`) as a
     self-contained SVG; `.size`, `.names_width` and `.struct` (`matrix_struct`) beside it.
 
     `order`: `'structure'` (run order at every level, each solve contiguous and boxed),

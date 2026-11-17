@@ -3,7 +3,7 @@ The roles the shipped contracts give their places, and where each driven problem
 takes one. A role is a class, never a value; its `arity` is its kind's.
 '''
 
-from ...core import Label, NestingGraph, Place, is_driven
+from ...core import Label, Graph, Place, is_driven
 from .driver import PerProblem, PerUnknown, Role
 
 
@@ -15,7 +15,7 @@ class Steps(PerProblem):
     '''Reported: how many iterations the solve took.'''
 
 
-def role_slots[N: Label, V: Place](graph: NestingGraph[N, V], role: type[Role]
+def role_slots[N: Label, V: Place](graph: Graph[N, V], role: type[Role]
                                    ) -> tuple[tuple[V, N, V | None], ...]:
     '''Each place a driven problem takes or reports `role` at, in binding order: the place,
     its problem, and for a per-unknown role the unknown it pairs with (`None` for a

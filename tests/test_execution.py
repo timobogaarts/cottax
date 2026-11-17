@@ -8,6 +8,11 @@ The model is `test_realisation_run`'s, one implicit discipline exact to
 finding the `x` that makes `f - t` vanish: one iteration of it a whole inner solve.
 '''
 
+from toy_places import Segmented
+from cottax.core import Place
+from cottax.core import steps
+from cottax.core import is_proved, prove, unproved
+
 import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -16,29 +21,31 @@ from typing import Any
 import pytest
 
 from cottax.core import (
-    AbstractGraph, FunctionalNode, GraphWithValues, NestingGraph, Solve, violations,
+    FunctionalNode,  Graph, Solve, violations,
 )
-from cottax.core.maths.valued import InputMissing, NotAPlace, OwnedGiven
+from cottax.consumers.execution.valued import InputMissing, NotAPlace, OwnedGiven
 from cottax.core.frozen import OrderedMap
-from cottax.core.driven import driven as with_driver, DrivenGraph
+from cottax.core.driven import driven as with_driver, DrivenGraph, DrivenNodes
 from cottax.core import is_driven
 from cottax.core.driven import DriverContract, PerProblem, PerUnknown, Role
 from cottax.consumers.execution import CallableGraph, run
+from cottax.consumers.execution.run import CallableNodes
 from cottax.consumers.execution.interface_types import ConditionMap, Context, Posed
 from cottax.consumers.execution.refusals import (
-    DataMissing, ImplementsAnother, NotADriverImplementation, NotCallable, ProvedBelow,
+    DataMissing, ImplementsAnother, NotADriverImplementation, NotCallable,
     ReportUnavailable, ReturnedUnlike,
 )
 from cottax.consumers.execution.interface import DriverImplementation
 from cottax.consumers.execution.run import InteriorConditionMap
 from cottax.core.realisation import (
-    ImplementDrivers, implemented, RealisedGraph, Unimplement,
+    ImplementDrivers, implemented, RealisedGraph, RealisedNodes, Unimplement,
 )
 from cottax.relational import Eq, Relation, RelationalCondition, is_root_find
+from cottax.consumers.execution import GraphWithValues
 
 
 @dataclass(frozen=True)
-class Word:
+class Word(Segmented):
     '''A place as a tuple of strings: the whole of `Place`.'''
 
     segments : tuple[str, ...]
@@ -166,15 +173,19 @@ def definitions(close=newton) -> OrderedMap:
 
 
 def flat(changes=OrderedMap()) -> CallableGraph:
-    return CallableGraph(NestingGraph(AbstractGraph(definitions() | changes), OrderedMap()))
+    graph = Graph(definitions() | changes, OrderedMap())
+    prove(graph, CallableGraph)
+    return graph
 
 
 def nested() -> CallableGraph:
     outer = driven(TARGET, RelationalCondition((Relation(G, None, Eq),), (), (X,), ()))
     aim   = call([F, T], [G], lambda f, t: f - t)
-    return CallableGraph(NestingGraph(AbstractGraph(definitions() | {W('Aim'): aim,
-                                                                     TARGET: outer}),
-                                      OrderedMap({CLOSE: TARGET})))
+    graph = Graph(definitions() | {W('Aim'): aim,
+                                                                     TARGET: outer},
+                                      OrderedMap({CLOSE: TARGET}))
+    prove(graph, CallableGraph)
+    return graph
 
 
 def exact_u(x: float) -> float:
@@ -201,7 +212,8 @@ def test_a_run_computes_every_place_and_the_report_lands_at_its_place():
 
 def test_the_data_arrives_one_tuple_per_role_and_the_conditions_as_values():
     spy = Spy()
-    graph = CallableGraph(NestingGraph(AbstractGraph(definitions(close=spy)), OrderedMap()))
+    graph = Graph(definitions(close=spy), OrderedMap())
+    prove(graph, CallableGraph)
     run(GraphWithValues(graph, OrderedMap({X: 1.0, W('^start.u'): 2.0, W('^budget.DiscA.close'): 7})))
     posed, context, data = spy.seen[0]
     conditions = posed.conditions
@@ -209,7 +221,7 @@ def test_the_data_arrives_one_tuple_per_role_and_the_conditions_as_values():
     assert not is_driven(posed.condition)   # what the values mean, nothing of the graph
     assert data == {Start: (2.0,), Budget: (7,)}
     assert isinstance(conditions, InteriorConditionMap) and isinstance(conditions, ConditionMap)
-    step = next(s for s in graph.steps if isinstance(s, Solve))
+    step = next(s for s in steps(graph) if isinstance(s, Solve))
     assert InteriorConditionMap.posing(graph[CLOSE], step.interior) == conditions
     assert conditions.unknowns == (U,) and conditions.context_places == (K,) and context == (2.0,)
     assert conditions.conditions == posed.condition.reads_inside
@@ -224,8 +236,9 @@ def test_the_condition_map_holds_no_value_and_one_serves_every_context():
     '''Places and a graph: it hashes, compares by value, and the context is an argument.
     A graph hashes when its mappings do, so this one is built of `OrderedMap`s.'''
     spy = Spy()
-    graph = CallableGraph(NestingGraph(AbstractGraph(definitions(close=spy)),
-                                       OrderedMap()))
+    graph = Graph(definitions(close=spy),
+                                       OrderedMap())
+    prove(graph, CallableGraph)
     for x in (1.0, 2.0):
         run(GraphWithValues(graph, OrderedMap({X: x, W('^start.u'): 1.0, W('^budget.DiscA.close'): 50})))
     (first, one, _), (second, two, _) = spy.seen
@@ -250,12 +263,28 @@ def test_the_inputs_are_exactly_what_nothing_owns():
         GraphWithValues(graph, OrderedMap({X: 1.0}))
 
 
-def test_a_run_takes_a_graph_proved_callable():
-    '''A graph proved only to a lower level is refused by name, before anything runs.'''
-    valued = GraphWithValues(RealisedGraph(flat().graph), OrderedMap({X: 1.0, **INNER}))
-    assert [type(v) for v in violations(run, valued)] == [ProvedBelow]
-    with pytest.raises(TypeError, match='a run takes a `CallableGraph`'):
-        run(valued)
+def test_a_run_proves_the_graph_callable_itself():
+    '''A run asks of the graph what it needs: a graph proved only to a lower level runs once
+    it is callable, the proof remembered on it, and one that is not is refused by name,
+    before anything runs.'''
+    graph = Graph(definitions(), OrderedMap())
+    prove(graph, RealisedGraph)
+    assert not is_proved(graph, CallableGraph)
+    run(GraphWithValues(graph, OrderedMap({X: 1.0, **INNER})))
+    assert is_proved(graph, CallableGraph)
+    bad = Graph(definitions() | {W('b'): implemented(
+        FunctionalNode((X,), (W('extra'),)), 'not callable')}, OrderedMap())
+    valued = GraphWithValues(bad, OrderedMap({X: 1.0, **INNER}))
+    assert NotCallable in [type(v) for v in violations(run, valued)]
+
+
+def test_what_a_run_proves_is_read_off_it():
+    """Declared with the function, not inside it: a run proves the graph callable, a trace
+    the same, and the steps are of a graph proved executable."""
+    from cottax.core import ExecutableGraph, proves, steps
+    from cottax.consumers.execution.jax_jit import Traced
+    assert proves(run) == (CallableGraph,) == proves(Traced)
+    assert proves(steps) == (ExecutableGraph,)
 
 
 def test_what_comes_back_is_counted():
@@ -267,8 +296,9 @@ def test_what_comes_back_is_counted():
     for close, error in ((lambda c, x, d: ((1.0, 2.0), {Steps: (1,)}), ValueError),
                          (lambda c, x, d: ((1.0,), {}), KeyError),
                          (lambda c, x, d: (1.0, 3), TypeError)):
-        graph = CallableGraph(NestingGraph(AbstractGraph(definitions(close=Returns(close))),
-                                           OrderedMap()))
+        graph = Graph(definitions(close=Returns(close)),
+                                           OrderedMap())
+        prove(graph, CallableGraph)
         with pytest.raises(error):
             ran(graph)
 
@@ -276,12 +306,15 @@ def test_what_comes_back_is_counted():
 # ---------------------------------------------------------------- the proof
 
 def test_a_nested_solve_holds_the_same_proof_at_every_depth():
-    graph = nested().graph
-    for level in (DrivenGraph, RealisedGraph, CallableGraph):
-        outer, = [s for s in level(graph).steps if isinstance(s, Solve)]
-        inner, = [s for s in outer.interior.steps if isinstance(s, Solve)]
-        assert (outer.problem, inner.problem) == (TARGET, CLOSE)
-        assert type(outer.interior) is type(inner.interior) is level
+    '''What holds of each node of the whole holds of each node of every interior: asked of
+    an interior, at every depth, the node groups pass.'''
+    graph = nested()
+    outer, = [s for s in steps(graph) if isinstance(s, Solve)]
+    inner, = [s for s in steps(outer.interior) if isinstance(s, Solve)]
+    assert (outer.problem, inner.problem) == (TARGET, CLOSE)
+    for level in (DrivenNodes, RealisedNodes, CallableNodes):
+        prove(outer.interior, level)
+        prove(inner.interior, level)
 
 
 # ---------------------------------------------------------------- what the proof refuses
@@ -292,13 +325,13 @@ class RepoRef:
     url : str
 
 
-def kinds(graph: NestingGraph) -> list[type]:
-    return [type(x) for x in violations(CallableGraph, graph)]
+def kinds(graph: Graph) -> list[type]:
+    return [type(x) for x in unproved(graph, CallableGraph)]
 
 
 def test_a_description_is_refused_a_call():
     changed = definitions() | {W('Mesh'): call([X], [K], RepoRef('git://mesh'))}
-    assert kinds(NestingGraph(AbstractGraph(changed), OrderedMap())) == [NotCallable]
+    assert kinds(Graph(changed, OrderedMap())) == [NotCallable]
 
 
 class Tolerance(PerProblem):
@@ -326,23 +359,23 @@ def test_a_driven_node_runs_by_an_implementation_of_its_own_driver():
                           (driven(CLOSE, condition, Returns(print), Newton(reports=(Steps, History))),
                            ReportUnavailable)):
         changed = definitions() | {CLOSE: node}
-        assert kinds(NestingGraph(AbstractGraph(changed), OrderedMap())) == [refused]
+        assert kinds(Graph(changed, OrderedMap())) == [refused]
 
 
 # ---------------------------------------------------------------- choosing and changing drivers
 
 def test_implementations_are_chosen_by_contract_and_chosen_again_on_what_the_graph_holds():
-    bare = Unimplement((CLOSE,)).apply(flat().graph)
+    bare = Unimplement((CLOSE,)).apply(flat())
     op   = ImplementDrivers(OrderedMap({Bisection: Returns(print), Newton: newton}))
     (implement,) = op.composed(bare)
     assert implement.values == OrderedMap({CLOSE: newton})
-    assert math.isclose(ran(CallableGraph(op.apply(bare)))[U], exact_u(1.0), rel_tol=1e-12)
+    assert math.isclose(ran(op.apply(bare))[U], exact_u(1.0), rel_tol=1e-12)
     with pytest.raises(ValueError, match='no attribute to set'):
-        op.apply(flat().graph)
+        op.apply(flat())
 
 
 def test_the_most_specific_contract_is_chosen_whatever_order_the_map_is_written_in():
-    bare = Unimplement((CLOSE,)).apply(flat().graph)
+    bare = Unimplement((CLOSE,)).apply(flat())
     for written in ({DriverContract: Returns(print), Newton: newton}, {Newton: newton, DriverContract: Returns(print)}):
         (implement,) = ImplementDrivers(OrderedMap(written)).composed(bare)
         assert implement.values == OrderedMap({CLOSE: newton})

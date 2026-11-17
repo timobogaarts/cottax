@@ -4,6 +4,8 @@ a box, as written and without a value -- in a toy place of plain strings. A `Rel
 no group for is refused, and so by `canonical` and `box`, which compute over it.
 '''
 
+from toy_places import Segmented
+from cottax.core import Place
 from dataclasses import dataclass
 
 import pytest
@@ -17,7 +19,7 @@ from cottax.relational.programme import NotProgrammable, check_programmable
 
 
 @dataclass(frozen=True)
-class Word:
+class Word(Segmented):
     '''A place as a tuple of strings: the whole of `Place`.'''
 
     segments : tuple[str, ...]

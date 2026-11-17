@@ -10,12 +10,14 @@ from functools import cached_property
 from typing import Callable
 
 from ..frozen import Frozen, PerLevel, Violation, first
-from ..maths.nesting import NestingGraph
+from ..maths.dependencies import WellFormed
+from ..maths.graph import Graph
+from ..maths.rules import Group, prove
 from ..maths.places import Label, Place
 
 
 def refusals[N: Label, V: Place](op: 'GraphOp[N, V]',
-                                 graph: NestingGraph[N, V]) -> 'Iterator[Violation]':
+                                 graph: Graph[N, V]) -> 'Iterator[Violation]':
     '''Why `op` does not apply to `graph`, as data. Most derived level first: an inherited
     check may read what the derived op computes (`Rewire`'s reads `Cut`'s renaming).'''
     for check in type(op).per_level('checks_graph', derived_first=True):
@@ -33,21 +35,29 @@ class GraphOp[N: Label, V: Place](Frozen):
     checks_graph : PerLevel[tuple[Callable, ...]] = ()
     '''`(op, graph) -> Iterator[Violation]`: collected by `refusals`, raised by `apply`.'''
 
-    def apply[G: NestingGraph[N, V]](self, graph: G) -> G:
-        '''Refuse, or return the graph with this op applied.'''
+    def apply[G: Graph[N, V]](self, graph: G, keeps: 'Group | None' = WellFormed) -> G:
+        '''Refuse, or return the graph with this op applied. `keeps` is proved of the graph
+        and of the result, so an op that breaks it is refused here, and not wherever the
+        graph is next read; remembered, so a graph an op left costs the next op nothing.
+        `None` keeps nothing: an op inside a composed one, which proves it once, at the end.'''
+        if keeps is not None:
+            prove(graph, keeps)
         first(refusals(self, graph))
-        return self._apply(graph)
+        result = self._apply(graph)
+        if keeps is not None:
+            prove(result, keeps)
+        return result
 
     @abstractmethod
-    def _apply[G: NestingGraph[N, V]](self, graph: G) -> G:
+    def _apply[G: Graph[N, V]](self, graph: G) -> G:
         '''The edit itself; may assume `checks_graph` passed.'''
 
-    def __call__[G: NestingGraph[N, V]](self, graph: G) -> G:
+    def __call__[G: Graph[N, V]](self, graph: G) -> G:
         return self.apply(graph)
 
-    def __radd__(self, base: NestingGraph[N, V]) -> 'Plan[N, V]':
+    def __radd__(self, base: Graph[N, V]) -> 'Plan[N, V]':
         '''`graph + op` starts a plan. Here and not on the graph, which knows no plans.'''
-        if not isinstance(base, NestingGraph):
+        if not isinstance(base, Graph):
             return NotImplemented
         return Plan(base) + self
 
@@ -56,20 +66,20 @@ class ComposedOp[N: Label, V: Place](GraphOp[N, V]):
     '''An op made of other ops, applied in order. It builds no graph itself.'''
 
     @abstractmethod
-    def composed(self, graph: NestingGraph[N, V]) -> Sequence[GraphOp[N, V]]:
+    def composed(self, graph: Graph[N, V]) -> Sequence[GraphOp[N, V]]:
         '''The ops this one is, which may depend on `graph`.'''
 
-    def _apply[G: NestingGraph[N, V]](self, graph: G) -> G:
+    def _apply[G: Graph[N, V]](self, graph: G) -> G:
         g = graph
         for op in self.composed(g):
-            g = op.apply(g)
+            g = op.apply(g, keeps=None)
         return g
 
 class Stage[N: Label, V: Place](Frozen):
     '''One stage of a `StagedOp`: the ops decided, and the graph they leave.'''
 
     ops   : tuple[GraphOp[N, V], ...]
-    graph : NestingGraph[N, V]
+    graph : Graph[N, V]
 
 
 class StagedOp[N: Label, V: Place](GraphOp[N, V]):
@@ -77,11 +87,11 @@ class StagedOp[N: Label, V: Place](GraphOp[N, V]):
     before left.'''
 
     @abstractmethod
-    def stages(self, graph: NestingGraph[N, V]
-               ) -> Generator[Sequence[GraphOp[N, V]], NestingGraph[N, V], None]:
+    def stages(self, graph: Graph[N, V]
+               ) -> Generator[Sequence[GraphOp[N, V]], Graph[N, V], None]:
         '''Yield a stage's ops; receive the graph they leave.'''
 
-    def staged(self, graph: NestingGraph[N, V]) -> tuple[Stage[N, V], ...]:
+    def staged(self, graph: Graph[N, V]) -> tuple[Stage[N, V], ...]:
         '''Every stage, with the graph it left.'''
         out, decide, g = [], self.stages(graph), graph
         try:
@@ -89,14 +99,14 @@ class StagedOp[N: Label, V: Place](GraphOp[N, V]):
             while True:
                 ops = tuple(ops)
                 for op in ops:
-                    g = op.apply(g)
+                    g = op.apply(g, keeps=None)
                 out.append(Stage(ops, g))
                 ops = decide.send(g)
         except StopIteration:
             pass
         return tuple(out)
 
-    def _apply[G: NestingGraph[N, V]](self, graph: G) -> G:
+    def _apply[G: Graph[N, V]](self, graph: G) -> G:
         stages = self.staged(graph)
         return stages[-1].graph if stages else graph
 
@@ -107,7 +117,7 @@ class Plan[N: Label, V: Place](Frozen):
     '''A base graph plus the ops applied to it. It pickles as `base` and `ops`; `graph` is
     rebuilt on demand.'''
 
-    base : NestingGraph[N, V]
+    base : Graph[N, V]
     ops  : tuple[GraphOp[N, V], ...] = ()
 
     @cached_property
@@ -117,7 +127,7 @@ class Plan[N: Label, V: Place](Frozen):
         return Plan(self.base, self.ops[:-1]) if self.ops else None
 
     @cached_property
-    def graph(self) -> NestingGraph[N, V]:
+    def graph(self) -> Graph[N, V]:
         '''`base` with every op applied.'''
         return self.base if self.trunk is None else self.ops[-1](self.trunk.graph)
 

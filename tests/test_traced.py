@@ -3,17 +3,19 @@
 refusing a miscount, and naming the node a failure came from.
 '''
 
+from cottax.core import prove
+
 import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
 import cottax.assemblies.jax as cx
-from cottax.core import GraphWithValues
 from cottax.core.frozen import OrderedMap, violations
 from cottax.consumers.execution import CallableGraph, run
 from cottax.consumers.execution.jax_jit import Traced
 from cottax.consumers.execution.refusals import ReturnedUnlike, TraceFailed
+from cottax.consumers.execution import GraphWithValues
 
 flat = cx.flat
 v = flat.place
@@ -26,7 +28,9 @@ def x64():
 
 
 def graph(*models):
-    return CallableGraph(cx.absolute.declare(*models).graph)
+    built = cx.absolute.declare(*models).graph
+    prove(built, CallableGraph)
+    return built
 
 
 def two(a):
@@ -66,7 +70,8 @@ def test_a_solve_is_traced_whole_and_its_interior_shaped():
         return u * u - z
 
     model = cx.absolute.declare(square) + cx.flat.drive(cx.Newton())
-    g = CallableGraph(model.graph)
+    g = model.graph
+    prove(g, CallableGraph)
     start = flat.place(cx.start('u'))
     t = Traced(GraphWithValues(g, OrderedMap({v('z'): jnp.zeros(3), start: jnp.ones(3)})))
     assert t.shapes[v('u')] == jax.ShapeDtypeStruct((3,), jnp.float64)

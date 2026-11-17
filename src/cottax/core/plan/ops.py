@@ -9,10 +9,11 @@ import dataclasses
 from collections.abc import Iterator, Mapping
 
 from ..maths.definition import (
-    Attribute, NodeDefinition, Renaming, misfits, with_attributes, without_attribute,
+    Attribute, NodeDefinition, Renaming,
 )
 from ..frozen import AbstractClassVar, OrderedMap, Violation, name_of
-from ..maths.nesting import NestingGraph
+from ..maths.dependencies import dependencies
+from ..maths.graph import Graph
 from ..maths.places import Label, Place, PlaceToPlace
 from .primitive import Redefine
 
@@ -21,7 +22,7 @@ type Relabel[N: Label, V: Place] = Mapping[N, Renaming[V]]
 '''Per node, old place -> new. Keyed by place, so `fn(x, x)` renames both.'''
 
 
-def check_renames_places_the_node_has(op: 'Rewire', graph: NestingGraph) -> Iterator[Violation]:
+def check_renames_places_the_node_has(op: 'Rewire', graph: Graph) -> Iterator[Violation]:
     '''A node only renames places it reads or owns.'''
     for name, m in op.renaming(graph).items():
         node = graph[name]
@@ -36,11 +37,11 @@ class Rewire[N: Label, V: Place](Redefine[N, V]):
     checks_graph = (check_renames_places_the_node_has,)
 
     @abstractmethod
-    def renaming(self, graph: NestingGraph[N, V]) -> Relabel[N, V]:
+    def renaming(self, graph: Graph[N, V]) -> Relabel[N, V]:
         '''Per node, old place -> new. One map serves reads and owns: a node never has a
         place in both.'''
 
-    def redefined(self, graph: NestingGraph[N, V]) -> Mapping[N, NodeDefinition[V]]:
+    def redefined(self, graph: Graph[N, V]) -> Mapping[N, NodeDefinition[V]]:
         return {name: graph[name].relabel(m)
                 for name, m in self.renaming(graph).items()}
 
@@ -53,7 +54,7 @@ class Replace[N: Label, V: Place](Redefine[N, V]):
 
     edits_attributes = True
 
-    def redefined(self, graph: NestingGraph[N, V]) -> Mapping[N, NodeDefinition[V]]:
+    def redefined(self, graph: Graph[N, V]) -> Mapping[N, NodeDefinition[V]]:
         return {self.node: self.definition}
 
     def __repr__(self) -> str:
@@ -67,7 +68,7 @@ class Rename[N: Label, V: Place](Rewire[N, V]):
     onto : tuple[tuple[V, V], ...]
     """Old place -> the place to use instead. Pairs, since an op is a record and hashes."""
 
-    def renaming(self, graph: NestingGraph[N, V]) -> Relabel[N, V]:
+    def renaming(self, graph: Graph[N, V]) -> Relabel[N, V]:
         return {self.node: dict(self.onto)}
 
     def __repr__(self) -> str:
@@ -83,17 +84,17 @@ def check_readers(op: 'Cut') -> Iterator[Violation]:
         yield NoReaders(op.var, op.copy)
 
 
-def check_cuts_a_produced_place(op: 'Cut', graph: NestingGraph) -> Iterator[Violation]:
+def check_cuts_a_produced_place(op: 'Cut', graph: Graph) -> Iterator[Violation]:
     '''`var` is produced (a boundary input has nothing to close the cut against), and its
     copy is not in use (a second cut would add readers to the first copy).'''
-    owners = graph.graph.owners
+    owners = dependencies(graph).owners
     if op.var not in owners:
         yield NotProduced(op.var)
-    elif op.copy in owners or op.copy in graph.graph.readers:
+    elif op.copy in owners or op.copy in graph.readers:
         yield AlreadyCut(op.var, op.copy)
 
 
-def check_readers_read_var(op: 'Cut', graph: NestingGraph) -> Iterator[Violation]:
+def check_readers_read_var(op: 'Cut', graph: Graph) -> Iterator[Violation]:
     '''Every reader reads `var`. Renaming on the producer would move the output instead.'''
     if off := tuple(r for r in op.readers if r in graph and op.var not in graph[r].reads):
         yield DoesNotRead(op.var, off)
@@ -116,7 +117,7 @@ class Cut[N: Label, V: Place](Rewire[N, V]):
         '''The boundary variable `readers` end up reading.'''
         return self.copy_of(self.var)
 
-    def renaming(self, graph: NestingGraph[N, V]) -> Relabel[N, V]:
+    def renaming(self, graph: Graph[N, V]) -> Relabel[N, V]:
         return {r: {self.var: self.copy} for r in self.readers}
 
     def __repr__(self) -> str:
@@ -130,19 +131,19 @@ def check_sets_something(op: 'SetAttribute') -> Iterator[Violation]:
         yield NoAttributeNamed()
 
 
-def check_settable(op: 'SetAttribute', graph: NestingGraph) -> Iterator[Violation]:
-    """No node carries one under that key already, and each can carry what it is given."""
-    for name, value in op.values.items():
-        if op.kind in (node := graph[name]).attributes:
+def check_settable(op: 'SetAttribute', graph: Graph) -> Iterator[Violation]:
+    """No node carries one under that key already. Whether it can carry what it is given is
+    the attribute's own layer's rule, which that layer's op adds (`Implement`)."""
+    for name in op.values:
+        if op.kind in graph[name].attributes:
             yield AttributeAlreadySet(name, op.kind.__name__)
-        yield from misfits(node, {op.kind: value})
 
 
 class SetAttribute[N: Label, V: Place](Redefine[N, V]):
     """Each named node carries the value given for it under `kind`; nothing else of it
     changes. An attribute's own op is this with its `kind` named: `Implement`."""
 
-    kind   : AbstractClassVar[type[Attribute]]
+    kind   : AbstractClassVar[Attribute]
     values : OrderedMap[N, object]
 
     edits_attributes = True
@@ -150,8 +151,8 @@ class SetAttribute[N: Label, V: Place](Redefine[N, V]):
     checks = (check_sets_something,)
     checks_graph = (check_settable,)
 
-    def redefined(self, graph: NestingGraph[N, V]) -> Mapping[N, NodeDefinition[V]]:
-        return {name: with_attributes(node := graph[name], OrderedMap({**node.attributes, self.kind: value}))
+    def redefined(self, graph: Graph[N, V]) -> Mapping[N, NodeDefinition[V]]:
+        return {name: dataclasses.replace(node := graph[name], attributes=OrderedMap({**node.attributes, self.kind: value}))
                 for name, value in self.values.items()}
 
     def __repr__(self) -> str:
@@ -164,7 +165,7 @@ def check_removes_something(op: 'RemoveAttribute') -> Iterator[Violation]:
         yield NoAttributeNamed()
 
 
-def check_removable(op: 'RemoveAttribute', graph: NestingGraph) -> Iterator[Violation]:
+def check_removable(op: 'RemoveAttribute', graph: Graph) -> Iterator[Violation]:
     """Each node carries one to take off."""
     for name in op.nodes:
         if op.kind not in graph[name].attributes:
@@ -174,7 +175,7 @@ def check_removable(op: 'RemoveAttribute', graph: NestingGraph) -> Iterator[Viol
 class RemoveAttribute[N: Label, V: Place](Redefine[N, V]):
     """The inverse of `SetAttribute`: what each node carries under `kind` taken off."""
 
-    kind  : AbstractClassVar[type[Attribute]]
+    kind  : AbstractClassVar[Attribute]
     nodes : tuple[N, ...]
 
     edits_attributes = True
@@ -182,8 +183,10 @@ class RemoveAttribute[N: Label, V: Place](Redefine[N, V]):
     checks = (check_removes_something,)
     checks_graph = (check_removable,)
 
-    def redefined(self, graph: NestingGraph[N, V]) -> Mapping[N, NodeDefinition[V]]:
-        return {name: without_attribute(graph[name], self.kind) for name in self.nodes}
+    def redefined(self, graph: Graph[N, V]) -> Mapping[N, NodeDefinition[V]]:
+        return {name: dataclasses.replace(node := graph[name], attributes=OrderedMap(
+                    (k, a) for k, a in node.attributes.items() if k is not self.kind))
+                for name in self.nodes}
 
     def __repr__(self) -> str:
         return f'{type(self).__name__.lower()}({", ".join(map(str, self.nodes))})'

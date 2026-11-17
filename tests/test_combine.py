@@ -5,6 +5,10 @@ is said by the language stating them -- so a toy kind in a toy place answers its
 here, and the fold reads nothing else of it.
 '''
 
+from toy_places import Segmented
+from cottax.core import Place
+from cottax.core import prove
+
 import dataclasses
 from dataclasses import dataclass
 
@@ -16,8 +20,8 @@ from cottax.consumers.architectures.refusals import (
     CarriesAttributes, FoldsDriven, NodeTwice, NotAddable, NotOfKind, NothingToCombine,
 )
 from cottax.core import (
-    AbstractGraph, Attachment, Attribute, Condition, ConditionalNode, Delete, ExecutableGraph,
-    NestingGraph, NodeDefinition, refusals, relabelled, violations, with_attributes,
+    Attachment, Condition, ConditionalNode, Delete, ExecutableGraph,
+    Graph, NodeDefinition, refusals, relabelled, violations,
 )
 from cottax.core.frozen import OrderedMap, answers
 from cottax.core.plan.primitive import NameTaken, Stranded
@@ -26,7 +30,7 @@ from cottax.core.plan.primitive import NameTaken, Stranded
 # ---------------------------------------------------------------- a toy place and kind
 
 @dataclass(frozen=True)
-class Word:
+class Word(Segmented):
     '''A place as a word of plain strings: the whole of `Place`.'''
 
     segments : tuple[str, ...]
@@ -86,10 +90,9 @@ class Ports(Attachment):
     owns  : tuple = ()
     def relabel(self, renaming):
         return Ports(relabelled(self.reads, renaming), relabelled(self.owns, renaming))
-    def violations_on(self, node): return iter(())
 
 
-class Note(Attribute):
+class Note:
     '''An attribute with no opinion on the node carrying it.'''
 
 
@@ -100,7 +103,7 @@ def states(reads, owns):    return ConditionalNode(condition(reads, owns))
 
 
 def G(definitions, within=None):
-    return NestingGraph(AbstractGraph(OrderedMap(definitions)), OrderedMap(within or {}))
+    return Graph(OrderedMap(definitions), OrderedMap(within or {}))
 
 
 # ---------------------------------------------------------------- the fold
@@ -141,14 +144,14 @@ def test_a_fold_is_asked_of_its_result_and_never_of_a_step_toward_it():
     alone = Delete((R,)).apply(g)                               # the step alone is carried ...
     assert dict(alone.within) == {Q: P}
     with pytest.raises(ValueError, match='not on one cycle'):
-        ExecutableGraph(alone)                                  # ... and refused as executable
+        prove(alone, ExecutableGraph)                                  # ... and refused as executable
 
 
 def test_a_fold_joins_conditions_and_neither_what_they_carry_nor_what_drives_them():
     '''What two nodes carry has no join, and which algorithm answers a join is not read off
     the two: a fold is of bare conditions, implemented and driven after.'''
     a, b = Word('a'), Word('b')
-    noted = G({a: with_attributes(states(['y'], ['u']), OrderedMap({Note: 'n'})),
+    noted = G({a: dataclasses.replace(states(['y'], ['u']), attributes=OrderedMap({Note: 'n'})),
                b: states(['z'], ['v'])})
     assert [type(v) for v in refusals(Combine(a, (a, b), States), noted)] == [CarriesAttributes]
     driven = G({a: dataclasses.replace(states(['y'], ['u']), driver=Ports()),

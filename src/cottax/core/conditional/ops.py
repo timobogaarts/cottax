@@ -8,7 +8,7 @@ import dataclasses
 from collections.abc import Iterator, Mapping
 
 from ..frozen import Violation
-from ..maths import Label, NestingGraph, NodeDefinition, Place
+from ..maths import Label, Graph, NodeDefinition, Place
 from ..plan import Redefine
 from .node import ConditionalNode, is_driven, kind_of
 
@@ -28,7 +28,7 @@ def stores_owns_inside(node: object) -> bool:
         f.name for f in dataclasses.fields(node.condition)}
 
 
-def check_owns_inside_is_stored(op: 'SetOwnsInside', graph: NestingGraph) -> Iterator[Violation]:
+def check_owns_inside_is_stored(op: 'SetOwnsInside', graph: Graph) -> Iterator[Violation]:
     """The node's condition stores `owns_inside` and the node carries no driver: a condition
     that derives it -- from its states -- has no choice to set, and a driver's slots are laid
     out per unknown."""
@@ -49,7 +49,7 @@ class SetOwnsInside[N: Label, V: Place](Redefine[N, V]):
     checks = (check_owned_once,)
     checks_graph = (check_owns_inside_is_stored,)
 
-    def redefined(self, graph: NestingGraph[N, V]) -> Mapping[N, NodeDefinition[V]]:
+    def redefined(self, graph: Graph[N, V]) -> Mapping[N, NodeDefinition[V]]:
         node = graph[self.node]
         return {self.node: dataclasses.replace(
             node, condition=dataclasses.replace(node.condition, owns_inside=self.owns_inside))}

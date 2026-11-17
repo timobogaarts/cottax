@@ -4,12 +4,14 @@ stated over the models that compute its conditions; and `Drive` over a problem o
 language.
 '''
 
+from cottax.core import prove, dependencies
+
 import math
 
 import pytest
 
 import cottax.assemblies.jax as cx
-from cottax.core import enclosers, GraphWithValues
+from cottax.core import enclosers
 from cottax.core.frozen import OrderedMap
 from cottax.core.plan import Plan
 from cottax.core.driven import DriverContract
@@ -21,6 +23,7 @@ from cottax.relational import Le, is_root_find
 from cottax.consumers.visualization.sequencing import Solve, entries
 from cottax.relational.consumers.execution.jax_solvers import Newton
 from test_answers import Raw                     # a condition node of no language cottax ships
+from cottax.consumers.execution import GraphWithValues
 
 v, n = flat.place, cx.absolute.node
 
@@ -56,7 +59,7 @@ def test_an_implicit_model_is_a_body_and_a_problem(sellar):
 
 def test_the_pair_is_a_coupled_block_with_a_problem(sellar):
     '''Implicitness is structural: nothing declares it, the cycle is it.'''
-    assert not sellar.graph.is_acyclic
+    assert not dependencies(sellar).is_acyclic
     assert enclosers(sellar.definitions) == (cx.absolute.node(cx.solve(N['disc1'])),)
     solve, _ = entries(sellar)
     assert isinstance(solve, Solve) and solve.problem == cx.absolute.node(cx.solve(N['disc1']))
@@ -98,7 +101,7 @@ def test_the_pair_runs(sellar):
     problem = cx.absolute.node(cx.solve(N['disc1']))
     driven  = (Plan(sellar) + cx.absolute.assign(problem, SelfStarting())
                + cx.absolute.implement({problem: Relax()})).graph
-    out = run(GraphWithValues(CallableGraph(driven), OrderedMap({v('z'): 1.0})))
+    out = run(GraphWithValues(driven, OrderedMap({v('z'): 1.0})))
     assert out[v('y1')] == pytest.approx(1.0 + 0.2 * out[v('y2')])
     assert out[v('y2')] == pytest.approx(math.sqrt(abs(out[v('y1')])) + 1.0)
     assert out[v('f')]  == pytest.approx(out[v('y1')] + out[v('y2')])
@@ -128,8 +131,8 @@ def test_the_optimise_pairs_with_the_models_that_compute_its_conditions():
                          'margin': flat.function(margin, 'margin'),
                          'design': flat.optimise(minimise='cost', design=('R0', 'B0')).condition
                                    .join(flat.requirement('margin', Le))}).graph
-    assert graph.graph.components == ((n('cost'), n('margin'), n('design')),)
-    assert graph.graph.boundary_inputs == ()
+    assert dependencies(graph).components == ((n('cost'), n('margin'), n('design')),)
+    assert dependencies(graph).boundary_inputs == ()
 
 
 # ---------------------------------------------------------------- a problem of another language

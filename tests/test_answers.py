@@ -8,6 +8,10 @@ in plain Python, and placed by an architecture closing its cuts its own way. And
 empty listed.
 '''
 
+from toy_places import Segmented
+from cottax.core import Place
+from cottax.core import prove, dependencies
+
 from dataclasses import dataclass
 import math
 import subprocess
@@ -16,8 +20,7 @@ import sys
 import pytest
 
 from cottax.core import (
-    AbstractGraph, ComposedOp, Condition, ConditionalNode, Cut, ExecutableGraph, FunctionalNode,
-    GraphWithValues, Insert, Mint, Minting, NestingGraph, minted,
+    ComposedOp, Condition, ConditionalNode, Cut, ExecutableGraph, FunctionalNode,  Insert, Mint, Minting, Graph, minted,
 )
 from cottax.consumers.architectures.cut_rules import GaussSeidel
 from cottax.core.frozen import OrderedMap, answer, answers, choice, violations
@@ -27,7 +30,7 @@ from cottax.core.driven import Start
 from cottax.core.driven import DriverContract
 from cottax.consumers.architectures import MDA
 from cottax.consumers.architectures.interface import Closing, ModelReading
-from cottax.consumers.execution import CallableGraph, Drive, run
+from cottax.consumers.execution import CallableGraph, Drive, GraphWithValues, run
 from cottax.consumers.execution.interface import DriverImplementation
 from cottax.consumers.declaration import declare
 from cottax.consumers.surface import core_role_places
@@ -49,7 +52,7 @@ from cottax.consumers.visualization.xdsm import xdsm_struct
 # ================================================================ core's interface alone
 
 @dataclass(frozen=True)
-class Plain:
+class Plain(Segmented):
     '''A place: segments, and a constructor taking them. Nothing answers for it.'''
     segments : tuple
 
@@ -74,15 +77,15 @@ class Raw(Vanishes):
 
 def coupled(place, kind):
     p = lambda *s: place(s)
-    return NestingGraph(AbstractGraph(OrderedMap({
+    return Graph(OrderedMap({
         p('body'): FunctionalNode((p('k'), p('u')), (p('r'),)),
         p('cond'): ConditionalNode(kind((p('r'),), (p('u'),))),
-    })), OrderedMap())
+    }), OrderedMap())
 
 
 def test_with_core_alone_a_graph_is_built_proved_and_drawn_grey():
     g = coupled(Plain, Raw)
-    assert ExecutableGraph(g).graph == g
+    prove(g, ExecutableGraph)
     assert xdsm_struct(g, blocks=True)['problem_types'] == {'cond': 'stated'}
     for picture in (render_xdsm_svg, render_matrix_svg, render_html, to_dot):
         assert 'cond' in picture(g)
@@ -99,7 +102,7 @@ def test_with_core_alone_json_refuses_naming_what_is_missing():
 # ================================================================ the toy, answered
 
 @dataclass(frozen=True)
-class Tok:
+class Tok(Segmented):
     '''A place: segments, a minted one under its purpose as the first segment.'''
     segments : tuple
 
@@ -305,7 +308,7 @@ def solved():
 def test_the_toy_is_declared_through_its_vocabulary_and_runs_in_plain_python():
     g = solved()
     assert g.nodes == (T('sq'), Tok((Zeroed(), 'sq')))
-    out = run(GraphWithValues(CallableGraph(g), OrderedMap({T('k'): 2.0,
+    out = run(GraphWithValues(g, OrderedMap({T('k'): 2.0,
                                                            Tok((purposes.Start(), 'u')): 1.0})))
     assert math.isclose(out[T('u')], math.sqrt(2.0), rel_tol=1e-12)
 
@@ -351,7 +354,7 @@ class ZeroModel(ModelReading):
     def combines_as(self, condition):       return None
 
     def body(self, graph, problem):
-        owners = graph.graph.owners
+        owners = dependencies(graph).owners
         return tuple(dict.fromkeys(owners[c] for c in graph[problem].reads_inside))
 
 
@@ -384,15 +387,15 @@ class ClosedByGap(Closing):
 def test_the_toy_is_placed_by_an_architecture_closing_its_own_way():
     '''Two toy models coupled through their states: an MDA asks each what it is, cuts once,
     closes the cut by the toy's `Gap` and nests both models in the closure.'''
-    g = NestingGraph(AbstractGraph(OrderedMap({
+    g = Graph(OrderedMap({
         T('a'): FunctionalNode((T('k'), T('u'), T('v')), (T('ra'),)), T('A'): ConditionalNode(Zero((T('ra'),), (T('u'),))),
         T('b'): FunctionalNode((T('u'), T('v')), (T('rb'),)),         T('B'): ConditionalNode(Zero((T('rb'),), (T('v'),))),
-    })), OrderedMap())
+    }), OrderedMap())
     out = (Plan(g) + MDA(GaussSeidel(), ClosedByGap())).graph
     closure, hat = Tok((purposes.Closure(), 'a')), Tok((purposes.Copy(), 'v'))
     assert dict(out.within) == {T('A'): closure, T('B'): closure}
     assert out[closure].condition == Zero((minted(GapOf(), hat),), (hat,))
-    assert ExecutableGraph(out).graph == out
+    prove(out, ExecutableGraph)
     with pytest.raises(TypeError, match='test_answers.Raw has no ModelReading answer'):
         Plan(coupled(Tok, Raw)) + MDA(GaussSeidel(), ClosedByGap())
 

@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, fields, replace
 from collections.abc import Callable, Iterator
+import functools
 from functools import cached_property
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Self, get_origin
 
@@ -215,6 +216,28 @@ def _cached_hash(self) -> int:
     except KeyError:
         memo['_frozen_hash'] = value = self.__field_hash__()
         return value
+
+
+class remembered[T]:
+    '''
+    Cached property for functions not on the class.
+
+    The function must be of the value alone: nothing else it reads may change (i.e. don't read global state in such a function)
+
+    Tested to a few uses in cottax (limit the cache size on the object)
+    '''
+
+    def __init__(self, fn: Callable[[Any], T]) -> None:
+        self.fn = fn
+        functools.update_wrapper(self, fn)
+
+    def __call__(self, value: Any) -> T:
+        memo = value.__dict__.setdefault('_remembered', {})
+        try:
+            return memo[self]
+        except KeyError:
+            memo[self] = answer = self.fn(value)
+            return answer
 
 
 def _implementation(value: object) -> 'Callable | None':

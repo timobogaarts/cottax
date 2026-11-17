@@ -4,6 +4,8 @@ an implementation of a level covers every final under it -- in a toy place of pl
 strings, so the contracts are shown generic in the place.
 '''
 
+from toy_places import Segmented
+from cottax.core import Place
 from dataclasses import dataclass
 
 import pytest
@@ -25,7 +27,7 @@ from cottax.relational import Eq, Le, Relation, RelationalCondition, is_fixed_po
 
 
 @dataclass(frozen=True)
-class Word:
+class Word(Segmented):
     '''A place as a tuple of strings: the whole of `Place`.'''
 
     segments : tuple[str, ...]

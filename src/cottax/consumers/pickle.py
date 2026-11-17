@@ -5,7 +5,7 @@ import pickle
 import types
 from collections.abc import Iterator
 
-from ..core import Label, NestingGraph, Place, Violation
+from ..core import Label, Graph, Place, Violation
 from ..core.frozen import checked
 
 
@@ -22,7 +22,7 @@ class _Scan(pickle.Pickler):
         return NotImplemented
 
 
-def check_nodes_pickle[N: Label, V: Place](graph: NestingGraph[N, V]) -> Iterator[Violation]:
+def check_nodes_pickle[N: Label, V: Place](graph: Graph[N, V]) -> Iterator[Violation]:
     '''Each node pickles, and names nothing in `__main__`'''
     for name in graph.nodes:
         scan = _Scan()
@@ -36,7 +36,7 @@ def check_nodes_pickle[N: Label, V: Place](graph: NestingGraph[N, V]) -> Iterato
 
 
 @checked(check_nodes_pickle)
-def write_pickle[N: Label, V: Place](graph: NestingGraph[N, V]) -> bytes:
+def write_pickle[N: Label, V: Place](graph: Graph[N, V]) -> bytes:
     '''A graph whose every node another process can unpickle, pickled; `pickle.loads` gives
     it back.'''
     return pickle.dumps(graph)

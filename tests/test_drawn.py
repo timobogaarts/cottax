@@ -5,6 +5,8 @@ with no language and no place of cottax's anywhere in the graph. Every class ans
 is this module's own, since a registration lasts the session.
 '''
 
+from toy_places import Segmented
+from cottax.core import Place
 import re
 from dataclasses import dataclass
 
@@ -25,7 +27,7 @@ from graphs import graph_of
 # ---------------------------------------------------------------- a place of the test's own
 
 @dataclass(frozen=True)
-class Term:
+class Term(Segmented):
     '''The whole of `Place`: segments, and a constructor taking them. Nobody answers
     for it, so it is drawn by the defaults.'''
     segments : tuple
@@ -35,7 +37,7 @@ class Term:
 
 
 @dataclass(frozen=True)
-class Dotted:
+class Dotted(Segmented):
     '''A place that answers for itself: dot-joined, a `Mint` first segment minted.'''
     segments : tuple
 

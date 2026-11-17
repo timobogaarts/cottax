@@ -132,7 +132,7 @@ def node(name, reads, owns, **kw):
 
 
 def test_a_node_is_its_interface():
-    # And nothing else: a name is a place, so nothing knows its own. `NestingGraph` binds it.
+    # And nothing else: a name is a place, so nothing knows its own. `Graph` binds it.
     n = node('d1', ['z', 'y2'], ['y1'])
     assert not hasattr(n, 'name')
     assert n.reads == (V(GetAttrKey('z')), V(GetAttrKey('y2')))
@@ -179,17 +179,16 @@ def test_a_path_keeps_its_hash_and_its_prefixes_and_neither_is_its_value():
     every graph: both are taken once. Neither is part of the value, so equality, `replace`
     and a pickle (a hash does not outlive its process) know nothing of them.'''
     import copy, dataclasses, pickle
-    from cottax.core.maths.places import prefixes
 
     x, y, z = map(GetAttrKey, 'xyz')
     path = V(x, y, z)
-    assert prefixes(path) == (V(), V(x), V(x, y)) and prefixes(path) is prefixes(path)
-    assert prefixes(V()) == ()
+    assert path.prefixes == (V(), V(x), V(x, y)) and path.prefixes is path.prefixes
+    assert V().prefixes == ()
     assert path == V(x, y, z) and hash(path) == hash(V(x, y, z)) and path != N(x, y, z)
     for copied in (pickle.loads(pickle.dumps(path)), copy.deepcopy(path),
                    dataclasses.replace(V(x), segments=(x, y, z))):
         assert copied == path and hash(copied) == hash(path) and type(copied) is VarPath
-        assert prefixes(copied) == prefixes(path)
+        assert copied.prefixes == path.prefixes
     assert pickle.loads(pickle.dumps(path))._prefixes is None       # asked again where it lands
     with pytest.raises(TypeError, match='unhashable'):
         V([x])                                                      # refused where it is made

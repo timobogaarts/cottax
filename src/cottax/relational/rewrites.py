@@ -4,7 +4,7 @@ its unknowns, and `FixedPointCut`, cuts closed by a problem on their copies.'''
 from collections.abc import Iterator, Sequence
 
 from ..core import (
-    ComposedOp, ConditionalNode, Cut, GraphOp, Insert, Label, NestingGraph, Place, SetOwnsInside,
+    ComposedOp, ConditionalNode, Cut, GraphOp, Insert, Label, Graph, Place, SetOwnsInside,
     Violation, is_driven,
 )
 from ..core.frozen import OrderedMap
@@ -20,14 +20,14 @@ def check_unknowns(op: 'Determine') -> Iterator[Violation]:
         yield NoUnknowns()
 
 
-def check_determines_nothing_yet(op: 'Determine', graph: NestingGraph) -> Iterator[Violation]:
+def check_determines_nothing_yet(op: 'Determine', graph: Graph) -> Iterator[Violation]:
     """The node determines nothing yet: unknowns are set, never added to."""
     node = graph[op.node]
     if stores_owns_inside(node) and not is_driven(node) and node.owns_inside:   # else `SetOwnsInside` refuses it
         yield AlreadyDetermined(op.node, node.owns_inside)
 
 
-def check_determines_something(op: 'Undetermine', graph: NestingGraph) -> Iterator[Violation]:
+def check_determines_something(op: 'Undetermine', graph: Graph) -> Iterator[Violation]:
     """There is something to drop."""
     node = graph[op.node]
     if stores_owns_inside(node) and not is_driven(node) and not node.owns_inside:   # else `SetOwnsInside` refuses it
@@ -99,7 +99,7 @@ class FixedPointCut[N: Label, V: Place](ComposedOp[N, V]):
             owns_inside = self.copies, reads_outside=(),
         ))
 
-    def composed(self, graph: NestingGraph[N, V]) -> Sequence[GraphOp[N, V]]:
+    def composed(self, graph: Graph[N, V]) -> Sequence[GraphOp[N, V]]:
         return (*self.cuts, Insert(OrderedMap({self.at: self.definition})))
 
     def __repr__(self) -> str:

@@ -2,7 +2,7 @@
 
 from collections.abc import Iterable, Sequence
 
-from ...core import ComposedOp, GraphOp, Label, NestingGraph, Place, first
+from ...core import ComposedOp, GraphOp, Label, Graph, Place, first
 from .cut_rules import CutRule, Opened, cuts_per_cycle
 from .interface import Closing
 from .refusals import ClosuresCollide
@@ -28,7 +28,7 @@ class CloseFunctionalCycles[N: Label, V: Place](ComposedOp[N, V]):
     rule    : CutRule[N, V]
     closing : Closing[N, V]
 
-    def composed(self, graph: NestingGraph[N, V]) -> Sequence[GraphOp[N, V]]:
+    def composed(self, graph: Graph[N, V]) -> Sequence[GraphOp[N, V]]:
         return closed(cuts_per_cycle(graph, self.rule), self.closing)
 
     def __repr__(self) -> str:

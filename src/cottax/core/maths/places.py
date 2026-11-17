@@ -3,30 +3,23 @@ A place: a word over segments, and the prefix order on words.
 """
 
 from collections.abc import Callable, Collection, Hashable, Iterable, Iterator, Set
-from typing import Any, Protocol
-
+from typing import Protocol, Self
 
 type Label = Hashable
 '''
 Where a node is bound: a key, and nothing more.
 '''
 
-
 class Place(Protocol):
     """
-    Place composed over segments of a path (i.e. paths in a nested tree)
-
-    A place may keep its own `prefixes` (its strict prefixes, root first): `prefixes` asks
-    for them, and builds them from `segments` where a place keeps none.
+    A word over segments, as a path into a nested tree, and its strict prefixes. 
     """
 
-    def __init__(self, segments: Iterable[Any]) -> None:
-        ...
+    segments : tuple[Hashable, ...]
+    '''The word, in order from the root: finite, each segment compared by equality and hashed.'''
 
-    @property
-    def segments(self) -> tuple[Any, ...]:
-        '''The word itself, in order from the root. Finite and hashable.'''
-        ...
+    prefixes : tuple[Self, ...]
+    '''`{q : q ⊏ self}`, root first: the root, `.x`, `.x.y` of `.x.y.z`. (implementations can cache this since it's often used)'''
 
 
 type PlaceToPlace[P: Place] = Callable[[P], P]
@@ -47,14 +40,6 @@ def is_prefix[P: Place](a: P, b: P) -> bool:
     """`a ⊑ b`, equality included."""
     return b.segments[:len(a.segments)] == a.segments
 
-def prefixes[P: Place](place: P) -> 'Iterable[P]':
-    """`{q : q ⊏ place}`, root first. Set of all prefixes. For e.g. `.x.y.z` gives the root, `.x`, `.x.y`.
-    The place's own where it keeps them: every rule asks them of every place of every graph."""
-    if (kept := getattr(place, 'prefixes', None)) is not None:
-        return kept
-    cls, segments = type(place), place.segments
-    return tuple(cls(segments[:i]) for i in range(len(segments)))
-
 def comparable[P: Place](a: P, b: P) -> bool:
     """`a ⊑ b or b ⊑ a`."""
     return is_prefix(a, b) or is_prefix(b, a)
@@ -70,14 +55,14 @@ def comparables_in[P: Place](place: P, among: Collection[P],
     """
     if place in among:
         yield place
-    yield from (q for q in prefixes(place) if q in among)
+    yield from (q for q in place.prefixes if q in among)
     if place in (strictly_below(among) if below is None else below):
         yield from (x for x in among if x != place and is_prefix(place, x))
 
 
 def strictly_below[P: Place](among: Iterable[P]) -> set[P]:
     """`{q : q ⊏ x, x ∊ among}`: every place with an extension in `among`."""
-    return {q for x in among for q in prefixes(x)}
+    return {q for x in among for q in x.prefixes}
 
 # ---------------------------------------------------------------- the lookup, over a sequence: what the rules spell
 
@@ -101,4 +86,4 @@ def self_overlaps[P: Place](places: Iterable[P]) -> Iterator[tuple[P, P]]:
         for other in comparables_in(place, seen, below):
             yield place, other
         seen.add(place)
-        below.update(prefixes(place))
+        below.update(place.prefixes)

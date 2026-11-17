@@ -12,9 +12,8 @@ from collections.abc import Generator, Iterator, Sequence
 from typing import Any, ClassVar
 
 from ...core import (
-    AbstractConditionalNode, FunctionalNode, Label, kind_of, NestingGraph, Place, Violation,
-    is_encloser, GraphOp, Nest, StagedOp, refusals,
-)
+    AbstractConditionalNode, FunctionalNode, Label, kind_of, Graph, Place, Violation,
+    is_encloser, GraphOp, Nest, StagedOp, refusals, dependencies, nesting)
 from ...core.frozen import AbstractVar, Frozen, OrderedMap, answer, first
 from .closing import closed
 from .combine import Combine
@@ -25,12 +24,12 @@ from .refusals import BodyShared, NestedAlready, NotCombinable, TopNotAProblem, 
 
 # ---------------------------------------------------------------- what a problem is, asked
 
-def not_implicit[N: Label](graph: NestingGraph[N, Any], problem: N) -> tuple[Violation, ...]:
+def not_implicit[N: Label](graph: Graph[N, Any], problem: N) -> tuple[Violation, ...]:
     '''Why the problem is not an implicit model, by its `ModelReading`; refused if none.'''
     return tuple(answer(ModelReading, kind_of(graph[problem])).not_implicit(graph, problem))
 
 
-def body_of_problem[N: Label](graph: NestingGraph[N, Any], problem: N) -> tuple[N, ...]:
+def body_of_problem[N: Label](graph: Graph[N, Any], problem: N) -> tuple[N, ...]:
     '''The function nodes that are the problem's own, by its `ModelReading`.'''
     return answer(ModelReading, kind_of(graph[problem])).body(graph, problem)
 
@@ -48,15 +47,15 @@ def _spelled(kind: type | None) -> str:
 # ---------------------------------------------------------------- one problem inside another
 
 
-def lies_inside[N: Label](graph: NestingGraph[N, Any], inner: N, outer: N,
+def lies_inside[N: Label](graph: Graph[N, Any], inner: N, outer: N,
                           bodies: dict[N, tuple[N, ...]]) -> bool:
     '''`inner` and its whole body on `outer`'s cycle, and its body part of `outer`'s, which
     holds more: it can be placed nowhere but inside `outer`.'''
     own, other = set(bodies[inner]), set(bodies[outer])
-    return own < other and {inner, *own} <= set(graph.cycle_of(outer))
+    return own < other and {inner, *own} <= set(nesting(graph).cycle_of(outer))
 
 
-def inside[N: Label](graph: NestingGraph[N, Any], bodies: dict[N, tuple[N, ...]]) -> OrderedMap[N, N]:
+def inside[N: Label](graph: Graph[N, Any], bodies: dict[N, tuple[N, ...]]) -> OrderedMap[N, N]:
     '''Each problem lying wholly inside another's body, and the least such other, the one it
     is nested in; in binding order. The pairs are a forest, a body growing up each chain.'''
     out = {}
@@ -75,7 +74,7 @@ def chain[N: Label](pairs: OrderedMap[N, N], p: N) -> tuple[N, ...]:
     return tuple(out)
 
 
-def shared_bodies[N: Label](graph: NestingGraph[N, Any], bodies: dict[N, tuple[N, ...]]
+def shared_bodies[N: Label](graph: Graph[N, Any], bodies: dict[N, tuple[N, ...]]
                             ) -> Iterator[Violation]:
     '''Two problems sharing a body node, neither inside the other at any depth.'''
     pairs = inside(graph, bodies)
@@ -93,7 +92,7 @@ def shared_bodies[N: Label](graph: NestingGraph[N, Any], bodies: dict[N, tuple[N
             claimed.setdefault(b, []).append(p)
 
 
-def folded_as[N: Label](op: 'Architecture', graph: NestingGraph[N, Any], into: N,
+def folded_as[N: Label](op: 'Architecture', graph: Graph[N, Any], into: N,
                         nodes: Sequence[N]) -> type:
     '''The kind `into` combines as, every one of `nodes` combining as it; else refused.'''
     kind = combines_as(graph[into])
@@ -103,7 +102,7 @@ def folded_as[N: Label](op: 'Architecture', graph: NestingGraph[N, Any], into: N
     return kind
 
 
-def combined[N: Label](op: 'Architecture', graph: NestingGraph[N, Any], into: N,
+def combined[N: Label](op: 'Architecture', graph: Graph[N, Any], into: N,
                        nodes: Sequence[N]) -> tuple[GraphOp, ...]:
     '''`nodes` combined into `into`, their first, as `folded_as` says: one `Combine`, or
     none for one node.'''
@@ -135,12 +134,12 @@ class Resolution[N: Label, V: Place](Frozen):
     '''What resolved the cycles off the scope's: the analysis's closures and placing.'''
     closures  : tuple[GraphOp[N, V], ...]
     '''What the cutting bound, one closure per group: what the `Closing` returned.'''
-    opened    : NestingGraph[N, V]
+    opened    : Graph[N, V]
     '''The graph after those two and before any problem is placed.'''
     combining : tuple[GraphOp[N, V], ...]
     '''The ops placing the problems: each lying inside another's body nested there, then the
     final's own, placing the closures and the declared problems.'''
-    graph     : NestingGraph[N, V]
+    graph     : Graph[N, V]
     '''The result.'''
 
 # ---------------------------------------------------------------- which solves are boxes
@@ -149,19 +148,19 @@ class Boxes[N: Label, V: Place](Frozen):
     '''Which problems of the graph handed are seen as one function each.'''
 
     @abstractmethod
-    def folded(self, graph: NestingGraph[N, V]) -> tuple[N, ...]:
+    def folded(self, graph: Graph[N, V]) -> tuple[N, ...]:
         '''The problems to fold, in binding order.'''
 
 
 # ---------------------------------------------------------------- the skeleton
 
 
-def check_nothing_nested(op: 'Architecture', graph: NestingGraph) -> Iterator[Violation]:
+def check_nothing_nested(op: 'Architecture', graph: Graph) -> Iterator[Violation]:
     if graph.within:
         yield NestedAlready(tuple((str(i), str(o)) for i, o in graph.within.items()))
 
 
-def check_implicit_models(op: 'Architecture', graph: NestingGraph) -> Iterator[Violation]:
+def check_implicit_models(op: 'Architecture', graph: Graph) -> Iterator[Violation]:
     '''
     - An implicit model in its own language (`ModelReading.not_implicit`); where the final
       combines what is declared, combining as the top does
@@ -171,7 +170,7 @@ def check_implicit_models(op: 'Architecture', graph: NestingGraph) -> Iterator[V
     '''
     own = set(op.design)
     into = combines_as(graph[op.design[0]]) if op.design and op.design[0] in graph else None
-    free = NestingGraph(graph.graph.subgraph(n for n in graph.nodes if n not in own), OrderedMap())
+    free = Graph(graph.subgraph(n for n in graph.nodes if n not in own).definitions)
     bodies: dict = {}
     for p in free.enclosers:
         if refused := not_implicit(free, p):
@@ -220,25 +219,25 @@ class Architecture[N: Label, V: Place](StagedOp[N, V]):
     checks_graph = (check_nothing_nested, check_implicit_models)
 
     @abstractmethod
-    def scope(self, graph: NestingGraph[N, V]) -> NestingGraph[N, V]:
+    def scope(self, graph: Graph[N, V]) -> Graph[N, V]:
         '''The graph the cutting sees, and whose cycles are placed.'''
 
     @abstractmethod
-    def outside(self, graph: NestingGraph[N, V]) -> tuple[GraphOp[N, V], ...]:
+    def outside(self, graph: Graph[N, V]) -> tuple[GraphOp[N, V], ...]:
         '''What resolves the cycles the scope leaves out, once absorbed.'''
 
     @abstractmethod
-    def absorbing(self, graph: NestingGraph[N, V]) -> tuple[GraphOp[N, V], ...]:
+    def absorbing(self, graph: Graph[N, V]) -> tuple[GraphOp[N, V], ...]:
         '''What is combined before anything is cut.'''
 
     @abstractmethod
-    def combining(self, opened: NestingGraph[N, V], closures: Sequence[N]
+    def combining(self, opened: Graph[N, V], closures: Sequence[N]
                   ) -> Sequence[GraphOp[N, V]]:
         '''The ops placing what lies in the scope, read off `opened`, the graph the
         cutting leaves; `closures` is the problems it bound.'''
 
-    def stages(self, graph: NestingGraph[N, V]
-               ) -> Generator[Sequence[GraphOp[N, V]], NestingGraph[N, V], None]:
+    def stages(self, graph: Graph[N, V]
+               ) -> Generator[Sequence[GraphOp[N, V]], Graph[N, V], None]:
         '''Absorb; resolve what then lies outside; cut and close the scope of what is
         left; place every problem on its cycles, the closures being the problems the
         cutting bound.'''
@@ -249,7 +248,7 @@ class Architecture[N: Label, V: Place](StagedOp[N, V]):
         nested   = yield self.nesting_inside(scope)
         yield self.combining(nested, tuple(p for p in opened.enclosers if p not in set(resolved.enclosers)))
 
-    def nesting_inside(self, scope: NestingGraph[N, V]) -> tuple[GraphOp[N, V], ...]:
+    def nesting_inside(self, scope: Graph[N, V]) -> tuple[GraphOp[N, V], ...]:
         '''Each problem of the scope lying wholly inside another's body nested there, read
         before anything is cut; none where the final combines declared problems.'''
         if self.combines_declared:
@@ -257,7 +256,7 @@ class Architecture[N: Label, V: Place](StagedOp[N, V]):
         pairs = inside(scope, {p: body_of_problem(scope, p) for p in scope.enclosers})
         return tuple(Nest(i, o) for i, o in pairs.items())
 
-    def resolution(self, graph: NestingGraph[N, V]) -> Resolution[N, V]:
+    def resolution(self, graph: Graph[N, V]) -> Resolution[N, V]:
         '''The whole derivation: each stage's ops and the graph it leaves. Refused as
         `apply` refuses.'''
         first(refusals(self, graph))
@@ -265,14 +264,14 @@ class Architecture[N: Label, V: Place](StagedOp[N, V]):
         return Resolution(absorbed.ops, outside.ops, closures.ops, closures.graph,
                           (*nested.ops, *combining.ops), combining.graph)
 
-    def cycles_under(self, opened: NestingGraph[N, V], closures: Sequence[N]
+    def cycles_under(self, opened: Graph[N, V], closures: Sequence[N]
                      ) -> tuple[OnCycle[N], ...]:
         '''Per cycle of the scope in `opened`, the problems on it: the closures the
         cutting bound and the ones the model declared, but those already nested.'''
         bound = set(closures)
         under = self.scope(opened)
         out = []
-        for cycle in under.graph.cycles:
+        for cycle in dependencies(under).cycles:
             problems = [p for p in cycle if is_encloser(under[p]) and p not in under.within]
             out.append(OnCycle(tuple(p for p in problems if p in bound),
                                tuple(p for p in problems if p not in bound)))
@@ -282,17 +281,17 @@ class Architecture[N: Label, V: Place](StagedOp[N, V]):
 # ---------------------------------------------------------------- the two scopes
 
 
-def check_top_bound(op: 'Monolithic', graph: NestingGraph) -> Iterator[Violation]:
+def check_top_bound(op: 'Monolithic', graph: Graph) -> Iterator[Violation]:
     if op.top not in graph.definitions:
         yield TopUnbound(str(op.top))
 
 
-def check_top_is_problem(op: 'Monolithic', graph: NestingGraph) -> Iterator[Violation]:
+def check_top_is_problem(op: 'Monolithic', graph: Graph) -> Iterator[Violation]:
     if op.top in graph and not is_encloser(graph[op.top]):
         yield TopNotAProblem(str(op.top))
 
 
-def check_top_combinable(op: 'Monolithic', graph: NestingGraph) -> Iterator[Violation]:
+def check_top_combinable(op: 'Monolithic', graph: Graph) -> Iterator[Violation]:
     '''The top is combined with what it absorbs and, by the final, with closures or
     declared problems: it combines as some kind, and what it absorbs as the same.'''
     if op.top in graph and is_encloser(graph[op.top]):
@@ -302,10 +301,10 @@ def check_top_combinable(op: 'Monolithic', graph: NestingGraph) -> Iterator[Viol
                 yield NotCombinable(str(n), _spelled(found), repr(op), str(op.top))
 
 
-def reached_requirements[N: Label, V: Place](graph: NestingGraph[N, V], top: N) -> tuple[N, ...]:
+def reached_requirements[N: Label, V: Place](graph: Graph[N, V], top: N) -> tuple[N, ...]:
     '''Every requirement whose conditions the design of `top` reaches.'''
-    reach  = set(graph.graph.reach(graph[top].owns_inside))
-    owners = graph.graph.owners
+    reach  = set(dependencies(graph).reach(graph[top].owns_inside))
+    owners = dependencies(graph).owners
     return tuple(r for r, d in graph.definitions.items()
                  if isinstance(d, AbstractConditionalNode) and not d.owns_inside
                  and all(owners.get(c) in reach for c in d.reads_inside))
@@ -328,20 +327,20 @@ class Monolithic[N: Label, V: Place](Architecture[N, V]):
     def design(self) -> tuple[N, ...]:
         return (self.top,)
 
-    def scope(self, graph: NestingGraph[N, V]) -> NestingGraph[N, V]:
-        return graph.interior(self.top)
+    def scope(self, graph: Graph[N, V]) -> Graph[N, V]:
+        return nesting(graph).interior(self.top)
 
-    def outside(self, graph: NestingGraph[N, V]) -> tuple[GraphOp[N, V], ...]:
+    def outside(self, graph: Graph[N, V]) -> tuple[GraphOp[N, V], ...]:
         '''The analysis over the graph with the top's cycle taken out, its ops applied
         to the whole: a cycle off the top's is a component of its own.'''
-        on  = set(graph.cycle_of(self.top))
+        on  = set(nesting(graph).cycle_of(self.top))
         off = graph.subgraph(n for n in graph.nodes if n not in on)
         if not off.nodes:
             return ()
         r = (self.analysis or MDA(self.rule, self.closing)).resolution(off)
         return (*r.absorbed, *r.outside, *r.closures, *r.combining)
 
-    def absorbing(self, graph: NestingGraph[N, V]) -> tuple[GraphOp[N, V], ...]:
+    def absorbing(self, graph: Graph[N, V]) -> tuple[GraphOp[N, V], ...]:
         '''Every requirement whose conditions the design of `top` reaches, combined
         into `top`: one `Combine`, or nothing.'''
         found = (self.top, *reached_requirements(graph, self.top))
@@ -359,13 +358,13 @@ class Coupled[N: Label, V: Place](Architecture[N, V]):
 
     design = ()
 
-    def scope(self, graph: NestingGraph[N, V]) -> NestingGraph[N, V]:
+    def scope(self, graph: Graph[N, V]) -> Graph[N, V]:
         return graph
 
-    def outside(self, graph: NestingGraph[N, V]) -> tuple[GraphOp[N, V], ...]:
+    def outside(self, graph: Graph[N, V]) -> tuple[GraphOp[N, V], ...]:
         return ()
 
-    def absorbing(self, graph: NestingGraph[N, V]) -> tuple[GraphOp[N, V], ...]:
+    def absorbing(self, graph: Graph[N, V]) -> tuple[GraphOp[N, V], ...]:
         return ()
 
     def _repr(self) -> str:
@@ -419,7 +418,7 @@ class Analysis[N: Label, V: Place](Coupled[N, V]):
                 for op in one_mda(self, opened, cycle, None)]
 
 
-def one_mda[N: Label](op: Architecture, opened: NestingGraph[N, Any], cycle: OnCycle[N],
+def one_mda[N: Label](op: Architecture, opened: Graph[N, Any], cycle: OnCycle[N],
                       within: N | None) -> tuple[GraphOp, ...]:
     '''A cycle's closures folded into its first, the MDA, nested in `within` if given, and
     each declared problem nested in the MDA; with no closure, each nested in `within`, or
@@ -434,11 +433,11 @@ def one_mda[N: Label](op: Architecture, opened: NestingGraph[N, Any], cycle: OnC
 # ---------------------------------------------------------------- boxes cyclic
 
 
-def cuts_per_cycle_boxed[N: Label, V: Place](graph: NestingGraph[N, V], boxes: Boxes[N, V],
+def cuts_per_cycle_boxed[N: Label, V: Place](graph: Graph[N, V], boxes: Boxes[N, V],
                                              rule: CutRule[N, V]) -> tuple[Opened[N, V], ...]:
     '''
     `cuts_per_cycle` over the graph with each selected problem contracted with its
-    body (`NestingGraph.contract`), together with every problem lying inside it; a body no
+    body (`Graph.contract`), together with every problem lying inside it; a body no
     selected problem brings is contracted alone, so nothing inside a body is cut. Every
     box is mapped back to its members: on a cycle, its function nodes in binding order;
     as a reader, those that read the variable -- under `check_implicit_models` always its
@@ -461,10 +460,10 @@ def cuts_per_cycle_boxed[N: Label, V: Place](graph: NestingGraph[N, V], boxes: B
                                     if var in graph[m].reads)
                          for var, readers in group.items()}
                         for group in groups))
-                 for cycle, groups in cuts_per_cycle(graph.contract(blocks), rule))
+                 for cycle, groups in cuts_per_cycle(nesting(graph).contract(blocks), rule))
 
 
-def per_functional_cycle_boxed[N: Label, V: Place](graph: NestingGraph[N, V], boxes: Boxes[N, V],
+def per_functional_cycle_boxed[N: Label, V: Place](graph: Graph[N, V], boxes: Boxes[N, V],
                                                    rule: CutRule[N, V]) -> tuple[ToCut[N, V], ...]:
     '''`cuts_per_cycle_boxed`'s groups, every cycle's in a row.'''
     return tuple(group for _, groups in cuts_per_cycle_boxed(graph, boxes, rule) for group in groups)
@@ -475,7 +474,7 @@ def per_functional_cycle_boxed[N: Label, V: Place](graph: NestingGraph[N, V], bo
 class Bodies[N: Label, V: Place](Boxes[N, V]):
     '''None: the function nodes alone are seen.'''
 
-    def folded(self, graph: NestingGraph[N, V]) -> tuple[N, ...]:
+    def folded(self, graph: Graph[N, V]) -> tuple[N, ...]:
         return ()
 
     def __repr__(self) -> str:
@@ -486,7 +485,7 @@ class Disciplines[N: Label, V: Place](Boxes[N, V]):
     '''Every problem of the graph handed -- a discipline under `check_implicit_models`,
     and under an architecture every implicit model in its scope.'''
 
-    def folded(self, graph: NestingGraph[N, V]) -> tuple[N, ...]:
+    def folded(self, graph: Graph[N, V]) -> tuple[N, ...]:
         return graph.enclosers
 
     def __repr__(self) -> str:
@@ -498,7 +497,7 @@ class Solves[N: Label, V: Place](Boxes[N, V]):
 
     names : tuple[N, ...]
 
-    def folded(self, graph: NestingGraph[N, V]) -> tuple[N, ...]:
+    def folded(self, graph: Graph[N, V]) -> tuple[N, ...]:
         return self.names
 
     def __repr__(self) -> str:

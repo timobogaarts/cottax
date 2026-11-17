@@ -8,7 +8,7 @@ Names are built by hand from key entries, as in `test_algebra.py` and `test_rewr
 import pytest
 from jax.tree_util import GetAttrKey
 
-from cottax.core import FunctionalNode
+from cottax.core import FunctionalNode, dependencies
 from cottax.core.plan import Cut, Insert, Plan, refusals
 import purposes
 from cottax.core.frozen import OrderedMap
@@ -47,8 +47,8 @@ def names(graph):
 def contributing(graph, *wanted):
     '''What a run to `wanted` needs -- the ancestors of their producers -- as a graph.
     The hazard below is about what this drops.'''
-    owners = graph.graph.owners
-    return graph.subgraph(graph.graph.ancestors(owners[v] for v in wanted if v in owners))
+    owners = dependencies(graph).owners
+    return graph.subgraph(dependencies(graph).ancestors(owners[v] for v in wanted if v in owners))
 
 
 @pytest.fixture
@@ -77,7 +77,7 @@ def looped():
 
 def opening(graph, var):
     '''`Cut(var, ..., HAT)` aimed at whatever closes the cycle -- what a caller writes.'''
-    return Cut(var, graph.graph.closing_readers(var), HAT)
+    return Cut(var, dependencies(graph).closing_readers(var), HAT)
 
 
 def test_a_bare_cut_leaves_the_producer_droppable(looped):
@@ -90,7 +90,7 @@ def test_a_residual_makes_the_pair_an_edge(looped):
     '''Reading both halves puts the producer back in the structure, where a restriction sees it.'''
     op = opening(looped, Y1)
     g  = (looped + op + Insert(OrderedMap({N('res'): call([Y1, op.copy], [R])}))).graph
-    assert g.graph.is_acyclic
+    assert dependencies(g).is_acyclic
     assert names(contributing(g, F, R)) == ['.d1', '.d2', '.obj', '.res']
 
 
@@ -98,7 +98,7 @@ def test_a_source_that_reads_nothing_leaves_the_producer_droppable(looped):
     '''Driving from outside: acyclic, but nothing inside needs the computed value.'''
     op = opening(looped, Y1)
     g  = (looped + op + Insert(OrderedMap({N('guess'): source(op.copy)}))).graph
-    assert g.graph.is_acyclic
+    assert dependencies(g).is_acyclic
     assert '.d1' not in names(contributing(g, F))
 
 
@@ -107,7 +107,7 @@ def test_a_source_that_reads_the_computed_value_keeps_the_cycle(looped):
     nothing that assigning a driver would not have.'''
     op = opening(looped, Y1)
     g  = (looped + op + Insert(OrderedMap({N('mda'): call([Y1], [op.copy])}))).graph
-    assert not g.graph.is_acyclic
+    assert not dependencies(g).is_acyclic
     assert '.d1' in names(contributing(g, F))
 
 

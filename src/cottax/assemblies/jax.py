@@ -12,6 +12,7 @@ from ..core import (
 from ..consumers.architectures.cut_rules import (
     ByName, GaussSeidel, GaussSeidelMinimal, GaussSeidelOrdered, Jacobi, NoCuts,
 )
+from ..core import prove, steps, unproved
 from ..core.frozen import OrderedMap, choice
 from ..core.driven import Start, driven
 from ..consumers.architectures import (
@@ -200,7 +201,7 @@ __all__ = [
     'OdeDeclaring', 'Rate', 'Dt', 'OdeCondition', 'Integration', 'Integrator',
     'Times', 'Trajectory',
     'Newton', 'Picard', 'BFGS', 'ScipyMinimize', 'HostMinimiser', 'HostProblem',
-    'canonical', 'box', 'Box', 'NotSquare', 'JitGraph',
+    'canonical', 'box', 'Box', 'NotSquare', 'JitGraph', 'prove', 'unproved', 'steps',
     'Running', 'Results', 'Inputs', 'Traced', 'Start', 'driven', 'CallableGraph', 'completed',
     'PlainFormat', 'LatexFormatter', 'render_xdsm_svg', 'render_matrix_svg', 'by_namespace',
     'render_html', 'draw', 'render', 'to_dot', 'Style', 'STYLES', 'TERRACOTTA', 'PYXDSM', 'DARK',

@@ -5,6 +5,8 @@ variable name.
 Names are built by hand from key entries, as in `test_algebra.py`.
 '''
 
+from cottax.core import prove, dependencies
+
 import re
 
 import pytest
@@ -123,7 +125,7 @@ def test_a_problem_leads_the_block_it_drives(sellar):
 def test_the_blocking_is_the_solver_blocking(sellar):
     blocked = [b['steps'] for b in xdsm_struct(sellar, blocks=True)['blocks']]
     assert blocked == [[n.spelling for n in c]
-                       for c in sellar.graph.components]
+                       for c in dependencies(sellar).components]
 
 
 def test_only_a_coupled_block_is_ringed_as_one(sellar):
@@ -145,10 +147,11 @@ def test_the_figure_and_the_page_key_alike_and_once(sellar, nestable):
     from cottax.consumers.visualization.xdsm import key_entries
     from cottax.consumers.visualization.xdsm_html import xdsm_view
     two = graph_of(OrderedMap({**nestable.definitions, N('pre'): call([], ['k'])}))
-    nested = ExecutableGraph((Plan(two) + Nest(N('h'), N('opt'))).graph)
-    assert {(b['ring'], b['depth']) for b in xdsm_struct(two, blocks=nested)['blocks']
+    nested = (Plan(two) + Nest(N('h'), N('opt'))).graph
+    prove(nested, ExecutableGraph)
+    assert {(b['ring'], b['depth']) for b in xdsm_struct(nested, blocks=True)['blocks']
             if b['ring'] == 'run'} == {('run', 0), ('run', 1)}
-    for graph, blocks in ((two, nested), (sellar, True)):
+    for graph, blocks in ((nested, True), (sellar, True)):
         for style in (PYXDSM, TERRACOTTA):
             struct = xdsm_struct(graph, blocks=blocks)
             texts = [e['text'] for e in key_entries(struct, style)]
@@ -384,16 +387,17 @@ def nestable():
 def test_a_nested_solve_is_a_ring_inside_a_ring(nestable):
     '''The interior draws its own blocks, so nesting shows as containment and the colour
     is left to say *which level* -- level 0 the solver colour, level 1 the next.'''
-    nested = ExecutableGraph((Plan(nestable) + Nest(N('h'), N('opt'))).graph)
+    nested = (Plan(nestable) + Nest(N('h'), N('opt'))).graph
+    prove(nested, ExecutableGraph)
 
     # Un-nested, the two problems share one block and no blocking exists; `blocks=True`
     # still rings the component, since the drawing walks `entries(graph.graph)`.
     assert [(b['ring'], b['depth']) for b in xdsm_struct(nestable, blocks=True)['blocks']] \
         == [('solve', 0)]
-    assert [(b['ring'], b['depth']) for b in xdsm_struct(nestable, blocks=nested)['blocks']] \
+    assert [(b['ring'], b['depth']) for b in xdsm_struct(nested, blocks=True)['blocks']] \
         == [('solve', 0), ('solve', 1), ('run', 1)]
 
-    svg = render_xdsm_svg(nestable, blocks=nested)
+    svg = render_xdsm_svg(nested, blocks=True)
     assert 'group-l0' in svg and 'group-l1' in svg
     assert 'solved together' in svg and 'solved one level in' in svg
 
@@ -403,15 +407,16 @@ def test_the_outer_problem_leads_so_every_interior_is_contiguous(nestable, sella
     contiguous run. Pinning the problem answered *outside* to the head is what leaves the
     interior occupying the rest of it -- at every depth. A block no problem answers leads
     with every problem it holds.'''
-    nested = ExecutableGraph((Plan(nestable) + Nest(N('h'), N('opt'))).graph)
-    assert xdsm_struct(nestable, blocks=nested)['steps'][0] == '.opt'   # the outer problem leads
+    nested = (Plan(nestable) + Nest(N('h'), N('opt'))).graph
+    prove(nested, ExecutableGraph)
+    assert xdsm_struct(nested, blocks=True)['steps'][0] == '.opt'   # the outer problem leads
 
-    for graph, blocks in ((nestable, nested), (nestable, True), (sellar, True),
+    for graph, blocks in ((nested, True), (nestable, True), (sellar, True),
                           *((three_problems(*nesting), True)
                             for nesting in (NOTHING_NESTED, UNORDERED_IN_P, NESTED))):
         struct = xdsm_struct(graph, blocks=blocks)
         at = {s: i for i, s in enumerate(struct['steps'])}
-        ringed = walk(ordered_graph(blocks if isinstance(blocks, ExecutableGraph) else graph))
+        ringed = walk(ordered_graph(graph))
         assert len(ringed) == len(struct['blocks'])
         for b, block in zip(struct['blocks'], ringed):
             slots = sorted(at[s] for s in b['steps'])
@@ -425,8 +430,9 @@ def test_the_outer_problem_leads_so_every_interior_is_contiguous(nestable, sella
 
 
 def test_nesting_the_other_way_leads_with_the_other_problem(nestable):
-    nested = ExecutableGraph((Plan(nestable) + Nest(N('opt'), N('h'))).graph)
-    assert xdsm_struct(nestable, blocks=nested)['steps'][0] == '.h'
+    nested = (Plan(nestable) + Nest(N('opt'), N('h'))).graph
+    prove(nested, ExecutableGraph)
+    assert xdsm_struct(nested, blocks=True)['steps'][0] == '.h'
 
 
 def test_the_rings_of_three_problems_on_one_cycle():
@@ -522,7 +528,7 @@ def test_ordered_graph_is_the_binding_in_run_order():
         N('a'): call([],    ['a']),
         N('b'): call(['a'], ['b']),
     }))
-    assert [n.spelling for n in ordered_graph(ExecutableGraph(g)).nodes] == ['.a', '.b', '.c']
+    assert [n.spelling for n in ordered_graph(g).nodes] == ['.a', '.b', '.c']
 
 
 def test_an_interior_runs_in_its_own_order(prelude):

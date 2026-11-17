@@ -6,17 +6,17 @@ from collections.abc import Callable, Iterable, Iterator, Mapping
 from typing import Any
 
 from ...core import (
-    ConditionalNode, FunctionalNode, GraphWithValues, Label, NodeDefinition, Place, Run,
-    SteppedExecutableGraph, Violation, is_driven,
-)
+    ConditionalNode, FunctionalNode,  Label, Graph, NodeDefinition,
+    NodeRules, Place, Rules, Run, Violation, is_driven, proved, steps, dependencies)
 from ...core.frozen import OrderedMap, checked
 from ...core.realisation import RealisedGraph, implementation_of, is_implemented
 from .interface import DriverImplementation
 from .interface_types import ConditionMap, ConditionValues, Context, Posed, Unknowns
 from .refusals import (
-    DataMissing, ImplementsAnother, NotADriverImplementation, NotCallable, ProvedBelow,
+    DataMissing, ImplementsAnother, NotADriverImplementation, NotCallable,
     ReportUnavailable, ReturnedUnlike,
 )
+from .valued import GraphWithValues
 
 
 
@@ -62,23 +62,19 @@ def _names(roles: tuple[type, ...]) -> tuple[str, ...]:
     return tuple(role.__name__ for role in roles)
 
 
-class CallableGraph[N: Label, V: Place](RealisedGraph[N, V]):
-    '''A realised graph whose every implementation is callable / driver implemented'''
+CallableNodes = NodeRules('CallableNodes', (check_function_callable, check_implements_its_driver))
+'''Every function's implementation callable, every driver's implementing its contract.'''
 
-    checks_node = (check_function_callable, check_implements_its_driver)
+CallableGraph = Rules('CallableGraph', implies=(RealisedGraph, CallableNodes))
+'''A realised graph whose every implementation is callable / driver implemented.'''
 
 
 
 # ============================================================================ running it
 # Running a CallableGraph with a value at each of its inputs.
 
-def check_callable(valued: GraphWithValues) -> Iterator[Violation]:
-    if not isinstance(valued.graph, CallableGraph):
-        yield ProvedBelow(type(valued.graph).__name__)
-
-
-@checked(check_callable)
-def run[N: Label, V: Place](valued: GraphWithValues[CallableGraph[N, V], V]
+@checked(proved(CallableGraph, at='graph'))
+def run[N: Label, V: Place](valued: GraphWithValues[Graph[N, V], V]
                             ) -> OrderedMap[V, Any]:
     '''Every place with a value: the inputs, and everything the graph computes.'''
     env = Env(valued.values)
@@ -102,15 +98,15 @@ class Env[V]:
     def write(self, places: tuple[V, ...], values: Iterable[Any]) -> None:
         self.values.update(zip(places, values, strict=True))
 
-type AtSolve = Callable[[ConditionalNode, SteppedExecutableGraph, Env], None]
+type AtSolve = Callable[[ConditionalNode, Graph, Env], None]
 '''What a walk does at a `Solve`, handed the problem, its interior and the values so far:
 it writes the unknowns and the reports, and walks the interior if it wants its values.'''
 
 
-def walk(graph: SteppedExecutableGraph, env: Env, at_solve: AtSolve) -> None:
+def walk(graph: Graph, env: Env, at_solve: AtSolve) -> None:
     '''`graph`'s steps in order, a `Run` called and a `Solve` handed to `at_solve`: `run` is
     this loop with "solve it" at a solve. What a step raises names its node (`blamed`).'''
-    for step in graph.steps:
+    for step in steps(graph):
         name = step.node if isinstance(step, Run) else step.problem
         try:
             if isinstance(step, Run):
@@ -149,7 +145,7 @@ def _call(name: Any, node: Any, env: Env) -> None:
     env.write(node.owns, (result,) if len(node.owns) == 1 else result)
 
 
-def _solve(node: ConditionalNode, interior: CallableGraph, env: Env) -> None:
+def _solve(node: ConditionalNode, interior: Graph, env: Env) -> None:
     conditions = InteriorConditionMap.posing(node, interior)
     driver = node.driver
 
@@ -171,7 +167,7 @@ class InteriorConditionMap[N: Label, V: Place](ConditionMap):
     '''A condition map by one walk of a solve's interior. It holds a graph and places, so
     it hashes and compares by value.'''
 
-    interior       : CallableGraph[N, V]
+    interior       : Graph[N, V]
     unknowns       : tuple[V, ...]
     '''Where the unknowns' values go.'''
     context_places : tuple[V, ...]
@@ -181,16 +177,16 @@ class InteriorConditionMap[N: Label, V: Place](ConditionMap):
     '''Where the answer is read: the condition's reads, its conditions then its parameters.'''
 
     @classmethod
-    def posing(cls, node: ConditionalNode[V], interior: CallableGraph[N, V]
+    def posing(cls, node: ConditionalNode[V], interior: Graph[N, V]
                ) -> 'InteriorConditionMap[N, V]':
         '''The map `run` hands `node`'s driver, `interior` its `Solve`'s. Fixed: what the
         interior reads from outside, and what the condition reads that the interior does not
         produce (a parameter); the map answers at every condition read.'''
         solved   = set(node.owns_inside)
         stated   = node.condition.reads
-        produced = set(interior.graph.graph.owned_variables)
+        produced = set(interior.owned_variables)
         fixed    = tuple(dict.fromkeys(
-            p for p in (*interior.graph.graph.boundary_inputs, *stated)
+            p for p in (*dependencies(interior).boundary_inputs, *stated)
             if p not in solved and p not in produced))
         return cls(interior, node.owns_inside, fixed, stated)
 

@@ -16,11 +16,11 @@ from jax.tree_util import GetAttrKey, tree_flatten, tree_structure
 
 from cottax.core.frozen import OrderedMap
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core import FunctionalNode
+from cottax.core import FunctionalNode, dependencies
 from cottax.core.realisation import implemented
 import purposes
 from graphs import graph_of
-from cottax.core.maths.nesting import NestingGraph
+from cottax.core.maths.graph import Graph
 
 HAT, PROBLEM = purposes.Copy(), purposes.Solve()
 
@@ -42,7 +42,7 @@ def call(reads, owns):
                        body)
 
 
-def acyclic() -> NestingGraph:
+def acyclic() -> Graph:
     '''A fresh graph, built twice so the two are equal without being identical.'''
     return graph_of(OrderedMap({
         N('d1') : call(['z'], ['y1']),
@@ -51,10 +51,10 @@ def acyclic() -> NestingGraph:
     }))
 
 
-def ask_everything(g: NestingGraph) -> None:
+def ask_everything(g: Graph) -> None:
     '''Answer enough queries that every layer of cache is warm.'''
-    g.graph.topological_order, g.graph.variables, g.graph.boundary_outputs, g.graph.boundary_inputs
-    g.graph.components, g.graph.owners, g.graph.readers
+    dependencies(g).topological_order, g.variables, dependencies(g).boundary_outputs, dependencies(g).boundary_inputs
+    dependencies(g).components, dependencies(g).owners, g.readers
     g[N('d1')]                                  # OrderedMap._index, one level down
 
 
@@ -63,7 +63,7 @@ def ask_everything(g: NestingGraph) -> None:
 def test_a_query_caches_on_the_instance_where_the_flatten_never_looks():
     g = acyclic()
     ask_everything(g)
-    assert 'owners' in g.graph.__dict__                # ordinary instance state, on the dependency graph...
+    assert 'owners' in dependencies(g).__dict__        # ordinary instance state, on the dependency view...
     leaves, treedef = tree_flatten(g)
     assert treedef == tree_flatten(acyclic())[1]       # ...that the pytree cannot see
     assert leaves  == tree_flatten(acyclic())[0]
@@ -88,22 +88,21 @@ def test_an_asked_graph_is_still_one_jit_cache_key():
 
 def test_a_rebuilt_instance_starts_empty():
     '''A new object gets its own cache, as `functools` does. Rebuilt directly rather than
-    with `eqx.tree_at`: a `NestingGraph` registers no flatten, so nothing reaches past its
+    with `eqx.tree_at`: a `Graph` registers no flatten, so nothing reaches past its
     constructor to swap a definition -- `Redefine` is how that is said.'''
     g = acyclic()
     ask_everything(g)
     rebuilt = graph_of(acyclic().definitions, g.within)
-    # the binding rules read `owners` and `readers` at construction, so those two are
-    # the dependency graph's constructor's own work; nothing else of `g`'s memo came across.
-    assert set(rebuilt.__dict__) == {'graph', 'within'}
-    assert set(rebuilt.graph.__dict__) == {'definitions', 'owners', 'readers'}
+    # the binding rules are a group, asked when proved and not at construction, so the
+    # rebuilt graph is its two fields alone: nothing of `g`'s memo came across.
+    assert set(rebuilt.__dict__) == {'definitions', 'within'}
 
 
 # ---------------------------------------------------------------- priming
 
 '''
 A maker may write an answer down before anything asks, because it already knew it --
-a `__dict__` update in `NestingGraph`'s derived constructors and in `Plan.__add__`. Nothing at
+a `__dict__` update in `Graph`'s derived constructors and in `Plan.__add__`. Nothing at
 write time checks that the answer is right, so the check is here: walk every cached
 answer a corpus produced and recompute the slow way.
 '''
@@ -161,16 +160,16 @@ def test_every_primed_answer_is_what_the_query_would_have_computed():
     graphs = [p.graph for p in plans]
     for g in graphs:
         # not `topological_order`: the ring is cyclic until the last cut lands
-        g.nodes, g.graph.variables, g.graph.boundary_outputs, g.graph.boundary_inputs, g.graph.is_acyclic
-        g.graph.components, g.graph.owners, g.graph.readers, g.graph.owned_variables, g.graph.read_variables
-    assert every_cached_answer_is_the_real_one(*plans, *graphs, *(g.graph for g in graphs)) > len(graphs)
+        g.nodes, g.variables, dependencies(g).boundary_outputs, dependencies(g).boundary_inputs, dependencies(g).is_acyclic
+        dependencies(g).components, dependencies(g).owners, g.readers, g.owned_variables, g.read_variables
+    assert every_cached_answer_is_the_real_one(*plans, *graphs, *(dependencies(g) for g in graphs)) > len(graphs)
 
 
 def test_the_guard_catches_a_wrong_answer():
     g = acyclic()
-    g.graph.__dict__['owners'] = {}
-    with pytest.raises(AssertionError, match='AbstractGraph.owners'):
-        every_cached_answer_is_the_real_one(g.graph)
+    dependencies(g).__dict__['owners'] = {}
+    with pytest.raises(AssertionError, match='Dependencies.owners'):
+        every_cached_answer_is_the_real_one(dependencies(g))
 
 
 def test_a_prefilled_answer_leaves_the_treedef_and_equality_alone():
@@ -178,7 +177,8 @@ def test_a_prefilled_answer_leaves_the_treedef_and_equality_alone():
     invisible to everything but the query it answers.'''
     g      = acyclic()
     before = tree_structure(g)
-    g.graph.__dict__['owners'] = dict(type(g.graph).owners.func(g.graph))
+    view   = dependencies(g)
+    view.__dict__['owners'] = dict(type(view).owners.func(view))
     assert tree_structure(g) == before
     assert g == acyclic() and hash(g) == hash(acyclic())
 
@@ -260,11 +260,10 @@ def test_a_pickle_carries_the_fields_and_no_memo():
     ask_everything(warm); hash(warm)
     assert len(warm.__dict__) > 2
     back = pickle.loads(pickle.dumps(warm))
-    assert set(back.__dict__) == {'graph', 'within'}                    # the two fields, cold
-    assert set(back.graph.__dict__) == {'definitions'}
+    assert set(back.__dict__) == {'definitions', 'within'}              # the two fields, cold
     assert set(vars(back.definitions)) == {'_keys', '_values'}          # no `_index`, no hash
     assert back == warm and hash(back) == hash(warm)                    # asked now, memoised now
-    assert set(back.__dict__) == {'graph', 'within', '_frozen_hash'}
+    assert set(back.__dict__) == {'definitions', 'within', '_frozen_hash'}
 
 
 def test_a_plan_pickles_without_its_prefix_graphs():

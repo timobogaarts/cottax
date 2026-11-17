@@ -22,9 +22,9 @@ ops       proof                  (ops: Assign / Undrive; AssignByRule, an Assign
 from .driver import Driver, DriverContract, PerProblem, PerUnknown, Role, entry_for
 from .roles import Start, Steps, role_slots
 from .ops import Assign, AssignByRule, Undrive, driven, driving_violations
-from .proof import DrivenGraph
+from .proof import DrivenGraph, DrivenNodes, check_driver_fits
 
 __all__ = [
     'Driver', 'DriverContract', 'PerProblem', 'PerUnknown', 'Role', 'entry_for', 'role_slots', 'driven', 'driving_violations', 'Assign', 'AssignByRule', 'Undrive',
-    'DrivenGraph', 'Start', 'Steps',
+    'DrivenGraph', 'DrivenNodes', 'check_driver_fits', 'Start', 'Steps',
 ]

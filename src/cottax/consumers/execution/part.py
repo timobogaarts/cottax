@@ -4,7 +4,7 @@ name or read from a caller's structures, as a surface's methods.'''
 from collections.abc import Callable, Iterator, Mapping
 from typing import Any
 
-from ...core import GraphWithValues, Label, Minting, NestingGraph, Place, PlaceToPlace, ProvedGraph, is_encloser
+from ...core import Label, Minting, Graph, Place, PlaceToPlace, Rules, is_encloser, dependencies
 from ...core.driven import AssignByRule, role_slots
 from ...core import is_driven
 from ...core.driven import DriverContract, Role
@@ -17,6 +17,7 @@ from .drive import Drive
 from .structures import (Assessed, Inputs, Slot, read_from as _read_from, slots,
                          write_back as _write_back, write_role as _write_role)
 from .run import CallableGraph, run as _run
+from .valued import GraphWithValues
 
 
 class Driving(Part):
@@ -49,7 +50,7 @@ class Results(Mapping):
     `out[Trajectory, 'x']`. `out.into(state)` writes them into a structure, `out.into(history,
     Trajectory)` a role's at each unknown's place.'''
 
-    def __init__(self, values: OrderedMap, surface: Surface, graph: NestingGraph) -> None:
+    def __init__(self, values: OrderedMap, surface: Surface, graph: Graph) -> None:
         self._values, self._surface, self._graph = values, surface, graph
 
     def __getitem__(self, key: Any) -> Any:
@@ -63,7 +64,7 @@ class Results(Mapping):
         '''Where the problem owning the unknown written has `role`: at that unknown, or, per
         problem, at its one place.'''
         unknown = self._surface.place(written, role=f'out[{role.__name__}, ...]')
-        owner = self._graph.graph.owners.get(unknown)
+        owner = dependencies(self._graph).owners.get(unknown)
         for place, problem, at in role_slots(self._graph, role):
             if problem == owner and at in (unknown, None):
                 return place
@@ -98,11 +99,11 @@ class Running(Part):
     copies : AbstractVar[PlaceToPlace]
     '''Where a cut's copy of a place goes: a copy's datum is read at what it copies.'''
 
-    def valued(self, model: NestingGraph | ProvedGraph | Model, values: Mapping[type, Mapping[Any, Any]] = OrderedMap(),
+    def valued(self, model: Graph | Model, values: Mapping[type, Mapping[Any, Any]] = OrderedMap(),
                read_from: Mapping[type, Any] = OrderedMap(), *,
-               proof: type = CallableGraph) -> GraphWithValues:
+               proof: Rules = CallableGraph) -> GraphWithValues:
         '''
-        `model` (a graph, a proof, or a `Model`: a `Declared`), proved a `proof` unless it is one, with a
+        `model` (a graph, or a `Model`: a `Declared`), proved a `proof` (a rule group), with a
         value at each boundary input, from exactly one source: the declaration's own values;
         `values`, by name, `{Inputs: {'x': 1.}, Start: {'z_1': 5., s.copy('y_2'): 1.}}`, a
         driver's data by role and unknown, a per-problem role at any one unknown of its
@@ -112,17 +113,17 @@ class Running(Part):
         '''
         return self.assess(model, values, read_from, proof=proof).valued()
 
-    def assess(self, model: NestingGraph | ProvedGraph | Model, values: Mapping[type, Mapping[Any, Any]] = OrderedMap(),
+    def assess(self, model: Graph | Model, values: Mapping[type, Mapping[Any, Any]] = OrderedMap(),
                read_from: Mapping[type, Any] = OrderedMap(), *,
-               proof: type = CallableGraph) -> Assessed:
+               proof: Rules = CallableGraph) -> Assessed:
         '''
         `valued`'s lookup, stopped before holding it to one value per input: an input without
         a value and a place given twice are asked of what it returns, and refused by its
         `valued()`. The other refusals are a caller's errors, and raise here. What `read_from`
         holds that no run takes is asked of it too, and no refusal: `unread`, `overwritten`.
         '''
-        declared, graph, nesting = _model(model)
-        inputs = nesting.graph.boundary_inputs
+        declared, nesting = _model(model)
+        inputs = dependencies(nesting).boundary_inputs
         table = slots(nesting, self._at(nesting))
         given = [(p, v, 'the declaration') for p, v in (declared.given.items() if declared is not None else ())
                  if p in inputs]
@@ -130,26 +131,26 @@ class Running(Part):
                     f'values[{key.__name__}][{written!r}]')
                    for key, written_values in values.items()
                    for written, value in written_values.items()]
-        return Assessed(graph, proof, table, (*given, *by_name, *_read_from(nesting, table, read_from)), read_from)
+        return Assessed(nesting, proof, table, (*given, *by_name, *_read_from(nesting, table, read_from)), read_from)
 
-    def _at(self, graph: NestingGraph) -> Callable[[Any], Any]:
+    def _at(self, graph: Graph) -> Callable[[Any], Any]:
         '''Where an unknown's datum sits in a structure: at what it copies, by this surface's
         `copies`, else at the unknown itself.'''
-        copied = {self.copies(p): p for p in graph.graph.variables
+        copied = {self.copies(p): p for p in graph.variables
                   if answer(Minting, p, None) is not None}
         return lambda unknown: copied.get(unknown, unknown)
 
-    def _slot[N: Label, V: Place](self, graph: NestingGraph[N, V], table: tuple[Slot[V, N], ...], key: type, written: Any) -> V:
+    def _slot[N: Label, V: Place](self, graph: Graph[N, V], table: tuple[Slot[V, N], ...], key: type, written: Any) -> V:
         '''The open slot of `table` a name written under `key` gives: an input itself, or the
         datum of the problem owning the unknown written, at that unknown or, per problem, at
         any. Refused with why it gives none.'''
         if key is Inputs:
             place = self.place(written, role='an input')
-            if place not in graph.graph.boundary_inputs:
+            if place not in dependencies(graph).boundary_inputs:
                 raise NotAnInput((place,)).raised
             return place
         unknown = self.place(written, role=f'`values[{key.__name__}]`')
-        at = graph.graph.owners.get(unknown)
+        at = dependencies(graph).owners.get(unknown)
         node = graph[at] if at is not None else None
         if node is None or not is_encloser(node) or unknown not in node.owns_inside:
             why = ('which nothing owns' if node is None else
@@ -160,20 +161,18 @@ class Running(Part):
             why = ('which no driver answers' if not is_driven(node) else
                    f'whose driver takes {", ".join(r.__name__ for r in node.driver.contract.takes)}')
             raise NotDriverData(at, key.__name__, why).raised
-        if found[0].place not in graph.graph.boundary_inputs:
+        if found[0].place not in dependencies(graph).boundary_inputs:
             raise TakesNoValue(at, key.__name__, found[0].place).raised
         return found[0].place
 
-    def run(self, model: NestingGraph | ProvedGraph | Model, values: Mapping[type, Mapping[Any, Any]] = OrderedMap(),
+    def run(self, model: Graph | Model, values: Mapping[type, Mapping[Any, Any]] = OrderedMap(),
             read_from: Mapping[type, Any] = OrderedMap()) -> Results:
         '''`model` run, valued as `valued` says: every place's value, read by name.'''
-        return Results(_run(self.valued(model, values, read_from)), self, _model(model)[2])
+        return Results(_run(self.valued(model, values, read_from)), self, _model(model)[1])
 
 
-def _model(model: NestingGraph | ProvedGraph | Model
-           ) -> tuple[Model | None, NestingGraph | ProvedGraph, NestingGraph]:
-    '''A graph, a proof or a `Model`: the model if it is one, the graph or proof, and the
-    nesting graph under it.'''
-    declared = None if isinstance(model, (NestingGraph, ProvedGraph)) else model
-    graph = model.graph if declared is not None else model
-    return declared, graph, graph.graph if isinstance(graph, ProvedGraph) else graph
+def _model(model: Graph | Model
+           ) -> tuple[Model | None, Graph]:
+    '''A graph or a `Model`: the model if it is one, and the graph.'''
+    declared = None if isinstance(model, Graph) else model
+    return declared, model.graph if declared is not None else model

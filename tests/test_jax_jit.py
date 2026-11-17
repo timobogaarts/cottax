@@ -3,6 +3,9 @@
 -- at every depth a solver is handed.
 '''
 
+from cottax.consumers.execution.jax_jit import JitKeyNodes
+from cottax.core import is_proved, prove, steps, unproved
+
 import dataclasses
 import functools
 
@@ -11,7 +14,6 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from cottax.core import GraphWithValues, without_attribute
 from cottax.core.realisation import Implementation, implementation_of, implemented
 from cottax.core.driven import Start
 from cottax.core.frozen import OrderedMap, violations
@@ -24,6 +26,7 @@ from cottax.consumers.execution.refusals import BodyByIdentity, PartialBody, Unh
 from cottax.consumers.execution.jax_jit import JitGraph
 from graphs import graph_of
 from test_execution_jax import NESTED, SQUARE, N, V, call
+from cottax.consumers.execution import GraphWithValues
 
 
 @pytest.fixture(autouse=True)
@@ -34,11 +37,11 @@ def x64():
 
 def graph_with(body):
     '''`SQUARE`'s graph, its first body replaced.'''
-    return graph_of(dict(SQUARE.graph.definitions) | {N('mid'): call([V('u')], [V('w')], body)})
+    return graph_of(dict(SQUARE.definitions) | {N('mid'): call([V('u')], [V('w')], body)})
 
 
 def kinds(graph) -> list[type]:
-    return [type(v) for v in violations(JitGraph, graph)]
+    return [type(v) for v in unproved(graph, JitGraph)]
 
 
 class Scaled(eqx.Module):
@@ -55,24 +58,24 @@ class Times:
 
 
 def test_a_graph_of_module_functions_and_frozen_solvers_is_a_jit_graph():
-    assert kinds(SQUARE.graph) == []
-    assert kinds(NESTED.graph) == []
+    assert kinds(SQUARE) == []
+    assert kinds(NESTED) == []
 
 
 def test_an_array_in_the_graph_is_refused_naming_its_leaves():
-    found = list(violations(JitGraph, graph_with(Scaled(jnp.asarray(2.0)))))
+    found = list(unproved(graph_with(Scaled(jnp.asarray(2.0))), JitGraph))
     assert [type(v) for v in found] == [Unhashable]
     assert found[0].count == 1 and 'Array' in found[0].leaves
     with pytest.raises(TypeError, match='cannot be a jit cache key'):
-        JitGraph(graph_with(Scaled(jnp.asarray(2.0))))
+        prove(graph_with(Scaled(jnp.asarray(2.0))), JitGraph)
 
 
 def test_an_array_in_a_solver_setting_is_named_by_its_leaf():
     '''The leaves are found under every field, a solver's settings included.'''
-    h     = SQUARE.graph[N('h')]
-    held  = implemented(without_attribute(h, Implementation), dataclasses.replace(
+    h     = SQUARE[N('h')]
+    held  = implemented(dataclasses.replace(h, attributes=OrderedMap()), dataclasses.replace(
         implementation_of(h), atol=jnp.asarray(1e-8)))
-    found = list(violations(JitGraph, graph_of(dict(SQUARE.graph.definitions) | {N('h'): held})))
+    found = list(unproved(graph_of(dict(SQUARE.definitions) | {N('h'): held}), JitGraph))
     assert [type(v) for v in found] == [Unhashable]
     assert found[0].count == 1 and 'Array' in found[0].leaves
 
@@ -87,11 +90,12 @@ def test_a_partial_is_refused():
 
 def test_what_a_solver_is_posed_hashes_at_every_depth():
     # A solver compiles keyed on its `Posed`, whose condition map holds the interior.
-    graph     = JitGraph(NESTED.graph)
-    (outer,)  = [s for s in graph.steps if isinstance(s, Solve)]
-    (inner,)  = [s for s in outer.interior.steps if isinstance(s, Solve)]
+    graph = NESTED
+    prove(graph, JitGraph)
+    (outer,)  = [s for s in steps(graph) if isinstance(s, Solve)]
+    (inner,)  = [s for s in steps(outer.interior) if isinstance(s, Solve)]
     for step, holder in ((outer, graph), (inner, outer.interior)):
-        assert isinstance(step.interior, JitGraph)
+        prove(step.interior, JitKeyNodes)
         node = holder[step.problem]
         conditions = InteriorConditionMap.posing(node, step.interior)
         hash(Posed(node.condition, node.driver.contract.reports, conditions,
@@ -100,7 +104,8 @@ def test_what_a_solver_is_posed_hashes_at_every_depth():
 
 def test_a_jit_graph_runs_on_a_structure():
     tree = {'z': 9.0, 'u': None, 'w': None, 'r': None}
-    graph = JitGraph(SQUARE.graph)
+    graph = SQUARE
+    prove(graph, JitGraph)
     out  = cx.flat.run(graph, {Start: {V('u'): 1.0}}, read_from={cx.Inputs: tree}).into(tree)
     assert out['u'] == pytest.approx(3.0, rel=1e-10)
 
@@ -108,7 +113,8 @@ def test_a_jit_graph_runs_on_a_structure():
 def test_a_run_on_a_structure_is_read_outside_a_jit_run_inside_and_written_outside():
     '''The data is read and written outside the trace; the values cross it as arrays, so one
     trace serves every tree.'''
-    graph  = JitGraph(SQUARE.graph)
+    graph = SQUARE
+    prove(graph, JitGraph)
     traces = []
 
     @eqx.filter_jit
@@ -120,6 +126,6 @@ def test_a_run_on_a_structure_is_read_outside_a_jit_run_inside_and_written_outsi
         tree   = {'z': z, 'u': 1.0, 'w': None, 'r': None}
         valued = cx.flat.valued(graph, read_from={cx.Inputs: tree, Start: tree})
         values = go(valued.graph, OrderedMap((p, jnp.asarray(v)) for p, v in valued.values.items()))
-        out    = write_back(graph.graph, tree, values)
+        out    = write_back(graph, tree, values)
         assert out['u'] == pytest.approx(z ** 0.5, rel=1e-10) and out['z'] == z
     assert len(traces) == 1

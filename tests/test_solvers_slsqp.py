@@ -4,6 +4,8 @@ constraints and their signs, bounds, what it reports, the Jacobian transform, th
 and running under a trace and without one. Float64, as `test_solvers.py`.
 '''
 
+from cottax.core import prove
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -11,7 +13,7 @@ import pytest
 from jax.tree_util import DictKey
 
 import equinox as eqx
-from cottax.core import FunctionalNode, GraphWithValues
+from cottax.core import FunctionalNode
 from cottax.relational import Min, Objective
 from cottax.core.frozen import OrderedMap
 from cottax.core.driven import driven
@@ -26,6 +28,7 @@ from cottax.relational.consumers.execution.jax_solvers.canonical_nlp import Cano
 from cottax.relational.consumers.execution.jax_solvers import ScipyMinimize
 from cottax.relational.consumers.execution.jax_solvers.host import HostProblem
 from graphs import graph_of
+from cottax.consumers.execution import GraphWithValues
 
 
 @pytest.fixture(autouse=True)
@@ -74,7 +77,8 @@ def optimise(objective, design, relations, implementation, bounded=False, steps=
 
 
 def solve(nodes, values):
-    graph = CallableGraph(graph_of(OrderedMap(nodes)))
+    graph = graph_of(OrderedMap(nodes))
+    prove(graph, CallableGraph)
     return run(GraphWithValues(graph, OrderedMap({k: jnp.asarray(v) if not isinstance(v, tuple)
                                                   else v for k, v in values.items()})))
 
@@ -252,11 +256,12 @@ def test_a_line_search_asks_values_it_never_differentiates(monkeypatch):
 @pytest.mark.slow
 def test_under_a_jit_it_runs_through_pure_callback_tracing_once():
     traces: list = []
-    graph = CallableGraph(graph_of(OrderedMap({
+    graph = graph_of(OrderedMap({
         N('m')  : call(['x', 'a'], ['f', 'g'], lambda x, a: ((x - a) ** 2, x - 1.0)),
         N('opt'): optimise('f', ['x'], (Relation(V('g'), None, Le),), ScipyMinimize(),
                            bounded=True, steps=True),
-    })))
+    }))
+    prove(graph, CallableGraph)
 
     @eqx.filter_jit
     def go(graph, values):
@@ -304,10 +309,11 @@ def test_under_a_jit_the_model_is_evaluated_on_the_gpu_and_not_the_callbacks_cpu
         return read(self, groups, limits)
 
     monkeypatch.setattr(HostProblem, '_read', recording)
-    graph = CallableGraph(graph_of(OrderedMap({
+    graph = graph_of(OrderedMap({
         N('m')  : call(['x', 'a'], ['f'], lambda x, a: jnp.sum((x - a) ** 2)),
         N('opt'): optimise('f', ['x'], (), ScipyMinimize()),
-    })))
+    }))
+    prove(graph, CallableGraph)
     x = eqx.filter_jit(lambda g, v: run(GraphWithValues(g, v))[V('x')])(
         graph, OrderedMap({V('a'): jnp.full(4, 3.0), STARTS(V('x')): jnp.zeros(4)}))
     assert x.tolist() == pytest.approx([3.0] * 4, abs=1e-6)

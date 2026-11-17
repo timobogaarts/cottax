@@ -5,6 +5,9 @@ Python over `test_execution`'s `Word` place and model -- no jax, no pytree. The 
 its locator reading a string as a `Word`.
 '''
 
+from toy_places import Segmented
+from cottax.core import prove
+
 from dataclasses import dataclass
 
 import pytest
@@ -14,9 +17,9 @@ from cottax.consumers.surface.interface import Locator
 from cottax.consumers.execution import CallableGraph, Inputs, Running, read_from, slots
 from cottax.consumers.execution.interface import DataStructure
 from cottax.consumers.execution.refusals import ValuedTwice
-from cottax.core import AbstractGraph, FunctionalNode, NestingGraph, answer_for_places
+from cottax.core import FunctionalNode, Graph, answer_for_places
 from cottax.core.frozen.answer import Unanswered
-from cottax.core.maths.dispatch import NothingToAsk
+from cottax.core.answers import NothingToAsk
 from cottax.core.driven import driven
 from cottax.core.realisation import implemented
 from cottax.relational import Eq, Relation, RelationalCondition
@@ -91,14 +94,14 @@ def test_only_what_is_read_from_a_structure_is_read():
 
 def test_where_a_datum_is_read_is_the_at_handed_in():
     state = OrderedMap({X: 1.0, U: 2.0, W('guess'): 5.0})
-    graph = flat().graph
+    graph = flat()
     found = read_from(graph, slots(graph, at=lambda unknown: W('guess')), {Start: state})
     assert found == ((START, 5.0, "read_from[Start] at Word(segments=('guess',)), "
                                   "for Word(segments=('u',))"),)
 
 
 def test_a_datum_the_graph_computes_is_not_read():
-    warm = flat().graph.definitions[W('Mesh')]
+    warm = flat().definitions[W('Mesh')]
     fed  = flat(OrderedMap({W('Warm'): implemented(type(warm)((X,), (START,)), lambda x: x)}))
     valued = s.valued(fed, BUDGETED, held(OrderedMap({X: 1.0, U: 2.0})))
     assert dict(valued.values) == {X: 1.0, BUDGET: 50}
@@ -111,9 +114,10 @@ def test_a_start_shared_by_two_unknowns_is_valued_twice():
     other  = implemented(
         driven(RelationalCondition((Relation(r_v, None, Eq),), (), (v,), ()), Newton(),
                ((START,), (W('^budget.Other'),)), ((W('^steps.Other'),),)), newton)
-    graph  = CallableGraph(NestingGraph(AbstractGraph(
+    graph = Graph(
         definitions() | {W('DiscC'): call([v, X], [r_v], lambda v, x: v - x),
-                         W('Other'): other}), OrderedMap()))
+                         W('Other'): other}, OrderedMap())
+    prove(graph, CallableGraph)
     with pytest.raises(ValueError) as refused:
         s.valued(graph, read_from=held(OrderedMap({X: 1.0, U: 2.0, v: 3.0})))
     assert refused.value.violation == ValuedTwice(START, ('read_from[Start] at ' + repr(U),
@@ -164,7 +168,7 @@ def test_a_run_is_valued_run_and_written_back():
     from cottax.consumers.execution import run, write_back
     state  = OrderedMap({X: 1.0, U: 1.0, F: -99.0})
     values = run(s.valued(flat(), BUDGETED, held(state)))
-    back   = write_back(flat().graph, state, values)
+    back   = write_back(flat(), state, values)
     assert back == s.run(flat(), BUDGETED, held(state)).into(state)
     assert back[X] == 1.0 and back[F] == values[F] != -99.0
 
@@ -174,7 +178,7 @@ def test_a_run_is_valued_run_and_written_back():
 def test_role_slots_pair_each_place_with_its_problem_and_unknown():
     from cottax.core.driven import role_slots
     from test_execution import Budget, History
-    graph = nested().graph
+    graph = nested()
     assert role_slots(graph, Start) == ((START, CLOSE, U), (W('^start.x'), W('target'), X))
     assert role_slots(graph, Budget) == ((BUDGET, CLOSE, None),
                                          (W('^budget.target'), W('target'), None))
@@ -184,7 +188,7 @@ def test_role_slots_pair_each_place_with_its_problem_and_unknown():
 # ---------------------------------------------------------------- the structure registered
 
 def test_the_structure_is_the_one_registered_for_the_places_class():
-    assert type(answer_for_places(DataStructure, flat().graph)) is Table
+    assert type(answer_for_places(DataStructure, flat())) is Table
 
 
 def test_a_place_class_indexed_twice_is_refused():
@@ -199,7 +203,7 @@ def test_a_place_class_indexed_twice_is_refused():
         answers(Word)(Again)
 
 
-class Other:
+class Other(Segmented):
     '''A place: `Unindexed` has no structure.'''
 
     def __init__(self, s): self.s = s
@@ -215,9 +219,9 @@ class Unindexed(Other):
     pass
 
 
-def over(cls) -> NestingGraph:
+def over(cls) -> Graph:
     '''A graph whose places are of `cls`.'''
-    return NestingGraph(AbstractGraph(OrderedMap({W('f'): FunctionalNode((cls('x'),), (cls('y'),))})),
+    return Graph(OrderedMap({W('f'): FunctionalNode((cls('x'),), (cls('y'),))}),
                         OrderedMap())
 
 
@@ -230,5 +234,5 @@ def test_a_place_class_nobody_indexes_is_refused_by_name():
 
 
 def test_a_graph_with_no_place_is_refused():
-    empty = NestingGraph(AbstractGraph(OrderedMap()), OrderedMap())
+    empty = Graph(OrderedMap(), OrderedMap())
     assert [type(v) for v in violations(answer_for_places, DataStructure, empty)] == [NothingToAsk]

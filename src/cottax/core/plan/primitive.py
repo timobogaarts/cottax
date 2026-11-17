@@ -7,9 +7,9 @@ from abc import abstractmethod
 from collections.abc import Collection, Iterator, Mapping
 from dataclasses import replace
 
-from ..maths.definition import NodeDefinition, with_attributes
+from ..maths.definition import NodeDefinition
 from ..frozen import Frozen, OrderedMap, Violation, first
-from ..maths.nesting import NestingGraph, NestingLoop
+from ..maths.graph import Graph, NestingLoop
 from ..maths.places import Label, Place
 from .algebra import GraphOp
 
@@ -18,9 +18,10 @@ from .algebra import GraphOp
 
 class Primitive[N: Label, V: Place](GraphOp[N, V]):
     '''
-    An op that builds a graph, through the checked constructors: every rule is checked on
-    every result. What a valid result would hide (a name replaced, a nesting pair dropped)
-    the op refuses first, in `checks_graph`.
+    An op that builds a graph. Every result is proved what `apply` keeps (`WellFormed`, the
+    nesting's rules and the bindings'). What a valid
+    result would hide (a name replaced, a nesting pair dropped) the op refuses first, in
+    `checks_graph`.
     '''
 
 
@@ -40,10 +41,10 @@ class Rebind[N: Label, V: Place](Primitive[N, V]):
     '''Remove and define names in one step, so only the result has to be valid.'''
 
     @abstractmethod
-    def rebinding(self, graph: NestingGraph[N, V]) -> Rebinding[N, V]:
+    def rebinding(self, graph: Graph[N, V]) -> Rebinding[N, V]:
         '''What this op removes and defines of `graph`.'''
 
-    def _apply[G: NestingGraph[N, V]](self, graph: G) -> G:
+    def _apply[G: Graph[N, V]](self, graph: G) -> G:
         '''Order kept, redefinitions in place, new names appended. A nesting pair through a
         removed node is dropped; an op that must not drop one refuses first.'''
         r = self.rebinding(graph)
@@ -51,35 +52,35 @@ class Rebind[N: Label, V: Place](Primitive[N, V]):
         definitions |= {n: d for n, d in r.define.items() if n not in definitions}
         return replace(
             graph,
-            graph=replace(graph.graph, definitions=OrderedMap(definitions)),
+            definitions=OrderedMap(definitions),
             within=OrderedMap((i, o) for i, o in graph.within.items()
                               if i not in r.remove and o not in r.remove))
 
 
 # ---------------------------------------------------------------- the intent of a rebinding
 
-def check_names_free[N: Label](op: 'Insert', g: NestingGraph[N, Place]) -> Iterator[Violation]:
+def check_names_free[N: Label](op: 'Insert', g: Graph[N, Place]) -> Iterator[Violation]:
     '''The inserted names are not bound yet.'''
     for name in op.nodes:
         if name in g.definitions:
             yield NameTaken(name)
 
 
-def check_names_bound[N: Label](op: 'Delete', g: NestingGraph[N, Place]) -> Iterator[Violation]:
+def check_names_bound[N: Label](op: 'Delete', g: Graph[N, Place]) -> Iterator[Violation]:
     '''The removed names are bound.'''
     for name in op.nodes:
         if name not in g.definitions:
             yield NotBound(name)
 
 
-def stranded[N: Label](g: NestingGraph[N, Place], removed: Collection[N]) -> Iterator[Violation]:
+def stranded[N: Label](g: Graph[N, Place], removed: Collection[N]) -> Iterator[Violation]:
     '''A nesting pair losing exactly one end to `removed`. A nesting is a decision the plan
     recorded, so it is not dropped silently: `Unnest` first. Losing both ends is fine.'''
     if broken := [(i, o) for i, o in g.within.items() if (i in removed) != (o in removed)]:
         yield Stranded(tuple(i for i, _ in broken), tuple(o for _, o in broken))
 
 
-def check_delete_keeps_nesting_whole[N: Label](op: 'Delete', g: NestingGraph[N, Place]) -> Iterator[Violation]:
+def check_delete_keeps_nesting_whole[N: Label](op: 'Delete', g: Graph[N, Place]) -> Iterator[Violation]:
     '''No nesting pair loses one end to the deleted nodes.'''
     yield from stranded(g, set(op.nodes))
 
@@ -100,7 +101,7 @@ class Insert[N: Label, V: Place](Rebind[N, V]):
 
     checks_graph = (check_names_free,)
 
-    def rebinding(self, graph: NestingGraph[N, V]) -> Rebinding[N, V]:
+    def rebinding(self, graph: Graph[N, V]) -> Rebinding[N, V]:
         return Rebinding(frozenset(), self.nodes)
 
     def __repr__(self) -> str:
@@ -121,7 +122,7 @@ class Delete[N: Label](Rebind[N, Place]):
 
     checks_graph = (check_names_bound, check_delete_keeps_nesting_whole)
 
-    def rebinding(self, graph: NestingGraph[N, Place]) -> Rebinding[N, Place]:
+    def rebinding(self, graph: Graph[N, Place]) -> Rebinding[N, Place]:
         return Rebinding(frozenset(self.nodes), OrderedMap())
 
     def __repr__(self) -> str:
@@ -138,14 +139,14 @@ class Redefine[N: Label, V: Place](Rebind[N, V]):
     `RemoveAttribute`."""
 
     @abstractmethod
-    def redefined(self, graph: NestingGraph[N, V]) -> Mapping[N, NodeDefinition[V]]:
+    def redefined(self, graph: Graph[N, V]) -> Mapping[N, NodeDefinition[V]]:
         """The new definition of each node this op touches."""
 
-    def rebinding(self, graph: NestingGraph[N, V]) -> Rebinding[N, V]:
+    def rebinding(self, graph: Graph[N, V]) -> Rebinding[N, V]:
         redefined = OrderedMap(self.redefined(graph))
         first(NotBound(name) for name in redefined if name not in graph.definitions)
         if not self.edits_attributes:
-            redefined = OrderedMap((name, with_attributes(after, graph[name].attributes))
+            redefined = OrderedMap((name, replace(after, attributes=graph[name].attributes))
                                    for name, after in redefined.items())
         return Rebinding(frozenset(), redefined)
 
@@ -153,7 +154,7 @@ class Redefine[N: Label, V: Place](Rebind[N, V]):
 # ---------------------------------------------------------------- Nesting
 
 
-def check_nesting[N: Label](op: 'Nest', g: NestingGraph[N, Place]) -> Iterator[Violation]:
+def check_nesting[N: Label](op: 'Nest', g: Graph[N, Place]) -> Iterator[Violation]:
     """
     What only the op knows about its new pair: the inner is not nested yet (the pair would
     replace that nesting), and the outer is not inside the inner (the pair would close a
@@ -171,7 +172,7 @@ def check_nesting[N: Label](op: 'Nest', g: NestingGraph[N, Place]) -> Iterator[V
             return
 
 
-def check_unnesting[N: Label](op: 'Unnest', g: NestingGraph[N, Place]) -> Iterator[Violation]:
+def check_unnesting[N: Label](op: 'Unnest', g: Graph[N, Place]) -> Iterator[Violation]:
     """The inner is nested."""
     if op.inner not in g.within:
         yield NotNested(op.inner)
@@ -184,7 +185,7 @@ class Nest[N: Label](Primitive[N, Place]):
 
     checks_graph = (check_nesting,)
 
-    def _apply[G: NestingGraph[N, Place]](self, graph: G) -> G:
+    def _apply[G: Graph[N, Place]](self, graph: G) -> G:
         return replace(graph, within=graph.within | {self.inner: self.outer})
 
     def __repr__(self) -> str:
@@ -198,7 +199,7 @@ class Unnest[N: Label](Primitive[N, Place]):
 
     checks_graph = (check_unnesting,)
 
-    def _apply[G: NestingGraph[N, Place]](self, graph: G) -> G:
+    def _apply[G: Graph[N, Place]](self, graph: G) -> G:
         return replace(graph, within=OrderedMap((i, o) for i, o in graph.within.items() if i != self.inner))
 
     def __repr__(self) -> str:

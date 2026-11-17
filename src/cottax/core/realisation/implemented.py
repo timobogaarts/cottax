@@ -5,33 +5,39 @@ driven node what runs its driver -- and the edits setting it and taking it off.
 Implementation is an arbitrary object: it can be a function, a description of a repo or something else entirely.
 '''
 
-from collections.abc import Sequence
+import dataclasses
+from collections.abc import Iterator, Sequence
 
 from ...core import (
-    Attribute, ComposedOp, FunctionalNode, GraphOp, Label, NestingGraph, NodeDefinition, Place,
-    RemoveAttribute, SetAttribute, with_attributes,
+    Attribute, ComposedOp, FunctionalNode, GraphOp, Label, Graph, NodeDefinition, Place,
+    RemoveAttribute, SetAttribute, Violation,
 )
 from ...core.frozen import OrderedMap, name_of
 from ...core import is_driven
 from ...core.driven import DriverContract, entry_for
 
 
-class Implementation(Attribute):
+class Implementation:
     '''
     The key of what runs a node: a callable, or a description of one (location etc.).
     The node's kind says how it is used: a function is called with what it reads, a driven
     node's driver is run by it.
     '''
 
-    @classmethod
-    def fits(cls, value: object, node: NodeDefinition) -> bool:
-        '''Something runs a function, or a condition node with a driver; a bare condition
-        node takes a driver first (`Assign`).'''
-        return isinstance(node, FunctionalNode) or is_driven(node)
 
-    @classmethod
-    def text(cls, value: object) -> str:
-        return f'by {name_of(value)}'
+def check_implementation_fits[N: Label, V: Place](name: N, node: NodeDefinition[V]
+                                                 ) -> Iterator[Violation]:
+    '''An implementation is on a function, or on a condition node with a driver: something
+    runs a function, and what runs a driver; a bare condition node takes a driver first.'''
+    if is_implemented(node) and not (isinstance(node, FunctionalNode) or is_driven(node)):
+        yield ImplementationWithoutDriver(name, type(node).__name__)
+
+
+def check_implementable(op: 'Implement', graph: Graph) -> Iterator[Violation]:
+    '''Each node named can carry an implementation: asked of the node it would be, before
+    the graph is touched.'''
+    for name, value in op.values.items():
+        yield from check_implementation_fits(name, implemented(graph[name], value))
 
 
 def is_implemented(node: NodeDefinition) -> bool:
@@ -45,7 +51,7 @@ def implementation_of(node: NodeDefinition) -> object:
 
 def implemented[D: NodeDefinition](node: D, implementation: object) -> D:
     '''`node` with what runs it: how a node is built implemented, outside a plan.'''
-    return with_attributes(node, OrderedMap({**node.attributes, Implementation: implementation}))
+    return dataclasses.replace(node, attributes=OrderedMap({**node.attributes, Implementation: implementation}))
 
 
 # ----------------------------------------------------------------- the edits
@@ -55,6 +61,8 @@ class Implement[N: Label, V: Place](SetAttribute[N, V]):
     implementation -- in one op, since choosing a backend is one decision.'''
 
     kind = Implementation
+
+    checks_graph = (check_implementable,)
 
 
 class Unimplement[N: Label, V: Place](RemoveAttribute[N, V]):
@@ -76,7 +84,7 @@ class ImplementDrivers[N: Label, V: Place](ComposedOp[N, V]):
 
     implementations : OrderedMap[type[DriverContract], object]
 
-    def composed(self, graph: NestingGraph[N, V]) -> Sequence[GraphOp[N, V]]:
+    def composed(self, graph: Graph[N, V]) -> Sequence[GraphOp[N, V]]:
         chosen = ((name, entry_for(self.implementations, node.driver.contract, _NONE))
                   for name in graph.nodes
                   if is_driven(node := graph[name]) and not is_implemented(node))
@@ -85,3 +93,13 @@ class ImplementDrivers[N: Label, V: Place](ComposedOp[N, V]):
     def __repr__(self) -> str:
         return 'implement_drivers(' + ', '.join(f'{kind.__name__} <- {name_of(i)}'
                                                 for kind, i in self.implementations.items()) + ')'
+
+
+# ----------------------------------------------------------------- violation finals
+
+class ImplementationWithoutDriver(Violation):
+    node : object
+    kind : str
+    error    = TypeError
+    template = ('{node!r}: Implementation does not fit a {kind} with no driver -- nothing says '
+                'what it would run. `Assign` a driver first, or take the Implementation off')

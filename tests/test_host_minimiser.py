@@ -4,6 +4,8 @@ Jacobian is computed being each call's, what comes back; and `ScipyMinimize`, th
 `minimize`, which refuses what a method would drop. Float64, as `test_solvers.py`.
 '''
 
+from cottax.core import prove
+
 import logging
 import warnings
 
@@ -21,7 +23,7 @@ import purposes
 from cottax.assemblies.jax import flat
 from cottax.consumers.execution import CallableGraph, run
 from cottax.consumers.execution.interface_types import Posed
-from cottax.core import FunctionalNode, GraphWithValues
+from cottax.core import FunctionalNode
 from cottax.core.driven import driven, Start, Steps, role_slots
 from cottax.core.driven import PerProblem, Role
 from cottax.core.frozen import OrderedMap
@@ -34,6 +36,7 @@ from cottax.relational.consumers.execution.jax_solvers import (
 from cottax.relational.consumers.execution.jax_solvers.scipy_minimize import METHODS
 from cottax.relational.contracts import ConstrainedMinimiser, ConstrainedMinimisation
 from graphs import graph_of
+from cottax.consumers.execution import GraphWithValues
 
 
 @pytest.fixture(autouse=True)
@@ -73,7 +76,9 @@ def optimise(objective, design, relations, implementation, bounded=False, steps=
 
 
 def graph(nodes):
-    return CallableGraph(graph_of(OrderedMap(nodes)))
+    graph = graph_of(OrderedMap(nodes))
+    prove(graph, CallableGraph)
+    return graph
 
 
 def solve(nodes, values):
@@ -618,7 +623,8 @@ def idf_answer(driver, M, scaled):
     start = {'z': jnp.asarray(0.0), flat.copy('y2'): jnp.asarray(M)}
     scaling = idf_scaling(ran, M) if scaled else cx.Scaling()
     values = flat.valued(ran, {cx.Start: start, cx.Scales: {'z': scaling}}).values
-    out = run(GraphWithValues(cx.JitGraph(ran.graph), values))
+    cx.prove(ran.graph, cx.JitGraph)
+    out = run(GraphWithValues(ran.graph, values))
     return float(out[flat.place('z')]), float(out[flat.place('y2')]) / M
 
 
