@@ -2,4 +2,4 @@
 
 # Not here: `execution` and `declaration` (what they offer is chosen, nothing registered),
 # imported by name.
-from . import visualization
+from . import json, visualization

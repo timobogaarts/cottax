@@ -1,7 +1,7 @@
 '''
 The design of experiments, a third language beside `relational` and `ode`: its condition node,
 proved by core with nothing edited for it, the contract answering it, its run in jax,
-its declaration through the shipped surface, and its drawing.
+its declaration through the shipped surface, its drawing, and its JSON.
 '''
 
 import jax
@@ -18,6 +18,7 @@ from cottax.core.realisation import implemented
 from cottax.core.refusal_kinds import Constant, OwnReadInsideCycle, ReadInsideCycle
 from cottax.consumers.execution import CallableGraph, run
 from cottax.consumers.execution.jax_jit import JitGraph
+from cottax.consumers.json import read_json, write_json
 from cottax.consumers.visualization import render_html, render_matrix_svg, render_xdsm_svg, to_dot
 from cottax.consumers.visualization.xdsm import xdsm_struct
 from cottax.doe import DoeCondition, Recorded, Varied
@@ -193,3 +194,10 @@ def test_a_doe_is_drawn_in_its_own_category():
     assert struct['slots'] == {'.doe': [('hᵢ =', ['.h']), ('xᵢ =', ['.P'])]}
     assert SAMPLE.legend in render_xdsm_svg(g, blocks=True) and SAMPLE.legend in render_html(g)
     assert SAMPLE.colour[1] in render_matrix_svg(g) and SAMPLE.colour[1] in to_dot(g)
+
+
+# ================================================================ JSON
+
+def test_a_doe_run_by_jaxdoe_is_written_to_json_and_read_back():
+    g = graph_of({N('doe'): sampled(batch_size=2), N('F'): call(square, ['x'], ['h'])})
+    assert read_json(write_json(g)) == g
