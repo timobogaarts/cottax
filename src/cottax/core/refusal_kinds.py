@@ -10,11 +10,11 @@ from .maths.executable import (
     Constant, NoProblem, OutsideCycle, OwnReadInsideCycle, ReadInsideCycle, RequirementUnanswered,
     SeveralOutermost, StillCyclic,
 )
-from .maths.wellformed import (
+from .maths.valid import (
     OwnAroundOwner, OwnedTwice, OwnerInsideRead, OwnInsideOwner, ReadInsideOwner,
 )
 from .maths.kinds import OwnsNothing, ReadOnBothSides, StatesNothing
-from .maths.wellformed import EndOwnsNothingInside, NestingLoop, SelfNested, Unbound
+from .maths.valid import EndOwnsNothingInside, NestingLoop, SelfNested, Unbound
 from .maths.nesting import BlockTooSmall, BoxOwnsNothing, NodeInTwoBlocks, Unreachable
 from .plan.ops import (
     AlreadyCut, AttributeAlreadySet, AttributeNotSet, DoesNotRead, NoAttributeNamed,

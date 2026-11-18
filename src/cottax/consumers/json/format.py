@@ -7,7 +7,7 @@ from typing import Any
 
 from ...core import (
     FunctionalNode, Label, Graph, NodeDefinition, Place, Violation,
-    answer_for_labels, answer_for_places, first, WellFormed,
+    answer_for_labels, answer_for_places, first, Valid,
 )
 from ...core.frozen import Frozen, OrderedMap, answer, answered, answers, checked, dotted, violations
 from ...core import Condition, ConditionalNode, is_driven, kind_of
@@ -68,7 +68,7 @@ def read_json(data: dict, resolve: Callable[[str], object] = loaded) -> Graph:
         definitions.append((r.name, r.node(entry['definition'])))
     within = ((names.label(i), names.label(o)) for i, o in data['within'])
     graph  = Graph(OrderedMap(definitions), OrderedMap(within))
-    WellFormed.prove(graph)                    # the file is refused at the door, as a graph
+    Valid.prove(graph)                    # the file is refused at the door, as a graph
     return graph
 
 

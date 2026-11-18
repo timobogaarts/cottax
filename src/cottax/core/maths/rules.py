@@ -1,6 +1,6 @@
 '''
 Graph rules
-(`@checked(Executable.check)`, `checks = (WellFormed.check,)`) 
+(`@checked(Executable.check)`, `checks = (Valid.check,)`) 
 '''
 from collections.abc import Callable, Iterator
 from functools import update_wrapper
@@ -18,7 +18,7 @@ class Rules:
     '''
     Inheritable rules
 
-        class Executable(WellFormed):
+        class Executable(Valid):
             rules = (check_no_requirements, ...)
 
         class Driven(Executable, DrivenNodes):

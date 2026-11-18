@@ -20,7 +20,7 @@ import pytest
 from jax.tree_util import GetAttrKey, SequenceKey
 
 from cottax.core.maths.places import comparable, is_prefix, overlaps
-from cottax.core.maths.wellformed import (
+from cottax.core.maths.valid import (
     OwnAroundOwner, OwnInsideOwner, OwnedTwice, OwnerInsideRead, ReadInsideOwner,
 )
 from cottax.core import (
@@ -29,7 +29,7 @@ from cottax.core import (
     RemoveAttribute, SetAttribute,
     Violation, NodeDefinition, Insert, Delete,
     violations, comparables_in, first,
-    answer_for_labels, answer_for_places, WellFormed,
+    answer_for_labels, answer_for_places, Valid,
 )
 from cottax.core.plan.primitive import (
     Nest, Unnest, check_delete_keeps_nesting_whole, check_nesting, check_unnesting,
@@ -37,7 +37,7 @@ from cottax.core.plan.primitive import (
 from cottax.core.refusal_kinds import DoesNotRead, ReadOnBothSides
 from cottax.core.maths.executable import Executable
 from cottax.core.frozen import Answer, OrderedMap, answers
-from cottax.core.maths.wellformed import EndOwnsNothingInside, Unbound
+from cottax.core.maths.valid import EndOwnsNothingInside, Unbound
 from cottax.core.maths.nesting import BoxOwnsNothing, check_blocks_own_something, check_blocks_partition
 from cottax.pytree.path import VarPath
 from cottax.core import Attachment, Mint, Minting, relabelled
@@ -171,7 +171,7 @@ def proof(graph, op, define):
     '''Why `op` of `define` does not apply to `graph`, and the rules of the bindings that
     would result, as data.'''
     return list(refusals(op(OrderedMap(define)), graph)) + \
-           list(WellFormed.check(Graph(OrderedMap(graph.definitions | define))))
+           list(Valid.check(Graph(OrderedMap(graph.definitions | define))))
 
 
 def on_insert(new, standing=None):
@@ -277,10 +277,10 @@ def test_an_ownership_violation_names_each_owner():
     found = proof(G({a: toy([], ['y'])}), Insert, {c: toy([], ['y'])})
     assert found == [OwnedTwice(place=Word('y'), node=c, other=a)]
     three = {a: toy([], ['y']), b: toy([], ['y']), c: toy([], ['y'])}
-    assert list(WellFormed.check(Graph(OrderedMap(three)))) == [
+    assert list(Valid.check(Graph(OrderedMap(three)))) == [
         OwnedTwice(place=Word('y'), node=b, other=a), OwnedTwice(place=Word('y'), node=c, other=a)]
     around = {a: toy([], ['s.u']), b: toy([], ['s.v']), c: toy([], ['s'])}
-    assert list(WellFormed.check(Graph(OrderedMap(around)))) == [
+    assert list(Valid.check(Graph(OrderedMap(around)))) == [
         OwnAroundOwner(Word('s'), Word('s.u'), c, a), OwnAroundOwner(Word('s'), Word('s.v'), c, b)]
 
 
@@ -288,8 +288,8 @@ def test_a_nesting_with_a_bad_end_is_listed_not_raised():
     """A pair with a bad end is the one rule's that names it."""
     a, t = Word('a'), Word('t')
     graph = Graph(OrderedMap({a: states([], ['x']), t: toy([], ['y'])}))
-    assert [type(v) for v in WellFormed.check(Graph(graph.definitions, OrderedMap({Word('zz'): a})))] == [Unbound]
-    assert [type(v) for v in WellFormed.check(Graph(graph.definitions, OrderedMap({t: a})))] == [EndOwnsNothingInside]
+    assert [type(v) for v in Valid.check(Graph(graph.definitions, OrderedMap({Word('zz'): a})))] == [Unbound]
+    assert [type(v) for v in Valid.check(Graph(graph.definitions, OrderedMap({t: a})))] == [EndOwnsNothingInside]
 
 
 def test_a_contraction_refuses_a_block_owning_nothing():
@@ -428,12 +428,12 @@ def test_every_case_a_rule_can_name_has_wording():
 
     cyc = {a: states(['y'], ['x']), b: states(['x'], ['y']), t: toy(['x'], ['w'])}
     with pytest.raises(KeyError, match='not a node of this graph'):     # `check_nesting_ends_bound`
-        WellFormed.prove(G({a: states([], ['x'])}, {a: b}))
+        Valid.prove(G({a: states([], ['x'])}, {a: b}))
     seen(check_delete_keeps_nesting_whole(Delete((a,)), G(cyc, {a: b})))  # one end lost
-    seen(WellFormed.check(Graph(G({a: states([], ['x'])}).definitions, OrderedMap({a: b}))))   # unbound
-    seen(WellFormed.check(Graph(G(cyc).definitions, OrderedMap({a: t}))))            # t not a problem
+    seen(Valid.check(Graph(G({a: states([], ['x'])}).definitions, OrderedMap({a: b}))))   # unbound
+    seen(Valid.check(Graph(G(cyc).definitions, OrderedMap({a: t}))))            # t not a problem
     seen(check_nesting(Nest(a, b), G(cyc, {a: b})))                             # already
-    seen(WellFormed.check(Graph(G(cyc).definitions, OrderedMap({a: a}))))            # inside itself
+    seen(Valid.check(Graph(G(cyc).definitions, OrderedMap({a: a}))))            # inside itself
     seen(check_nesting(Nest(a, b), G(cyc, {b: a})))                             # loop
     seen(Executable.check(G({a: states([], ['x']), b: states([], ['y'])}, {a: b})))   # unreachable
     seen(check_blocks_own_something(G({a: states(['x'], []), b: states(['y'], [])}), ((a, b),)))  # a box owning nothing

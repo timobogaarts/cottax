@@ -18,10 +18,10 @@ graph                        (Graph, the one stored graph: definitions and `with
  ||                           at nothing; what is read off the bindings)
  \/
 rules                        (Rules, per_node_check: what is proved of a graph, as classes;
- ||                           Group.check / Group.prove, a set remembered on the graph)
+ ||                           Group.check / Group.prove, the answer remembered on the graph)
  \/
-wellformed                   (WellFormed: the nesting's three rules and the bindings' two,
- ||                           what a readable graph obeys)
+valid                        (Valid: ValidNesting, the nesting's three rules, and
+ ||                           ValidDependencies, the bindings' two -- each view asks its own)
  \/
 dependencies                 (`dependencies(graph)`, the view of owners, edges, components,
  ||                           order, reachability)
@@ -29,7 +29,7 @@ dependencies                 (`dependencies(graph)`, the view of owners, edges, 
 nesting                      (`nesting(graph)`, the view of the outermost problems, what each
  ||                           is nested in, its cycle and interior; `contract`)
  \/
-executable                   (the structural proof, a group implying WellFormed: cycles,
+executable                   (the structural proof, a group implying Valid: cycles,
  ||                           problems, and every problem's edges against its cycle; outline)
  \/
 steps                        (steps(graph): Run and Solve, every interior proved
@@ -46,7 +46,7 @@ from .definition import (
 from .kinds import AbstractConditionalNode, FunctionalNode, conditions, owns_inside
 from .graph import Graph
 from .rules import Rules, per_node_check
-from .wellformed import WellFormed
+from .valid import Valid, ValidDependencies, ValidNesting
 from .dependencies import Dependencies, dependencies
 from .nesting import Nesting, nesting
 from .executable import Executable, body_of, outline

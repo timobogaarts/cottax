@@ -6,7 +6,7 @@ from typing import Any
 
 from ...core import (
     Condition, ConditionalNode, Label, NodeDefinition, Place, Violation,
-    Graph, GraphOp, Plan, dependencies, WellFormed,
+    Graph, GraphOp, Plan, dependencies, Valid,
 )
 from ...core.frozen import Frozen, OrderedMap, answer, answers, checked
 from ..surface.interface import DerivedNames, Written
@@ -82,7 +82,7 @@ def declare(*models: Any) -> Declared:
             nodes.append((at, ConditionalNode(leaf) if isinstance(leaf, Condition) else leaf))
         node_tags.append((at, tags))
     graph = Graph(OrderedMap(nodes))
-    WellFormed.prove(graph)                    # a declared model is well formed, or refused here
+    Valid.prove(graph)                    # a declared model is well formed, or refused here
     declarations = [leaf for _, leaf, _ in found if isinstance(leaf, Declaration)]
     return Declared(Plan(graph),
                     OrderedMap(p_v for leaf in declarations for p_v in leaf.given.items()),

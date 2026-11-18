@@ -1,6 +1,6 @@
 '''
 What follows from owns meeting reads: who owns each place, the edges, the components and
-their order, reachability. A view of the graph, got by proving it well formed (`WellFormed`):
+their order, reachability. A view of the graph, got by proving its dependencies valid (`ValidDependencies`):
 only then does each place have one producer and each read meet an
 owned place exactly, so an edge is a fact of the nodes and cannot disagree with them.
 '''
@@ -14,7 +14,7 @@ from ..frozen import Frozen, remembered
 from .definition import NodeDefinition
 from .graph import Graph
 from .places import Label, Place
-from .wellformed import WellFormed, owners_of
+from .valid import ValidDependencies, owners_of
 
 
 # ---------------------------------------------------------------- the view
@@ -22,12 +22,12 @@ from .wellformed import WellFormed, owners_of
 class Dependencies[N: Label, V: Place](Frozen):
     '''
     The edges of a well-formed graph, and everything read off them. Built from a graph
-    proved `WellFormed`: getting the view is the proof, so no query is left unguarded.
+    proved `ValidDependencies`: getting the view is the proof, so no query is left unguarded.
     '''
 
     graph : Graph[N, V]
 
-    checks = (WellFormed.check,)
+    checks = (ValidDependencies.check,)
 
     @cached_property
     def owners(self) -> dict[V, N]:
@@ -142,7 +142,7 @@ class Dependencies[N: Label, V: Place](Frozen):
 
 @remembered
 def dependencies[N: Label, V: Place](graph: Graph[N, V]) -> Dependencies[N, V]:
-    '''The dependency view of `graph`, proving it `WellFormed`; one per graph.'''
+    '''The dependency view of `graph`, proving it `ValidDependencies`; one per graph.'''
     return Dependencies(graph)
 
 

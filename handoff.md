@@ -221,7 +221,7 @@ The layering is committed as `5b45a75`. Piece 1 is built on top, uncommitted:
 
 ## 5d. Tower piece 2: rule groups replace the subclass chain (uncommitted)
 
-Built on piece 1, storage untouched (still eager; `WellFormed` is piece 3).
+Built on piece 1, storage untouched (still eager; `Valid` is piece 3).
 
 - `core/maths/rules.py`: `Rules` (whole graph) and `NodeRules` (each node), fields `name`,
   `rules`, `implies`; `unproved`, `prove` (returns `None`: nothing new is made, so it is a
@@ -271,19 +271,19 @@ Owner asked: memo cleanup, `dispatch` and `valued` out of maths, then piece 3. A
     holds the three nesting rules (eager) and the bindings' reads: `nodes`, `variables`,
     `owned_variables`, `read_variables`, `readers`, `enclosers`, `outermost_enclosers`,
     `enclosing`, `subgraph`. `AbstractGraph` is gone.
-  - `maths/dependencies.py` has `WellFormed` (the two binding rules, lazy) and the
+  - `maths/dependencies.py` has `Valid` (the two binding rules, lazy) and the
     `Dependencies` view, with `owners`, `components`, `cycles`, `topological_order`,
     `ancestors`, `descendants`, `reach`, `boundary_*`, `feedback_variables` and
     `closing_readers`. `dependencies(graph)` is remembered, and building the view is the proof.
   - `maths/nesting.py` has the `Nesting` view (`cycle_of`, `interior`, `contract`) and
-    `nesting(graph)`. Levels and interiors carry `WellFormed` through
-    `carried(also=(WellFormed,))`, and so does `body_of`. `contract` proves `WellFormed` of
+    `nesting(graph)`. Levels and interiors carry `Valid` through
+    `carried(also=(Valid,))`, and so does `body_of`. `contract` proves `Valid` of
     its result.
-  - `ExecutableGraph` implies `WellFormed`.
-  - `GraphOp.apply(graph, keeps=WellFormed)` proves `keeps` of the input and of the result.
+  - `ExecutableGraph` implies `Valid`.
+  - `GraphOp.apply(graph, keeps=Valid)` proves `keeps` of the input and of the result.
     Composed and staged ops apply their parts with `keeps=None`. Not on `Plan`: no
     repository plan exists yet, so it would be an unused field.
-  - The doors prove `WellFormed` of what they build: `read_json` and `declare`.
+  - The doors prove `Valid` of what they build: `read_json` and `declare`.
   - Not done: `run(graph, values)` (step 4), and the `in_graph` slot (nothing needs it).
 - processax, owner's to change:
   - `GraphWithValues` is no longer in `cottax.core` but in `cottax.consumers.execution`:
@@ -320,12 +320,12 @@ Owner asked: memo cleanup, `dispatch` and `valued` out of maths, then piece 3. A
       without it each `+` rebuilds the chain).
     - Offered, not done: `Solve` holding its interior's steps (one tree, no memo lookup in
       host loops); `checked` precomputing its signature (~8 µs/call).
-  - `Graph` checks nothing at construction. The three nesting rules joined `WellFormed`
+  - `Graph` checks nothing at construction. The three nesting rules joined `Valid`
     (now five rules), so ops (`apply` keeps it) and the doors still refuse at once.
   - `readers_of` inlined into `Graph.readers`. `owners_of` stays: the binding check must not
     read the view it guards.
   - **`wellformed.py`** (between `rules` and `dependencies`) holds the five rules, `owners_of`,
-    `WellFormed` and their refusals. `graph.py` imports neither `kinds` nor any rule.
+    `Valid` and their refusals. `graph.py` imports neither `kinds` nor any rule.
   - **No "encloser" any more.** `kinds.owns_inside(d)` (a condition node's `owns_inside`, `()`
     otherwise) and `kinds.conditions(defs)` replace `is_encloser` / `enclosers` /
     `Graph.enclosers`. `outermost` and `enclosing(p)` moved to `nesting(g)`.
@@ -340,7 +340,7 @@ Owner asked: memo cleanup, `dispatch` and `valued` out of maths, then piece 3. A
     rules may assume what it implies (the `is_proved` guard in
     `check_nesting_ends_on_one_cycle` is gone). `at=` stays a dotted path: `jax_jit` uses
     `at='valued.graph'`.
-  - **Groups are classes.** `class ExecutableGraph(WellFormed): rules = (...)`; the bases are
+  - **Groups are classes.** `class ExecutableGraph(Valid): rules = (...)`; the bases are
     what a group implies, `closure` is computed from them at class creation (each once,
     in the order written), `asked` reads the class's own `rules` only. A group with no rules
     of its own (`DrivenGraph(ExecutableGraph, DrivenNodes)`) is proved once its bases are.
@@ -359,11 +359,11 @@ Owner asked: memo cleanup, `dispatch` and `valued` out of maths, then piece 3. A
   the value's type. So no wrapper, no forwarding, no `.graph.graph`, one jit key per graph,
   a DAG instead of a chain, and node and whole-graph rules can mix in any group. A
   combination needs a class only to be *named*; proving its bases proves it.
-- *Making a group the view* (`class WellFormed(Frozen): graph`) would be the tower again:
+- *Making a group the view* (`class Valid(Frozen): graph`) would be the tower again:
   rejected.
 - *Node checks stay on the nodes, at construction.* A rule one node alone decides, and
   whose breaking is never a meaningful intermediate state, belongs on the node. Relational
-  rules go to a group (`WellFormed`), and so do per-node rules about a stage (driven,
+  rules go to a group (`Valid`), and so do per-node rules about a stage (driven,
   implemented, jit). Test for moving one: is a node breaking it ever meaningful mid-plan?
   (A requirement is, which is why "owns something inside" is `check_no_requirements`.)
 - `definition`, `kinds`, `places` and `graph` are fine as they are (owner).
@@ -371,7 +371,7 @@ Owner asked: memo cleanup, `dispatch` and `valued` out of maths, then piece 3. A
 **Built (uncommitted, 2026-11-18): `rules.py` trimmed, 137 -> about 120 lines with docstrings.**
 Decided after a blind review (the metaclass idea was rejected, see below).
 - A group is a check through a classmethod: `@checked(Executable.check)`,
-  `checks = (WellFormed.check,)`. `check(held, *_)` proves `held` if it is a `Graph`, else
+  `checks = (Valid.check,)`. `check(held, *_)` proves `held` if it is a `Graph`, else
   `held.graph` (one hop; anything else is a `TypeError` naming the group). Extra arguments
   of a checked function are ignored. `Traced` gained a `graph` property for this.
 - `proves(f_or_cls)` = the checks that are some group's `.check` (bound classmethods compare
@@ -397,7 +397,7 @@ Decided after a blind review (the metaclass idea was rejected, see below).
   (`json/format.py`, `implemented.py`, `test_contracts`, `test_realisation` call it so).
   `Rules.rules` is typed `Callable[[Graph], Iterator[Violation]]`; `asked` folded into
   `unproved` (reads `g.__dict__['rules']`, own only). `test_incremental`'s probe counts
-  `WellFormed`'s first rule instead of patching `asked`. `held` is typed
+  `Valid`'s first rule instead of patching `asked`. `held` is typed
   `Graph | HasGraph` (a Protocol, owner's), no runtime TypeError.
 - Then (2026-11-18, later): the free functions went. `Rules` carries `check(graph)` (list)
   and `prove(graph)` (raise); `unproved`, `prove`, `proves` removed (`proves` test reads
@@ -414,6 +414,15 @@ Decided after a blind review (the metaclass idea was rejected, see below).
   `benchmark/structure.py:9,33`, `preprocess/wiring/graph.py:10,56`,
   `vmcon/tests/test_vmcon_scaling.py:13,83,138`. Already broken since groups became
   classes (never instantiated); the fix is `prove(graph, Jittable)` then pass `graph`.
+
+**Built (uncommitted): `WellFormed` split and renamed after the paper's "valid graph".**
+`maths/wellformed.py` -> `maths/valid.py`. `ValidNesting` (ends bound, no loops, ends own
+inside) and `ValidDependencies` (one producer, reads exact) are independent halves;
+`Valid(ValidNesting, ValidDependencies)` has no rules of its own (nesting first, so the
+order violations are reported in is unchanged). `Dependencies.checks` asks only
+`ValidDependencies`, `Nesting.checks` only `ValidNesting`; everything else (`Executable`,
+`apply`'s `keeps`, `declare`, `read_json`, `Nesting`'s rewrites) asks `Valid`. Proving
+`Valid` caches both halves. `test_incremental`'s probe wraps `ValidNesting`'s first rule.
 
 **Still open from earlier:**
 - `body_of` into the nesting view (`nesting(g).body`), recommended.
@@ -492,14 +501,14 @@ def view(requires, on=lambda graph: graph): ...   # class of queries -> function
 ```
 
 - The record of what is proved is a memo in `__dict__`: outside equality, hash and pickle.
-- `WellFormed` is also recorded on the `definitions` map, so `Nest` / `Unnest` do not re-run it.
-- `subgraph` carries the `NodeRules` groups and `WellFormed`; `contract` carries
-  `WellFormed` only (a boxed `FunctionalNode` has no implementation).
+- `Valid` is also recorded on the `definitions` map, so `Nest` / `Unnest` do not re-run it.
+- `subgraph` carries the `NodeRules` groups and `Valid`; `contract` carries
+  `Valid` only (a boxed `FunctionalNode` has no implementation).
 
 | Group | Kind | Rules | Implies |
 |---|---|---|---|
-| `WellFormed` | whole graph | one producer per place, exact reads | — |
-| `ExecutableGraph` | whole graph | the seven executable rules | `WellFormed` |
+| `Valid` | whole graph | one producer per place, exact reads | — |
+| `ExecutableGraph` | whole graph | the seven executable rules | `Valid` |
 | driven, realised, callable, jit-key | per node | 1, 1, 2, 2 | per-node groups only |
 | `DrivenGraph`, `RealisedGraph`, `CallableGraph`, `JitGraph` | composite | none | `ExecutableGraph` + the per-node parts |
 
@@ -515,8 +524,8 @@ view is the proof, so a query cannot be left unguarded.
 
 | View | Requires | Holds |
 |---|---|---|
-| `dependencies(graph)` | `WellFormed` | `owners`, edges, `components`, `cycles`, `topological_order`, `ancestors`, `descendants`, `reach`, `boundary_inputs`, `boundary_outputs`, `feedback_variables`, `closing_readers` |
-| `nesting(graph)` | `WellFormed` | `cycle_of`, `interior`, `contract` |
+| `dependencies(graph)` | `Valid` | `owners`, edges, `components`, `cycles`, `topological_order`, `ancestors`, `descendants`, `reach`, `boundary_inputs`, `boundary_outputs`, `feedback_variables`, `closing_readers` |
+| `nesting(graph)` | `Valid` | `cycle_of`, `interior`, `contract` |
 | `steps(graph)` | `ExecutableGraph` | `Run` and `Solve` steps |
 
 `dependencies` is memoised on the `definitions` map. Views are the only route to `owners`
@@ -537,9 +546,9 @@ order, stale memo). No contributions into a carried group unless per-node.
 
 - Primitives build their result unchecked; `checks_graph` keeps every intent check
   (`NameTaken`, `NotBound`, `Stranded`, `AlreadyNested`, …).
-- `GraphOp.apply(graph, keeps=WellFormed)` proves `keeps` of the input, asks the intent
+- `GraphOp.apply(graph, keeps=Valid)` proves `keeps` of the input, asks the intent
   checks, applies, proves `keeps` of the result. A composed op proves `keeps` once.
-- `Plan(base, ops, keeps=WellFormed)` proves `keeps` of its base and passes it on, also
+- `Plan(base, ops, keeps=Valid)` proves `keeps` of its base and passes it on, also
   after unpickling. A repository plan keeps nothing until a selecting op resolves it.
 - `keeps` is not a field of the graph (it would enter equality and the jit key). It is on
   `apply` and not only on `Plan` because 25% of op applications in the suite are bare
@@ -571,7 +580,7 @@ def run(graph, values): ...
 1. **Rule groups replace the tower.** The rules module, the groups, `steps(graph)`.
    Storage untouched and still eager, so `ExecutableGraph` implies nothing yet. Stands on
    its own; almost all of it is test call sites (counts in 6.1).
-2. **Flat storage and views.** `WellFormed` becomes lazy, `keeps` on `apply` and `Plan`,
+2. **Flat storage and views.** `Valid` becomes lazy, `keeps` on `apply` and `Plan`,
    the `in_graph` slot. Touches `.graph.owners`-style reads in src and processax.
 
 ### 6.5 What changed since the design was written

@@ -10,7 +10,8 @@ from functools import cached_property
 
 from ..frozen import Frozen, OrderedMap, Violation, first, remembered
 from .definition import NodeDefinition
-from .dependencies import WellFormed, dependencies
+from .dependencies import dependencies
+from .valid import Valid, ValidNesting
 from .graph import Graph
 from .kinds import FunctionalNode, owns_inside
 from .places import Label, Place
@@ -27,7 +28,7 @@ def check_nesting_ends_on_one_cycle(g: 'Graph') -> Iterator[Violation]:
 
     p ~ q  in  N \\ A(q)   ∀ (p, q) ∊ W       i.e.  p ∊ S_q, the cycle of q
 
-    Not a rule of `WellFormed`: nothing that reads a nesting needs it, so a plan may cut
+    Not a rule of `Valid`: nothing that reads a nesting needs it, so a plan may cut
     a nested pair apart and `Unnest` it after. `Executable` asks it.
     '''
     for inner, outer in g.within.items():
@@ -61,12 +62,12 @@ def check_blocks_own_something(g: 'Graph', blocks: Iterable[Iterable]) -> Iterat
 class Nesting[N: Label, V: Place](Frozen):
     '''
     The cycles of a well-formed graph's problems, read with the nesting. Built from a graph
-    proved `WellFormed`: getting the view is the proof.
+    proved `ValidNesting`: getting the view is the proof.
     '''
 
     graph : Graph[N, V]
 
-    checks = (WellFormed.check,)
+    checks = (ValidNesting.check,)
 
     @cached_property
     def outermost(self) -> tuple[N, ...]:
@@ -78,7 +79,7 @@ class Nesting[N: Label, V: Place](Frozen):
 
     def enclosing(self, problem: N) -> tuple[N, ...]:
         '''What `problem` is nested in, transitively, innermost first: A(q), every node with
-        a path from q in (N_P, W). A forest (`WellFormed`), so the walk ends.'''
+        a path from q in (N_P, W). A forest (`Valid`), so the walk ends.'''
         if problem not in self.graph.definitions:
             raise KeyError(f'not a node of this graph: {problem!r}')
         if not owns_inside(self.graph.definitions[problem]):
@@ -123,7 +124,7 @@ class Nesting[N: Label, V: Place](Frozen):
         Each block of at least two nodes contracted into one `FunctionalNode` at its first
         member's place: reading what the block reads from outside, owning what it owns.
         Every pair with an end in a block is dropped, since a box is no encloser. Every rule
-        is asked of the result: the nesting's by its constructor, then `WellFormed`.
+        is asked of the result: the nesting's by its constructor, then `Valid`.
         '''
         position = self.graph._position
         members = [n for block in blocks for n in block]
@@ -145,14 +146,14 @@ class Nesting[N: Label, V: Place](Frozen):
         result = replace(self.graph, definitions=definitions,
                          within=OrderedMap((i, o) for i, o in self.graph.within.items()
                                            if i not in members and o not in members))
-        WellFormed.prove(result)
+        Valid.prove(result)
         return result
 
 
 
 @remembered
 def nesting[N: Label, V: Place](graph: Graph[N, V]) -> Nesting[N, V]:
-    '''The nesting view of `graph`, proving it `WellFormed`; one per graph.'''
+    '''The nesting view of `graph`, proving it `ValidNesting`; one per graph.'''
     return Nesting(graph)
 
 

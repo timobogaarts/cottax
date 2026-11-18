@@ -25,7 +25,7 @@ from .maths import (
     AbstractConditionalNode, FunctionalNode, conditions, owns_inside,
     Graph,
     Rules, per_node_check,
-    Dependencies, WellFormed, dependencies, Nesting, nesting,
+    Dependencies, Valid, ValidDependencies, ValidNesting, dependencies, Nesting, nesting,
     Executable, body_of, outline,
     Run, Solve, Step, steps,
 )

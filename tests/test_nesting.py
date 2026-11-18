@@ -6,7 +6,7 @@ inner -> outer -- makes every consumer read one answer instead of being told, an
 the ways a rewrite could quietly void it refusals rather than surprises.
 """
 
-from cottax.core import Rules, WellFormed, dependencies, nesting
+from cottax.core import Rules, Valid, dependencies, nesting
 
 import pytest
 from jax.tree_util import GetAttrKey as G
@@ -101,17 +101,17 @@ def test_undetermining_one_end_is_refused_rather_than_dropped(nested):
 
 def test_the_nesting_is_a_forest_on_the_value_not_only_on_the_op(mdf):
     '''A loop is refused wherever it arrives: built from nothing, or closed by a `Nest`
-    -- at length one (`x` inside itself) and at any length. The rule is `WellFormed`'s
+    -- at length one (`x` inside itself) and at any length. The rule is `Valid`'s
     (`check_no_nesting_loops`); `check_nesting` only names the pair that closes one.'''
     with pytest.raises(ValueError, match='closes a loop'):
-        WellFormed.prove(graph_of(mdf.definitions, OrderedMap({n('mda'): n('opt'), n('opt'): n('mda')})))
+        Valid.prove(graph_of(mdf.definitions, OrderedMap({n('mda'): n('opt'), n('opt'): n('mda')})))
     with pytest.raises(ValueError, match='inside itself'):
-        WellFormed.prove(graph_of(mdf.definitions, OrderedMap({n('opt'): n('opt')})))
+        Valid.prove(graph_of(mdf.definitions, OrderedMap({n('opt'): n('opt')})))
     # A loop the walk does not start on, at length three, and one reached only by a
     # tail: both terminate and both are reported from where the loop closes.
     three = OrderedMap({n('d'): n('obj'), n('obj'): n('mda'), n('mda'): n('opt'), n('opt'): n('obj')})
     with pytest.raises(ValueError, match='closes a loop'):
-        WellFormed.prove(graph_of(mdf.definitions, three))
+        Valid.prove(graph_of(mdf.definitions, three))
     with pytest.raises(ValueError, match='inside itself'):
         Plan(mdf) + Nest(n('opt'), n('opt'))
     with pytest.raises(ValueError, match='closes a loop'):
@@ -214,7 +214,7 @@ def test_severing_a_nested_pair_is_carried_and_refused_as_executable(nested):
     # And from nothing: the base case is the same graph.
     assert graph_of(unnested.graph.definitions, OrderedMap({n('mda'): n('opt')})) == severed.graph
     with pytest.raises(ValueError, match='determines nothing'):
-        WellFormed.prove(graph_of(nested.definitions, OrderedMap({n('d'): n('opt')})))
+        Valid.prove(graph_of(nested.definitions, OrderedMap({n('d'): n('opt')})))
 
 
 # ---------------------------------------------------------------- rewrites over a pair

@@ -1,8 +1,5 @@
 '''
-What a readable graph obeys: `WellFormed`, five rules. Three on the nesting -- its ends are
-bound, own something inside, and form a forest -- and two on the bindings -- one producer
-per place, and every read exactly an owned place or unrelated to all of them. Written
-against the stored graph and `owners_of`, never against the views they guard.
+Valid graph: valid dependency structure between models and valid nesting.
 '''
 
 from collections.abc import Iterable, Iterator, Mapping
@@ -13,7 +10,50 @@ from .graph import Graph
 from .kinds import owns_inside
 from .places import Label, Place, comparables_in, is_prefix, overlaps
 from .rules import Rules
+# ---------------------------------------------------------------- the bindings
 
+def check_one_producer_per_place(g: Graph) -> Iterator[Violation]:
+    '''
+    The owned places, over every node, form an antichain (do not overlap).
+
+    o || m  ∀  n_i ≠ n_j,  n_i, n_j ∊ N:   o ∊ O_i, m ∊ O_j        
+    '''
+    yield from owned_overlaps((n, v) for n, d in g.definitions.items() for v in d.owns)
+
+
+def owned_overlaps[N: Label, V: Place](owned: Iterable[tuple[N, V]]) -> Iterator[Violation]:
+    '''Every comparable pair of `(owner, place)`s, the later against each earlier one it
+    meets, so each violation names its own two owners.'''
+    seen  : dict[V, N] = {}
+    below : set[V]     = set()
+    for node, place in owned:
+        for other in comparables_in(place, seen, below):
+            yield owned_comparably(place, node, other, seen[other])
+        seen.setdefault(place, node)
+        below.update(place.prefixes)
+
+
+def check_reads_are_exact(g: Graph) -> Iterator[Violation]:
+    '''
+    No read is strictly inside or around another node's owned place: a read is
+    exactly an owned place, or unrelated to every one.
+
+    o || p  or  o = p   ∀ n_i, n_j ∊ N:  o ∊ O_i, p ∊ I_j        
+    '''
+    readers, owners = g.readers, owners_of(g.definitions)
+    for place, other in overlaps(readers, owners):
+        if other != place:                                   # equal is the (correct) edge
+            yield (ReadInsideOwner if is_prefix(other, place) else OwnerInsideRead)(
+                place, other, tuple(readers[place]), owners[other])
+
+
+def owners_of[N: Label, V: Place](definitions: Mapping[N, NodeDefinition[V]]) -> dict[V, N]:
+    '''Who owns each place. One producer per place is `check_one_producer_per_place`'s rule; assumed here.'''
+    return {v: n for n, d in definitions.items() for v in d.owns}
+
+
+class ValidDependencies(Rules):    
+    rules = (check_one_producer_per_place, check_reads_are_exact)
 
 # ---------------------------------------------------------------- the nesting
 
@@ -67,53 +107,12 @@ def check_no_nesting_loops(g: Graph) -> Iterator[Violation]:
             at = g.within.get(at)
         seen.update(chain)
 
+class ValidNesting(Rules):    
+    rules = (check_nesting_ends_bound, check_no_nesting_loops, check_nesting_ends_own_inside)
 
-# ---------------------------------------------------------------- the bindings
-
-def check_one_producer_per_place(g: Graph) -> Iterator[Violation]:
-    '''
-    The owned places, over every node, form an antichain (do not overlap).
-
-    o || m  ∀  n_i ≠ n_j,  n_i, n_j ∊ N:   o ∊ O_i, m ∊ O_j        
-    '''
-    yield from owned_overlaps((n, v) for n, d in g.definitions.items() for v in d.owns)
-
-
-def owned_overlaps[N: Label, V: Place](owned: Iterable[tuple[N, V]]) -> Iterator[Violation]:
-    '''Every comparable pair of `(owner, place)`s, the later against each earlier one it
-    meets, so each violation names its own two owners.'''
-    seen  : dict[V, N] = {}
-    below : set[V]     = set()
-    for node, place in owned:
-        for other in comparables_in(place, seen, below):
-            yield owned_comparably(place, node, other, seen[other])
-        seen.setdefault(place, node)
-        below.update(place.prefixes)
-
-
-def check_reads_are_exact(g: Graph) -> Iterator[Violation]:
-    '''
-    No read is strictly inside or around another node's owned place: a read is
-    exactly an owned place, or unrelated to every one.
-
-    o || p  or  o = p   ∀ n_i, n_j ∊ N:  o ∊ O_i, p ∊ I_j        
-    '''
-    readers, owners = g.readers, owners_of(g.definitions)
-    for place, other in overlaps(readers, owners):
-        if other != place:                                   # equal is the (correct) edge
-            yield (ReadInsideOwner if is_prefix(other, place) else OwnerInsideRead)(
-                place, other, tuple(readers[place]), owners[other])
-
-
-def owners_of[N: Label, V: Place](definitions: Mapping[N, NodeDefinition[V]]) -> dict[V, N]:
-    '''Who owns each place. One producer per place is `check_one_producer_per_place`'s rule; assumed here.'''
-    return {v: n for n, d in definitions.items() for v in d.owns}
-
-
-class WellFormed(Rules):
-    '''The graph is well-formed (valid)'''
-    rules = (check_nesting_ends_bound, check_no_nesting_loops, check_nesting_ends_own_inside,
-             check_one_producer_per_place, check_reads_are_exact)
+# ----------------- Total Validity.
+class Valid(ValidNesting, ValidDependencies):
+    "Fully valid graph"    
 
 
 # ----------------------------------------------------------------- violation finals

@@ -15,7 +15,7 @@ from typing import Any, NamedTuple
 import pytest
 from jax.tree_util import GetAttrKey, SequenceKey
 
-from cottax.core import Graph, Rename, WellFormed, dependencies
+from cottax.core import Graph, Rename, Valid, ValidNesting, dependencies
 from proofs import recalled
 from cottax.core.plan import ComposedOp, GraphOp, Nest, Primitive, Rebind, StagedOp, Unnest
 from cottax.consumers.architectures import Combine
@@ -531,23 +531,23 @@ def test_a_rewire_owning_inside_an_existing_read_is_refused():
 # ---------------------------------------------------------------- the induction
 
 '''
-`apply` keeps `WellFormed`: every result is proved it, once, so a rule it holds, which no op
+`apply` keeps `Valid`: every result is proved it, once, so a rule it holds, which no op
 can name, is asked of every result.
 '''
 
 def _probe_asked_during(action, graph) -> int:
-    '''How often `WellFormed` is asked of a graph other than `graph` during `action`.'''
-    real  = WellFormed.rules
+    '''How often `Valid` is asked of a graph other than `graph` during `action`.'''
+    real  = ValidNesting.rules
     calls = []
     def counting(g):                                    # the first rule: once per ask
         if g is not graph:
             calls.append(1)
         return real[0](g)
-    WellFormed.rules = (counting, *real[1:])
+    ValidNesting.rules = (counting, *real[1:])
     try:
         action()
     finally:
-        WellFormed.rules = real
+        ValidNesting.rules = real
     return len(calls)
 
 
@@ -590,6 +590,6 @@ def test_an_op_keeps_the_graph_well_formed_and_says_so_where_it_breaks_it():
     with pytest.raises(ValueError, match='owned by both'):
         twice.apply(chain())
     kept = Insert(OrderedMap({N('d'): call([Y], [W])})).apply(chain())
-    assert recalled(kept, WellFormed)
+    assert recalled(kept, Valid)
     loose = twice.apply(chain(), keeps=None)
-    assert not recalled(loose, WellFormed) and N('d') in loose
+    assert not recalled(loose, Valid) and N('d') in loose

@@ -6,7 +6,8 @@ of a graph and remembered on it.
 
 from collections.abc import Iterator
 
-from .dependencies import WellFormed, dependencies
+from .dependencies import dependencies
+from .valid import Valid
 from .graph import Graph
 from .nesting import check_nesting_ends_on_one_cycle, nesting
 from .kinds import AbstractConditionalNode, owns_inside
@@ -136,7 +137,7 @@ def check_other_owns_off_cycle(g: Graph) -> Iterator[Violation]:
             yield OwnReadInsideCycle(p, tuple(v for v, _ in inside), tuple(r for _, r in inside))
 
 
-class Executable(WellFormed):
+class Executable(Valid):
     '''A well-formed graph that can be run: every cycle answered by one problem, the rest
     functionally acyclic.'''
     rules = (check_nestings_share_a_cycle,

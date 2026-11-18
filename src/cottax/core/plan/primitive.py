@@ -10,7 +10,7 @@ from dataclasses import replace
 from ..maths.definition import NodeDefinition
 from ..frozen import Frozen, OrderedMap, Violation, first
 from ..maths.graph import Graph
-from ..maths.wellformed import NestingLoop
+from ..maths.valid import NestingLoop
 from ..maths.places import Label, Place
 from .algebra import GraphOp
 
@@ -19,7 +19,7 @@ from .algebra import GraphOp
 
 class Primitive[N: Label, V: Place](GraphOp[N, V]):
     '''
-    An op that builds a graph. Every result is proved what `apply` keeps (`WellFormed`, the
+    An op that builds a graph. Every result is proved what `apply` keeps (`Valid`, the
     nesting's rules and the bindings'). What a valid
     result would hide (a name replaced, a nesting pair dropped) the op refuses first, in
     `checks_graph`.
