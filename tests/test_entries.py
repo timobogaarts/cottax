@@ -1,11 +1,12 @@
 """
 `entries(graph)`: what each component is -- a `Run`, a `Cycle`, a `Solve` or an
-`Unresolved` -- and `ExecutableGraph`, the graph proved to hold only the first and third, at
+`Unresolved` -- and `Executable`, the graph proved to hold only the first and third, at
 every depth. A graph always has entries; a blocking exists where they are executable.
 """
 
 from cottax.core import conditions
-from cottax.core import is_proved, outline, prove, dependencies
+from cottax.core import outline, dependencies
+from proofs import recalled
 
 from itertools import permutations
 
@@ -14,7 +15,7 @@ from jax.tree_util import GetAttrKey
 
 from cottax.core.frozen import OrderedMap
 from cottax.relational import Min, Objective
-from cottax.core import ExecutableGraph, Plan
+from cottax.core import Executable, Plan
 from cottax.consumers.visualization.sequencing import Cycle, Run, Solve, Unresolved, walk, entries
 from cottax.pytree.path import NodePath, VarPath
 from cottax.core import FunctionalNode
@@ -70,9 +71,9 @@ def test_a_proof_is_of_a_graph_and_adds_nothing_to_it(two_problems):
     import copy
     nested = (Plan(two_problems) + Nest(N('h'), N('opt'))).graph
     before = hash(nested)
-    prove(nested, ExecutableGraph)
-    assert is_proved(nested, ExecutableGraph) and hash(nested) == before
-    assert not is_proved(copy.deepcopy(nested), ExecutableGraph)
+    Executable.prove(nested)
+    assert recalled(nested, Executable) and hash(nested) == before
+    assert not recalled(copy.deepcopy(nested), Executable)
     assert copy.deepcopy(nested) == nested
 
 
@@ -80,7 +81,7 @@ def test_a_graph_has_entries_where_a_blocking_refuses(two_problems, cycle_nobody
     for g, message, kind in ((two_problems, 'several problems', Unresolved),
                              (cycle_nobody_solves, 'no problem', Cycle)):
         with pytest.raises(ValueError, match=message):
-            prove(g, ExecutableGraph)
+            Executable.prove(g)
         assert [e.nodes for e in entries(g)] == list(dependencies(g).components)
         # No single problem is answered at the coupled component's level: nothing to
         # answer, or two with nothing saying which -- an entry that says so, not a refusal.
@@ -115,11 +116,11 @@ def test_a_blocking_is_runs_and_solves_all_the_way_down(two_problems):
     '''That is what the executable rules say: every entry at every depth a `Run` or a
     `Solve`. The graph is the same graph -- the proof adds no data.'''
     nested = (Plan(two_problems) + Nest(N('h'), N('opt'))).graph
-    prove(nested, ExecutableGraph)
+    Executable.prove(nested)
     assert all(isinstance(blk.entry, (Run, Solve)) for blk in walk(nested))
     # three deep: a solve per level, each holding its interior; the innermost's body runs
     deep = three_problems(*NESTED)
-    prove(deep, ExecutableGraph)
+    Executable.prove(deep)
     assert drawn(deep) == [('Solve', N('p'), 0, EVERY),
                            ('Solve', N('q'), 1, EVERY[1:]),
                            ('Run', None, 2, (N('a'),)),

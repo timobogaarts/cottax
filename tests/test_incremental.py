@@ -15,7 +15,8 @@ from typing import Any, NamedTuple
 import pytest
 from jax.tree_util import GetAttrKey, SequenceKey
 
-from cottax.core import Graph, Rename, Rules, WellFormed, dependencies, is_proved
+from cottax.core import Graph, Rename, WellFormed, dependencies
+from proofs import recalled
 from cottax.core.plan import ComposedOp, GraphOp, Nest, Primitive, Rebind, StagedOp, Unnest
 from cottax.consumers.architectures import Combine
 from cottax.core.plan import Delete, Insert, Redefine
@@ -536,17 +537,17 @@ can name, is asked of every result.
 
 def _probe_asked_during(action, graph) -> int:
     '''How often `WellFormed` is asked of a graph other than `graph` during `action`.'''
-    real  = Rules.__dict__['asked']
+    real  = WellFormed.rules
     calls = []
-    def counting(cls, g):
-        if cls is WellFormed and g is not graph:
+    def counting(g):                                    # the first rule: once per ask
+        if g is not graph:
             calls.append(1)
-        return real.__func__(cls, g)
-    Rules.asked = classmethod(counting)
+        return real[0](g)
+    WellFormed.rules = (counting, *real[1:])
     try:
         action()
     finally:
-        Rules.asked = real
+        WellFormed.rules = real
     return len(calls)
 
 
@@ -589,6 +590,6 @@ def test_an_op_keeps_the_graph_well_formed_and_says_so_where_it_breaks_it():
     with pytest.raises(ValueError, match='owned by both'):
         twice.apply(chain())
     kept = Insert(OrderedMap({N('d'): call([Y], [W])})).apply(chain())
-    assert is_proved(kept, WellFormed)
+    assert recalled(kept, WellFormed)
     loose = twice.apply(chain(), keeps=None)
-    assert not is_proved(loose, WellFormed) and N('d') in loose
+    assert not recalled(loose, WellFormed) and N('d') in loose

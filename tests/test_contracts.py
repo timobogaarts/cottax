@@ -168,7 +168,7 @@ class Minimises(DriverImplementation[ConstrainedMinimisation]):
 
 def refusals(driver: DriverContract, implementation, condition=ROOT_FIND) -> list:
     node = driven(condition, driver, *slots(driver, condition))
-    return [type(v) for v in check_implements_its_driver(W('p'),
+    return [type(v) for v in check_implements_its_driver.node(W('p'),
                                                          implemented(node, implementation))]
 
 

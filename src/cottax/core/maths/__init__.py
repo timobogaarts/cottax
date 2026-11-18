@@ -17,8 +17,8 @@ kinds                        (FunctionalNode; AbstractConditionalNode, what ever
 graph                        (Graph, the one stored graph: definitions and `within`, checked
  ||                           at nothing; what is read off the bindings)
  \/
-rules                        (Rules, each_node: what is proved of a graph, as classes;
- ||                           unproved / prove / proved, a set remembered on the graph)
+rules                        (Rules, per_node_check: what is proved of a graph, as classes;
+ ||                           Group.check / Group.prove, a set remembered on the graph)
  \/
 wellformed                   (WellFormed: the nesting's three rules and the bindings' two,
  ||                           what a readable graph obeys)
@@ -45,9 +45,9 @@ from .definition import (
 )
 from .kinds import AbstractConditionalNode, FunctionalNode, conditions, owns_inside
 from .graph import Graph
-from .rules import Rules, each_node, is_proved, proved, proves, prove, unproved
+from .rules import Rules, per_node_check
 from .wellformed import WellFormed
 from .dependencies import Dependencies, dependencies
 from .nesting import Nesting, nesting
-from .executable import ExecutableGraph, body_of, outline
+from .executable import Executable, body_of, outline
 from .steps import Run, Solve, Step, steps

@@ -7,14 +7,14 @@ types said -- and two things they could not: a condition node whose unknowns are
 yet, and one that mixes an equality with an inequality.
 """
 
-from cottax.core import prove, dependencies
+from cottax.core import dependencies
 
 import pytest
 from jax.tree_util import DictKey
 
-from cottax.core.maths.executable import ExecutableGraph
+from cottax.core.maths.executable import Executable
 from cottax.relational import Min, Objective
-from cottax.consumers.execution import CallableGraph
+from cottax.consumers.execution import Runnable
 from cottax.core.plan import Delete, Plan
 from cottax.relational import (
     Eq, Le, Rel, Relation, RelationalCondition, is_constrained_optimise, is_equalities,
@@ -402,7 +402,7 @@ def test_a_proof_refuses_a_statement_that_determines_nothing():
     g = graph_with(stated(Relation(v('r'), None, Eq)))
     assert not any(owns_inside(d) for d in g.definitions.values())     # a requirement only
     with pytest.raises(ValueError, match='holds .* against nothing'):
-        prove(g, ExecutableGraph)
+        Executable.prove(g)
 
 
 def test_drawing_blocking_and_pruning_are_all_fine():
@@ -415,7 +415,7 @@ def test_drawing_blocking_and_pruning_are_all_fine():
 
 def test_deleting_it_is_how_a_graph_asserting_nothing_runs():
     p = Plan(graph_with(stated(Relation(v('r'), None, Eq)))) + Delete((n('c'),))
-    prove(p.graph, CallableGraph)                                # builds
+    Runnable.prove(p.graph)                                # builds
 
 
 def test_a_problem_with_no_conditions_is_off_its_cycle():
@@ -430,4 +430,4 @@ def test_a_problem_with_no_conditions_is_off_its_cycle():
     p = p + assign(n('c'), RootFinding(steps=False))
     assert p.graph[n('c')].reads_inside == ()
     with pytest.raises(ValueError, match='in no cycle'):
-        prove(p.graph, ExecutableGraph)
+        Executable.prove(p.graph)

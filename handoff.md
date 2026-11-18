@@ -226,7 +226,7 @@ Built on piece 1, storage untouched (still eager; `WellFormed` is piece 3).
 - `core/maths/rules.py`: `Rules` (whole graph) and `NodeRules` (each node), fields `name`,
   `rules`, `implies`; `unproved`, `prove` (returns `None`: nothing new is made, so it is a
   statement, owner's choice 2026-11-17), `is_proved`, `proved(group, of=0, at='')`, `proves(fn_or_class)`, `carried`.
-  The memo is `_proved` in the graph's `__dict__`, outside equality, hash and pickle.
+  The memo is `_satisfies` in the graph's `__dict__`, outside equality, hash and pickle.
   A node group may imply node groups only (`NodeRulesImplyWhole`).
 - Groups: `ExecutableGraph` (the seven rules); per node `DrivenNodes`, `RealisedNodes`,
   `CallableNodes`, `JitKeyNodes` (implies `RealisedNodes`); composites `DrivenGraph`,
@@ -258,7 +258,7 @@ Owner asked: memo cleanup, `dispatch` and `valued` out of maths, then piece 3. A
 
 - **One memo mechanism.** `frozen.remembered`: a function of a `Frozen` value and hashable
   arguments, remembered in the value's one memo slot (outside eq, hash, pickle), with
-  `known`, `answers` and `remember`. It replaces `_proved`, `_steps` and `NestingGraph._levels`.
+  `known`, `answers` and `remember`. It replaces `_satisfies`, `_steps` and `NestingGraph._levels`.
   `rules.broken(graph, group)` is a group's own violations, remembered. `closure(group)`,
   `unproved`, `is_proved` (known, asks nothing) and `carried` are read off it.
   `prove` returns `None` (owner's choice).
@@ -368,24 +368,52 @@ Owner asked: memo cleanup, `dispatch` and `valued` out of maths, then piece 3. A
   (A requirement is, which is why "owns something inside" is `check_no_requirements`.)
 - `definition`, `kinds`, `places` and `graph` are fine as they are (owner).
 
-**Proposed and agreed in principle, not built: trim `rules.py` to about 55 lines.**
-1. `@node_check` decorator on the 8 node checks: returns a small `NodeCheck` value with
-   `__call__(graph)` looping the nodes and `.node(name, node)` for the per-node call
-   (used by `json/format.py`, `realisation/implemented.py` and `test_contracts`). Groups then
-   list node and graph checks in one `rules`; `each_node` goes. Graph checks stay plain
-   functions (a function already is "a callable of a graph").
-2. Drop `proved` and `proves`; the five declaration sites write the access in Python:
-   `checks = (lambda view: unproved(view.graph, WellFormed),)` (`Dependencies`, `Nesting`),
-   `@checked(lambda graph: unproved(graph, ExecutableGraph))` (`steps`),
-   `@checked(lambda valued: unproved(valued.graph, CallableGraph))` (`run`, `Traced`).
-   Costs the two `proves(...)` lines in `test_execution.py:286-287`.
-3. `proofs` -> private `_proofs`.
-4. Drop the `__new__` guard on `Rules`. Keep the closure from the bases in order written:
-   `reversed(__mro__)` would ask later siblings first (`CallableNodes` before `WellFormed`),
-   so a broken graph would report "not callable" before the structural fault.
-   Left: `Rules`, `NodeCheck`/`node_check`, `_proofs`, `unproved` (list), `prove` (raise),
-   `is_proved` (look up, used by tests only, kept for cache-aware users). Confirm before
-   building: the owner said "do handoff then done" right after this proposal.
+**Built (uncommitted, 2026-11-18): `rules.py` trimmed, 137 -> about 120 lines with docstrings.**
+Decided after a blind review (the metaclass idea was rejected, see below).
+- A group is a check through a classmethod: `@checked(Executable.check)`,
+  `checks = (WellFormed.check,)`. `check(held, *_)` proves `held` if it is a `Graph`, else
+  `held.graph` (one hop; anything else is a `TypeError` naming the group). Extra arguments
+  of a checked function are ignored. `Traced` gained a `graph` property for this.
+- `proves(f_or_cls)` = the checks that are some group's `.check` (bound classmethods compare
+  equal, so `unchecked`/`skip=` still work). `test_execution.py:286` still holds.
+- `@node_check` marks a rule `(name, node)` as per-node (an attribute, the function is
+  unchanged, so `check_driver_fits(name, node)` etc. still work directly); `Rules.asked`
+  loops the nodes for it. `each_node` gone. Works on a lambda: `node_check(lambda ...)`.
+- `proved`, `at=` and `is_proved` gone; tests read `X in proofs(g)`. `proofs` is exported
+  (kept public: it is the documented memo). `__new__` guard kept (clear message).
+- Groups renamed to adjectives, so they read as properties, not constructions:
+  `ExecutableGraph`->`Executable`, `DrivenGraph`->`Driven`, `RealisedGraph`->`Realised`,
+  `CallableGraph`->`Runnable`, `CallableNodes`->`RunnableNodes`, `JitGraph`->`Jittable`.
+  `*Nodes` groups keep their names.
+- Rejected: a metaclass `__call__` making `Executable(g)` yield violations. A generator is
+  truthy, so `if Executable(g):` would always pass; mypy does not honour a metaclass
+  `__call__` return; `violations()` would take the Frozen-class branch; `checked` passes
+  every argument. Rejected: strict groups plus named helper checks (`proves` loses them).
+- `closure` (a ClassVar set in `__init_subclass__`) replaced by the classmethod
+  `Rules.implied()`, walking the bases each ask (no cache: a handful of classes). The
+  failed-skip in `unproved` is `issubclass(g, f)`; no MRO read anywhere.
+- `node_check` (a marker) became `per_node_check`, a class wrapping `rule(name, node)`:
+  itself a graph rule (`__call__(graph)` loops the nodes), the one-node rule at `.node`
+  (`json/format.py`, `implemented.py`, `test_contracts`, `test_realisation` call it so).
+  `Rules.rules` is typed `Callable[[Graph], Iterator[Violation]]`; `asked` folded into
+  `unproved` (reads `g.__dict__['rules']`, own only). `test_incremental`'s probe counts
+  `WellFormed`'s first rule instead of patching `asked`. `held` is typed
+  `Graph | HasGraph` (a Protocol, owner's), no runtime TypeError.
+- Then (2026-11-18, later): the free functions went. `Rules` carries `check(graph)` (list)
+  and `prove(graph)` (raise); `unproved`, `prove`, `proves` removed (`proves` test reads
+  `run.checks == (Runnable.check,)`). Exports from rules: `Rules`, `per_node_check` only.
+- The memo is pure: `@remembered def _satisfies(graph, group) -> bool` (bases first, own rules
+  to the first violation; no violation kept), replacing the mutable `_proofs` set.
+  `remembered` takes hashable keys: `fn(value, *key)`, cached at `(fn, *key)`
+  (`test_frozen` has a keyed test). `check` lists a group's own violations only when it
+  fails and its bases hold; a failing group's rules run twice (once to the first, once to
+  list), on the failure path only. Tests read the memo via `tests/proofs.py:recalled(g, X)`.
+- Tests: 30 touched files, 845 passed + 26 slow.
+- processax breaks (owner's to fix): `JitGraph` imported and *called as a wrapper*
+  (`JitGraph(graph)`) in `process/study.py:15,170`, `benchmark/capture.py:123`,
+  `benchmark/structure.py:9,33`, `preprocess/wiring/graph.py:10,56`,
+  `vmcon/tests/test_vmcon_scaling.py:13,83,138`. Already broken since groups became
+  classes (never instantiated); the fix is `prove(graph, Jittable)` then pass `graph`.
 
 **Still open from earlier:**
 - `body_of` into the nesting view (`nesting(g).body`), recommended.

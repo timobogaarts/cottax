@@ -14,7 +14,6 @@ from .dependencies import WellFormed, dependencies
 from .graph import Graph
 from .kinds import FunctionalNode, owns_inside
 from .places import Label, Place
-from .rules import prove, proved
 
 
 # ---------------------------------------------------------------- the rules
@@ -29,7 +28,7 @@ def check_nesting_ends_on_one_cycle(g: 'Graph') -> Iterator[Violation]:
     p ~ q  in  N \\ A(q)   ∀ (p, q) ∊ W       i.e.  p ∊ S_q, the cycle of q
 
     Not a rule of `WellFormed`: nothing that reads a nesting needs it, so a plan may cut
-    a nested pair apart and `Unnest` it after. `ExecutableGraph` asks it.
+    a nested pair apart and `Unnest` it after. `Executable` asks it.
     '''
     for inner, outer in g.within.items():
         if inner not in nesting(g).cycle_of(outer):
@@ -67,7 +66,7 @@ class Nesting[N: Label, V: Place](Frozen):
 
     graph : Graph[N, V]
 
-    checks = (proved(WellFormed, at='graph'),)
+    checks = (WellFormed.check,)
 
     @cached_property
     def outermost(self) -> tuple[N, ...]:
@@ -146,7 +145,7 @@ class Nesting[N: Label, V: Place](Frozen):
         result = replace(self.graph, definitions=definitions,
                          within=OrderedMap((i, o) for i, o in self.graph.within.items()
                                            if i not in members and o not in members))
-        prove(result, WellFormed)
+        WellFormed.prove(result)
         return result
 
 

@@ -7,7 +7,8 @@ surface joining the vocabularies, as `tests/test_ode.py` is; run with `-s` for t
 '''
 
 import dataclasses
-from cottax.core import is_proved, prove, unproved, dependencies
+from cottax.core import dependencies
+from proofs import recalled
 
 import math
 import re
@@ -20,17 +21,17 @@ import pytest
 import cottax.assemblies.jax as cx
 import purposes
 
-from cottax.core import ConditionalNode, ExecutableGraph
+from cottax.core import ConditionalNode, Executable
 from cottax.consumers.architectures.cut_rules import GaussSeidel
 from cottax.consumers.architectures import Combine
 from cottax.core.frozen import OrderedMap, answer, choice, violations
 from cottax.core.plan import Plan, refusals
-from cottax.core.driven import Assign, driven as with_driver, DrivenGraph, Start
+from cottax.core.driven import Assign, driven as with_driver, Driven, Start
 from cottax.core.realisation import Implement
 from cottax.consumers.architectures import IDF, MDF, SAND, AtFirstMember
 from cottax.consumers.architectures.refusals import NotCombinable
 from cottax.consumers.declaration import declare
-from cottax.consumers.execution import CallableGraph, Drive, run
+from cottax.consumers.execution import Runnable, Drive, run
 from cottax.consumers.execution.interface import DriverImplementation
 from cottax.consumers.execution.refusals import NoneImplements, ReportUnavailable
 from cottax.consumers.json import read_json, write_json
@@ -84,9 +85,9 @@ def per_problem(purpose, at: str) -> VarPath:
     return s.place(purpose(VarPath(problem(at).segments)))
 
 
-def driven(*models, implementation, **kw) -> CallableGraph:
+def driven(*models, implementation, **kw) -> Runnable:
     built = (Plan(declare(*models).graph) + drive(implementation, **kw)).graph
-    prove(built, CallableGraph)
+    Runnable.prove(built)
     return built
 
 
@@ -259,9 +260,9 @@ def test_4_the_history_couples_its_reader_to_the_ode_from_the_declaration():
     print(f'\n[4] area reads from {[str(n) for n in dependencies(g).ancestors((node("area"),))]}')
     assert dependencies(g).ancestors((node('area'),)) == (node('decay'), problem('decay'), node('area'))
     assert dependencies(g).owners[s.place('xs')] == problem('decay')
-    prove(g, DrivenGraph)
-    assert is_proved(g, ExecutableGraph)
-    kinds = [type(v).__name__ for v in unproved(declare(remembering).graph, ExecutableGraph)]
+    Driven.prove(g)
+    assert recalled(g, Executable)
+    kinds = [type(v).__name__ for v in Executable.check(declare(remembering).graph)]
     print(f'    a rate reading its own history: {kinds}')
     assert kinds == ['OwnReadInsideCycle']
 
@@ -286,7 +287,7 @@ def test_5_an_architecture_first_then_drive_fits_the_rate_to_the_history(final):
     from cottax.relational.consumers.execution.jax_solvers import BFGS
     plan = Plan(fitted().graph) + final(GaussSeidel(), CLOSING, node('opt'))
     assert dict(plan.graph.within) == {problem('decay'): node('opt')}
-    prove(plan.graph, ExecutableGraph)
+    Executable.prove(plan.graph)
     plan += drive(BFGS(rtol=1e-10, atol=1e-10), diffrax_run())
     ts = jnp.linspace(0.0, 2.0, 9)
     state = {'k': 0.1, 'x0': 1.0, 'span': (0.0, 2.0), 'times': ts, 'data': jnp.exp(-0.7 * ts)}
@@ -315,7 +316,7 @@ def test_6_the_flagged_contract_handed_to_drive_or_assigned_by_hand():
     at, g = problem('bare'), declare(bare, area_of_bare).graph
     by_hand = (Plan(g) + Assign(at, RECORDING, *s.role_places(
         at, g[at].owns_inside, RECORDING)) + Implement(OrderedMap({at: diffrax_run()}))).graph
-    prove(by_hand, CallableGraph)
+    Runnable.prove(by_hand)
     assert by_drive == by_hand
     out = run(GraphWithValues(by_drive, inputs))
     exact = (1 - math.exp(-1.0)) / 0.5
@@ -393,9 +394,9 @@ class Bisection(DriverImplementation[RootFinder]):
 
 def test_8_an_implementation_without_the_report_is_refused_by_the_proof():
     g = (Plan(declare(decay).graph) + Drive((EndOnly(10),), (), s.role_places)).graph
-    assert [type(v) for v in unproved(g, CallableGraph)] == [ReportUnavailable]
-    prove((Plan(declare(bare).graph)
-           + Drive((EndOnly(10),), ODE_CONTRACTS, s.role_places)).graph, CallableGraph)
+    assert [type(v) for v in Runnable.check(g)] == [ReportUnavailable]
+    Runnable.prove((Plan(declare(bare).graph)
+           + Drive((EndOnly(10),), ODE_CONTRACTS, s.role_places)).graph)
 
 
 def test_8_drive_on_a_contracted_problem_nothing_given_implements_is_refused():

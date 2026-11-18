@@ -492,3 +492,20 @@ def test_a_remembered_answer_is_of_the_value_and_outside_it():
     assert p == Pair(2) and hash(p) == hash(Pair(2))
     cold = copy.deepcopy(p)
     assert cold == p and doubled(cold) == 4 and asked == [2, 2]
+
+
+def test_a_remembered_answer_keyed_by_a_constant_is_asked_once_per_key():
+    '''`fn(value, key)`: one answer per key, each asked once.'''
+    from cottax.core.frozen import remembered
+    asked = []
+
+    class Pair(Frozen):
+        a : int
+
+    @remembered
+    def times(p, k):
+        asked.append(k)
+        return k * p.a
+
+    p = Pair(2)
+    assert times(p, 3) == times(p, 3) == 6 and times(p, 5) == 10 and asked == [3, 5]

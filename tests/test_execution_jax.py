@@ -10,7 +10,7 @@ tolerance needs. What is pinned: the graph, its nodes and a condition map are st
 by value), the inputs and the context are traced, so one trace serves every value.
 '''
 
-from cottax.core import prove, steps
+from cottax.core import steps
 
 import math
 
@@ -24,7 +24,7 @@ from cottax.core import FunctionalNode,  Solve
 from cottax.core.frozen import OrderedMap
 from cottax.core.driven import driven as with_driver
 from cottax.relational.contracts import RootFinding
-from cottax.consumers.execution import CallableGraph, run
+from cottax.consumers.execution import Runnable, run
 from cottax.consumers.execution.run import InteriorConditionMap
 import purposes
 from cottax.pytree.path import NodePath, VarPath
@@ -79,7 +79,7 @@ SQUARE = graph_of(OrderedMap({
     N('res'): call([V('w'), V('z')], [V('r')], lambda w, z: w * w - z),
     N('h')  : driven([Relation(V('r'), None, Eq)], [V('u')]),
 }))
-prove(SQUARE, CallableGraph)
+Runnable.prove(SQUARE)
 
 def exact_u(x):
     k = 1.0 + x
@@ -97,7 +97,7 @@ NESTED = graph_of(OrderedMap({
     N('Aim')      : call([V('f'), V('t')], [V('g')], lambda f, t: f - t),
     N('target')   : driven([Relation(V('g'), None, Eq)], [V('x')]),
 }), OrderedMap({N('close'): N('target')}))
-prove(NESTED, CallableGraph)
+Runnable.prove(NESTED)
 
 
 def jitted(graph, wanted):

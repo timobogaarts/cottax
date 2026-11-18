@@ -10,7 +10,7 @@ empty listed.
 
 from toy_places import Segmented
 from cottax.core import Place
-from cottax.core import prove, dependencies
+from cottax.core import dependencies
 
 from dataclasses import dataclass
 import math
@@ -20,7 +20,7 @@ import sys
 import pytest
 
 from cottax.core import (
-    ComposedOp, Condition, ConditionalNode, Cut, ExecutableGraph, FunctionalNode,  Insert, Mint, Minting, Graph, minted,
+    ComposedOp, Condition, ConditionalNode, Cut, Executable, FunctionalNode,  Insert, Mint, Minting, Graph, minted,
 )
 from cottax.consumers.architectures.cut_rules import GaussSeidel
 from cottax.core.frozen import OrderedMap, answer, answers, choice, violations
@@ -30,7 +30,7 @@ from cottax.core.driven import Start
 from cottax.core.driven import DriverContract
 from cottax.consumers.architectures import MDA
 from cottax.consumers.architectures.interface import Closing, ModelReading
-from cottax.consumers.execution import CallableGraph, Drive, GraphWithValues, run
+from cottax.consumers.execution import Runnable, Drive, GraphWithValues, run
 from cottax.consumers.execution.interface import DriverImplementation
 from cottax.consumers.declaration import declare
 from cottax.consumers.surface import core_role_places
@@ -85,7 +85,7 @@ def coupled(place, kind):
 
 def test_with_core_alone_a_graph_is_built_proved_and_drawn_grey():
     g = coupled(Plain, Raw)
-    prove(g, ExecutableGraph)
+    Executable.prove(g)
     assert xdsm_struct(g, blocks=True)['problem_types'] == {'cond': 'stated'}
     for picture in (render_xdsm_svg, render_matrix_svg, render_html, to_dot):
         assert 'cond' in picture(g)
@@ -395,7 +395,7 @@ def test_the_toy_is_placed_by_an_architecture_closing_its_own_way():
     closure, hat = Tok((purposes.Closure(), 'a')), Tok((purposes.Copy(), 'v'))
     assert dict(out.within) == {T('A'): closure, T('B'): closure}
     assert out[closure].condition == Zero((minted(GapOf(), hat),), (hat,))
-    prove(out, ExecutableGraph)
+    Executable.prove(out)
     with pytest.raises(TypeError, match='test_answers.Raw has no ModelReading answer'):
         Plan(coupled(Tok, Raw)) + MDA(GaussSeidel(), ClosedByGap())
 

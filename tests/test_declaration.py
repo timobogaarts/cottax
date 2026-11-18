@@ -6,8 +6,6 @@ kinds with `declares` and a contract cottax does not ship, joined to the relatio
 conventions reading a term their way.
 '''
 
-from cottax.core import prove
-
 import dataclasses
 import inspect
 import math
@@ -23,7 +21,7 @@ from cottax.core.driven import Assign
 from cottax.core.driven import DriverContract, PerUnknown
 from cottax.core.driven import Start
 from cottax.relational.contracts import CONTRACTS, FixedPointIteration
-from cottax.consumers.execution import CallableGraph, Drive, run
+from cottax.consumers.execution import Runnable, Drive, run
 from cottax.consumers.execution.interface import DriverImplementation
 from cottax.consumers.declaration import (
     Conventions, Shipped, declare, loose_at, tags_of, term_of,

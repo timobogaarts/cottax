@@ -11,8 +11,6 @@ The refusals themselves (an array, a bound method, a `functools.partial`) are
 `test_jax_jit.py`'s.
 '''
 
-from cottax.core import prove
-
 import equinox as eqx
 import jax.numpy as jnp
 import jax.tree_util as jtu
@@ -27,7 +25,7 @@ from cottax.assemblies.jax import flat
 
 def to_graph(*models):
     return flat.declare(*models).graph
-from cottax.consumers.execution.jax_jit import JitGraph
+from cottax.consumers.execution.jax_jit import Jittable
 from cottax.pytree.path import NodePath, VarPath
 from cottax.core.realisation import implementation_of, implemented
 from graphs import graph_of
@@ -75,7 +73,7 @@ def test_a_re_assembled_graph_traces_once():
     @eqx.filter_jit
     def run(graph, z):
         traces.append(1)
-        prove(graph, JitGraph)
+        Jittable.prove(graph)
         return run_graph(GraphWithValues(graph, OrderedMap({var('z'): z})))
 
     for i in range(3):
@@ -96,19 +94,19 @@ def test_a_callable_value_is_a_body_when_it_compares_by_value():
 
     graph = lambda: to_graph({'sized': flat.function(Sized(3), 'y')})
     assert graph() == graph()
-    prove(graph(), JitGraph)
+    Jittable.prove(graph())
 
 
 # ---------------------------------------------------------------- the ratchet
 
 def _proved(implementation):
     '''The ratchet is a jit fact, so it is asked where the jit cache key is built: a
-    node carrying anything at all is a legitimately implemented function, and `JitGraph`
+    node carrying anything at all is a legitimately implemented function, and `Jittable`
     is what refuses what jit cannot re-assemble.'''
     graph = graph_of(OrderedMap({
         node('one'): implemented(FunctionalNode((var('z'),), (var('q'),)),
                                  implementation)}))
-    prove(graph, JitGraph)
+    Jittable.prove(graph)
     return graph
 
 

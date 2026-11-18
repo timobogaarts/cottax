@@ -1,21 +1,22 @@
 '''
-`ExecutableGraph`: the proof between a graph and a run -- a graph executable at every depth.
+`Executable`: the proof between a graph and a run -- a graph executable at every depth.
 
 Names are built by hand from key entries, as everywhere below the declaration surface.
 '''
 
 from cottax.core import nesting
-from cottax.core import Rules, each_node, is_proved, prove, steps, unproved, dependencies
+from cottax.core import Rules, per_node_check, steps, dependencies
+from proofs import recalled
 
 import pytest
 from jax.tree_util import GetAttrKey
 
 from cottax.core import maths as core
 from cottax.relational import Min, Objective
-from cottax.core.maths.executable import ExecutableGraph
+from cottax.core.maths.executable import Executable
 from cottax.core.driven import Assign
 from cottax.core.driven import DriverContract
-from cottax.consumers.execution import CallableGraph, run
+from cottax.consumers.execution import Runnable, run
 from cottax.consumers.execution.interface import DriverImplementation
 from cottax.core.realisation import Implement, ImplementDrivers, implemented, is_implemented
 from cottax.consumers.visualization.sequencing import Run, Solve, entries
@@ -154,20 +155,20 @@ def test_every_interior_at_every_depth_is_proved_executable_and_holds_nothing_el
     it: an interior is a value of its own, and what holds of each node of the whole is asked
     of it -- and holds -- where it is needed.'''
     class Each(Rules):
-        rules = (each_node(lambda name, node: iter(())),)
+        rules = (per_node_check(lambda name, node: iter(())),)
 
-    class Stronger(ExecutableGraph, Each):
+    class Stronger(Executable, Each):
         pass
     each, stronger = Each, Stronger
     mda, = [n for n in conditions(mdf.definitions) if n != N('opt')]
     for graph in (sellar, two_solves, (Plan(mdf) + Nest(mda, N('opt'))).graph,
                   (Plan(mdf) + Nest(N('opt'), mda)).graph):
-        prove(graph, stronger)
+        stronger.prove(graph)
         interiors = list(every_interior(graph))
-        assert interiors and all(is_proved(i, ExecutableGraph) and not is_proved(i, each)
+        assert interiors and all(recalled(i, Executable) and not recalled(i, each)
                                  for i in interiors)
         for i in interiors:
-            prove(i, each)
+            each.prove(i)
 
 
 # ---------------------------------------------------------------- into a run
@@ -233,7 +234,7 @@ def test_combining_the_problems_is_the_merged_block(two_problems):
     over both unknowns.'''
     op = Combine(PROBLEM(N('mda')), (N('ha'), N('hb')), RelationalCondition)
     graph = driven(two_problems, op, solving(op.at))
-    prove(graph, CallableGraph)
+    Runnable.prove(graph)
 
     solve, run_ = steps(graph)
     assert isinstance(solve, core.Solve) and isinstance(run_, core.Run)
@@ -243,7 +244,7 @@ def test_combining_the_problems_is_the_merged_block(two_problems):
 
 def test_the_finer_blocking_is_two_solves(two_problems):
     graph = driven(two_problems, solving(N('ha')), solving(N('hb')))
-    prove(graph, CallableGraph)
+    Runnable.prove(graph)
     assert [type(s).__name__ for s in steps(graph)] == ['Solve', 'Solve', 'Run']
     assert steps(graph) is steps(graph)                               # derived once
     assert ran(graph)[V('f')] == pytest.approx(3.0)
@@ -256,7 +257,7 @@ def test_the_driver_rides_on_the_problem_through_a_re_blocking(two_problems):
     graph  = graph_of(OrderedMap({**dict(graph.definitions.items()),
                             N('post'): call(['f'], ['g'], lambda f: 2 * f)}), graph.within)
 
-    prove(graph, CallableGraph)
+    Runnable.prove(graph)
     assert len(steps(graph)) == 4
     assert ran(graph)[V('g')] == pytest.approx(6.0)
 
@@ -291,7 +292,7 @@ def test_a_block_of_two_problems_is_refused():
         N('opt'): RelationalCondition((), (Objective(V('obj'), Min),), (V('d'),), ()),
     }))
     with pytest.raises(ValueError, match='declares several problems'):
-        prove(g, CallableGraph)
+        Runnable.prove(g)
 
 
 @pytest.fixture
@@ -309,13 +310,13 @@ def test_two_problems_of_one_type_are_refused_too(coupled_problems):
     '''Same type is no less a decision: solving both with one driver is `Combine`, and
     used to happen silently because the unknowns simply concatenated.'''
     with pytest.raises(ValueError, match='declares several problems'):
-        prove(coupled_problems, ExecutableGraph)
+        Executable.prove(coupled_problems)
 
 
 def test_combining_them_is_how_that_is_said(coupled_problems):
     op    = Combine(PROBLEM(N('mda')), (N('ha'), N('hb')), RelationalCondition)
     graph = driven(coupled_problems, op, solving(op.at))
-    prove(graph, CallableGraph)
+    Runnable.prove(graph)
     solve, = steps(graph)
     assert names(graph[solve.problem].owns_inside) == ['.ua', '.ub']
     assert solve.problem == op.at and problem_type_of(graph[solve.problem]) == 'root-find'
@@ -345,21 +346,21 @@ def test_a_driven_block_still_says_what_makes_its_answer_right(two_problems):
     -- so the shape is read off the problem's own relations, which a driver being a
     field beside them leaves exactly where they were.'''
     graph = driven(two_problems, solving(N('ha')))
-    prove(graph, ExecutableGraph)
+    Executable.prove(graph)
     assert problem_type_of(graph[N('ha')]) == 'root-find'
     part = graph.subgraph([N('fa'), N('ha')])
-    prove(part, ExecutableGraph)
+    Executable.prove(part)
     assert [e.problem for e in entries(part)] == [N('ha')]
     assert is_root_find((graph[N('ha')]).condition)
 
 
 def test_a_blocking_is_executable_by_construction(uncut):
     '''`d1` and `d2` are a cycle with no problem in it. It partitions and it orders, but
-    there is no answer to what makes its answer right -- so no `ExecutableGraph` exists for it,
+    there is no answer to what makes its answer right -- so no `Executable` exists for it,
     and the refusal is at construction rather than when a run is built. A drawing
     still rings it, walking `entries(graph)`.'''
     with pytest.raises(ValueError, match='declares no problem'):
-        prove(uncut, ExecutableGraph)
+        Executable.prove(uncut)
 
 
 def test_a_block_still_cyclic_without_its_problem_is_not_drivable():
@@ -372,7 +373,7 @@ def test_a_block_still_cyclic_without_its_problem_is_not_drivable():
         N('ha'): problem(['ra'], ['ua']),
     }))
     with pytest.raises(ValueError, match=r'inside .*\.ha.*still cyclic with no problem'):
-        prove(g, ExecutableGraph)
+        Executable.prove(g)
 
 
 # ---------------------------------------------------------------- nesting: derived
@@ -423,9 +424,9 @@ def test_either_problem_may_be_the_outer_one(mdf):
     mda, = [n for n in conditions(mdf.definitions) if n != N('opt')]
 
     outer_opt = (Plan(mdf) + Nest(mda, N('opt'))).graph
-    prove(outer_opt, ExecutableGraph)
+    Executable.prove(outer_opt)
     outer_mda = (Plan(mdf) + Nest(N('opt'), mda)).graph
-    prove(outer_mda, ExecutableGraph)
+    Executable.prove(outer_mda)
 
     assert blocks(entries(outer_opt)[0].interior) == [['.D1', '.D2', '^solve.y2'], ['.obj'], ['.con']]
     assert blocks(entries(outer_mda)[0].interior) == [['.opt', '.D1', '.D2', '.obj', '.con']]
@@ -440,7 +441,7 @@ def test_a_problem_in_no_cycle_of_its_block_cannot_be_answered_there():
         N('k')  : call(['u'], ['w']),
     }))
     with pytest.raises(ValueError, match='in no cycle'):
-        prove(g, ExecutableGraph)
+        Executable.prove(g)
 
 
 # ---------------------------------------------------------------- nesting: `nest`
@@ -461,7 +462,7 @@ def test_a_level_exists_only_where_a_statement_encloses_another(mdf):
     nodes needs no entry, because `Drive.body` already *is* the block minus its problem.
     '''
     deep = (Plan(mdf) + Nest(MDA, N('opt'))).graph
-    prove(deep, ExecutableGraph)
+    Executable.prove(deep)
     # The interior's own blocking states nothing further: `subgraph` dropped the pair
     # when `opt` left, so `.mda`'s block has no nested problem under it.
     assert all(isinstance(e, Run) for e in entries(entries(entries(deep)[0].interior)[0].interior))   # the MDA's interior runs
@@ -477,12 +478,12 @@ def test_a_level_answers_one_problem(mdf):
 
 def test_nest_refuses_a_name_that_is_not_here(mdf):
     with pytest.raises(KeyError, match='not a node'):
-        prove((Plan(mdf) + Nest(MDA, N('nope'))).graph, ExecutableGraph)
+        Executable.prove((Plan(mdf) + Nest(MDA, N('nope'))).graph)
 
 
 def test_problems_names_what_each_level_answers(mdf):
     nested = (Plan(mdf) + Nest(MDA, N('opt'))).graph
-    prove(nested, ExecutableGraph)
+    Executable.prove(nested)
     assert [e.problem.spelling for e in entries(nested)] == ['.opt']
     assert problem_type_of(nested[N('opt')]) == 'optimise'
 
@@ -504,11 +505,11 @@ def test_answerability_is_asked_at_every_depth():
     }))
     nested = (Plan(g) + Nest(N('h'), N('opt'))).graph
     with pytest.raises(ValueError, match=r'inside .*\.h.*still cyclic with no problem'):
-        prove(nested, ExecutableGraph)                                     # the interior is not
+        Executable.prove(nested)                                     # the interior is not
     # And as data: `violations` reports it rather than raising -- the rules walk the
-    # entries and never build a `ExecutableGraph`.
+    # entries and never build a `Executable`.
     from cottax.core import violations
-    found = list(unproved(nested, ExecutableGraph))
+    found = list(Executable.check(nested))
     assert [type(v).__name__ for v in found] == ['StillCyclic']
 
 
@@ -523,7 +524,7 @@ def test_a_condition_produced_off_the_cycle_is_a_constant():
         N('c'): call([], ['x']),
     }))
     with pytest.raises(ValueError, match="a constant is not a condition"):
-        prove(Assign(N('p'), SelfStarting(), (), ())(g), ExecutableGraph)
+        Executable.prove(Assign(N('p'), SelfStarting(), (), ())(g))
 
 
 def test_a_parameter_is_a_read_held_fixed_off_the_cycle():
@@ -536,9 +537,9 @@ def test_a_parameter_is_a_read_held_fixed_off_the_cycle():
                                         (V('x'),)),
             N('c'): call(limit_from, ['x']),
         }))
-    prove(Assign(N('p'), SelfStarting(), (), ())(with_limit([])), ExecutableGraph)
+    Executable.prove(Assign(N('p'), SelfStarting(), (), ())(with_limit([])))
     with pytest.raises(ValueError, match='produced inside the block it drives'):
-        prove(Assign(N('p'), SelfStarting(), (), ())(with_limit(['u'])), ExecutableGraph)
+        Executable.prove(Assign(N('p'), SelfStarting(), (), ())(with_limit(['u'])))
 
 
 # ---------------------------------------------------------------- the proof a run takes
@@ -547,13 +548,13 @@ def test_a_callable_graph_is_an_executable_one_with_more_proved(two_problems, co
     '''A proof strengthens by implying: the executable checks run first, and a graph proved
     callable is proved executable. The graph is one value at every level.'''
     g = driven(two_problems, solving(N('ha')), solving(N('hb')))
-    prove(g, CallableGraph)
-    assert is_proved(g, ExecutableGraph)
+    Runnable.prove(g)
+    assert recalled(g, Executable)
     assert hash(g) == hash(driven(two_problems, solving(N('ha')), solving(N('hb'))))
     with pytest.raises(ValueError, match='no driver'):              # undriven
-        prove(two_problems, CallableGraph)
+        Runnable.prove(two_problems)
     with pytest.raises(ValueError, match='several problems'):       # executable's, first
-        prove(coupled_problems, CallableGraph)
+        Runnable.prove(coupled_problems)
 
 
 def test_a_declared_function_is_executable_but_not_callable(two_problems):
@@ -561,9 +562,9 @@ def test_a_declared_function_is_executable_but_not_callable(two_problems):
     refused, and the refusal names `Implement`.'''
     g = graph_of(OrderedMap({**dict(two_problems.definitions.items()),
                           N('post'): FunctionalNode((V('f'),), (V('g'),))}))
-    prove(g, ExecutableGraph)
+    Executable.prove(g)
     with pytest.raises(ValueError, match=r'\.post.*`Implement` it'):
-        prove(driven(g, solving(N('ha')), solving(N('hb'))), CallableGraph)
+        Runnable.prove(driven(g, solving(N('ha')), solving(N('hb'))))
 
 
 def test_implement_fills_the_slot_the_proof_refuses(two_problems):

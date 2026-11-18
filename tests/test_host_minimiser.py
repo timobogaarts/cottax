@@ -4,8 +4,6 @@ Jacobian is computed being each call's, what comes back; and `ScipyMinimize`, th
 `minimize`, which refuses what a method would drop. Float64, as `test_solvers.py`.
 '''
 
-from cottax.core import prove
-
 import logging
 import warnings
 
@@ -21,7 +19,7 @@ from scipy.optimize import OptimizeWarning
 import cottax.assemblies.jax as cx
 import purposes
 from cottax.assemblies.jax import flat
-from cottax.consumers.execution import CallableGraph, run
+from cottax.consumers.execution import Runnable, run
 from cottax.consumers.execution.interface_types import Posed
 from cottax.core import FunctionalNode
 from cottax.core.driven import driven, Start, Steps, role_slots
@@ -77,7 +75,7 @@ def optimise(objective, design, relations, implementation, bounded=False, steps=
 
 def graph(nodes):
     graph = graph_of(OrderedMap(nodes))
-    prove(graph, CallableGraph)
+    Runnable.prove(graph)
     return graph
 
 
@@ -623,7 +621,7 @@ def idf_answer(driver, M, scaled):
     start = {'z': jnp.asarray(0.0), flat.copy('y2'): jnp.asarray(M)}
     scaling = idf_scaling(ran, M) if scaled else cx.Scaling()
     values = flat.valued(ran, {cx.Start: start, cx.Scales: {'z': scaling}}).values
-    cx.prove(ran.graph, cx.JitGraph)
+    cx.Jittable.prove(ran.graph)
     out = run(GraphWithValues(ran.graph, values))
     return float(out[flat.place('z')]), float(out[flat.place('y2')]) / M
 

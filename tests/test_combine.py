@@ -7,7 +7,6 @@ here, and the fold reads nothing else of it.
 
 from toy_places import Segmented
 from cottax.core import Place
-from cottax.core import prove
 
 import dataclasses
 from dataclasses import dataclass
@@ -20,7 +19,7 @@ from cottax.consumers.architectures.refusals import (
     CarriesAttributes, FoldsDriven, NodeTwice, NotAddable, NotOfKind, NothingToCombine,
 )
 from cottax.core import (
-    Attachment, Condition, ConditionalNode, Delete, ExecutableGraph,
+    Attachment, Condition, ConditionalNode, Delete, Executable,
     Graph, NodeDefinition, refusals, relabelled, violations,
 )
 from cottax.core.frozen import OrderedMap, answers
@@ -144,7 +143,7 @@ def test_a_fold_is_asked_of_its_result_and_never_of_a_step_toward_it():
     alone = Delete((R,)).apply(g)                               # the step alone is carried ...
     assert dict(alone.within) == {Q: P}
     with pytest.raises(ValueError, match='not on one cycle'):
-        prove(alone, ExecutableGraph)                                  # ... and refused as executable
+        Executable.prove(alone)                                  # ... and refused as executable
 
 
 def test_a_fold_joins_conditions_and_neither_what_they_carry_nor_what_drives_them():

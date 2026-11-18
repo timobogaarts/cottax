@@ -10,7 +10,7 @@ from jax.tree_util import GetAttrKey
 
 from cottax.core import FunctionalNode, owns_inside, nesting
 from cottax.relational import Min, Objective
-from cottax.core.maths.executable import ExecutableGraph
+from cottax.core.maths.executable import Executable
 from cottax.core.plan import Cut, Nest, Plan
 from cottax.core.frozen import violations
 from cottax.core.realisation import implemented

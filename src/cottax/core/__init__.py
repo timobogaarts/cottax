@@ -24,9 +24,9 @@ from .maths import (
     NodeDefinition, Renaming, relabelled, Attribute,
     AbstractConditionalNode, FunctionalNode, conditions, owns_inside,
     Graph,
-    Rules, each_node, is_proved, proved, proves, prove, unproved,
+    Rules, per_node_check,
     Dependencies, WellFormed, dependencies, Nesting, nesting,
-    ExecutableGraph, body_of, outline,
+    Executable, body_of, outline,
     Run, Solve, Step, steps,
 )
 from .mints import Closure, Copy, Mint, Minting, mint_of, minted, unminted

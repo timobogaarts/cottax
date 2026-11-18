@@ -7,7 +7,7 @@ from typing import Any
 
 from ...core import (
     FunctionalNode, Label, Graph, NodeDefinition, Place, Violation,
-    answer_for_labels, answer_for_places, first, WellFormed, prove,
+    answer_for_labels, answer_for_places, first, WellFormed,
 )
 from ...core.frozen import Frozen, OrderedMap, answer, answered, answers, checked, dotted, violations
 from ...core import Condition, ConditionalNode, is_driven, kind_of
@@ -68,7 +68,7 @@ def read_json(data: dict, resolve: Callable[[str], object] = loaded) -> Graph:
         definitions.append((r.name, r.node(entry['definition'])))
     within = ((names.label(i), names.label(o)) for i, o in data['within'])
     graph  = Graph(OrderedMap(definitions), OrderedMap(within))
-    prove(graph, WellFormed)                    # the file is refused at the door, as a graph
+    WellFormed.prove(graph)                    # the file is refused at the door, as a graph
     return graph
 
 
@@ -219,11 +219,11 @@ class NodeReader[N: Label, V: Place](Frozen):
     def node(self, data: dict) -> NodeDefinition[V]:
         if data['kind'] == IMPLEMENTED:
             node = implemented(self.node(data['node']), self.implementation(data['implementation']))
-            first(check_implementation_fits(self.name, node))   # a file is refused as it is read
+            first(check_implementation_fits.node(self.name, node))   # a file is refused as it is read
             return node
         if data['kind'] == DRIVEN:
             node = self.driven(data)
-            first(check_driver_fits(self.name, node))
+            first(check_driver_fits.node(self.name, node))
             return node
         if (spelling := by_word(Spelling, 'kind').get(data['kind'])) is None:
             raise UnknownKind(self.name, data['kind']).raised

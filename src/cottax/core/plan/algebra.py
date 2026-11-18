@@ -12,7 +12,7 @@ from typing import Callable
 from ..frozen import Frozen, PerLevel, Violation, first
 from ..maths.wellformed import WellFormed
 from ..maths.graph import Graph
-from ..maths.rules import Rules, prove
+from ..maths.rules import Rules
 from ..maths.places import Label, Place
 
 
@@ -41,11 +41,11 @@ class GraphOp[N: Label, V: Place](Frozen):
         graph is next read; remembered, so a graph an op left costs the next op nothing.
         `None` keeps nothing: an op inside a composed one, which proves it once, at the end.'''
         if keeps is not None:
-            prove(graph, keeps)
+            keeps.prove(graph)
         first(refusals(self, graph))
         result = self._apply(graph)
         if keeps is not None:
-            prove(result, keeps)
+            keeps.prove(result)
         return result
 
     @abstractmethod

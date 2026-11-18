@@ -1,5 +1,5 @@
 '''
-What can run (`CallableGraph`), and running it (`run`).
+What can run (`Runnable`), and running it (`run`).
 '''
 
 from collections.abc import Callable, Iterable, Iterator, Mapping
@@ -7,9 +7,9 @@ from typing import Any
 
 from ...core import (
     ConditionalNode, FunctionalNode,  Label, Graph, NodeDefinition,
-    Place, each_node, Rules, Run, Violation, is_driven, proved, steps, dependencies)
+    Place, per_node_check, Rules, Run, Violation, is_driven, steps, dependencies)
 from ...core.frozen import OrderedMap, checked
-from ...core.realisation import RealisedGraph, implementation_of, is_implemented
+from ...core.realisation import Realised, implementation_of, is_implemented
 from .interface import DriverImplementation
 from .interface_types import ConditionMap, ConditionValues, Context, Posed, Unknowns
 from .refusals import (
@@ -25,6 +25,7 @@ from .valued import GraphWithValues
 # Realised Graph that can be called (all implementations are callable for functional nodes
 # and an implemented DriverContract for conditional nodes)
 
+@per_node_check
 def check_function_callable[N: Label, V: Place](name: N, node: NodeDefinition[V]
                                                 ) -> Iterator[Violation]:
     '''
@@ -35,6 +36,7 @@ def check_function_callable[N: Label, V: Place](name: N, node: NodeDefinition[V]
         yield NotCallable(name, implementation_of(node))
 
 
+@per_node_check
 def check_implements_its_driver[N: Label, V: Place](name: N, node: NodeDefinition[V]
                                                     ) -> Iterator[Violation]:
     '''
@@ -62,20 +64,20 @@ def _names(roles: tuple[type, ...]) -> tuple[str, ...]:
     return tuple(role.__name__ for role in roles)
 
 
-class CallableNodes(Rules):
+class RunnableNodes(Rules):
     '''Every function's implementation callable, every driver's implementing its contract.'''
-    rules = (each_node(check_function_callable), each_node(check_implements_its_driver))
+    rules = (check_function_callable, check_implements_its_driver)
 
 
-class CallableGraph(RealisedGraph, CallableNodes):
+class Runnable(Realised, RunnableNodes):
     '''A realised graph whose every implementation is callable / driver implemented.'''
 
 
 
 # ============================================================================ running it
-# Running a CallableGraph with a value at each of its inputs.
+# Running a Runnable with a value at each of its inputs.
 
-@checked(proved(CallableGraph, at='graph'))
+@checked(Runnable.check)
 def run[N: Label, V: Place](valued: GraphWithValues[Graph[N, V], V]
                             ) -> OrderedMap[V, Any]:
     '''Every place with a value: the inputs, and everything the graph computes.'''

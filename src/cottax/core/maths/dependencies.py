@@ -14,7 +14,6 @@ from ..frozen import Frozen, remembered
 from .definition import NodeDefinition
 from .graph import Graph
 from .places import Label, Place
-from .rules import proved
 from .wellformed import WellFormed, owners_of
 
 
@@ -28,7 +27,7 @@ class Dependencies[N: Label, V: Place](Frozen):
 
     graph : Graph[N, V]
 
-    checks = (proved(WellFormed, at='graph'),)
+    checks = (WellFormed.check,)
 
     @cached_property
     def owners(self) -> dict[V, N]:

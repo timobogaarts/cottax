@@ -7,8 +7,6 @@ The models are `test_execution_jax`'s. A derivative is taken w.r.t. the whole
 `OrderedMap`), and through a scalar wrapper otherwise.
 '''
 
-from cottax.core import prove
-
 import math
 
 import equinox as eqx
@@ -21,7 +19,7 @@ from cottax.core import FunctionalNode
 from cottax.core.frozen import OrderedMap
 from cottax.core.driven import driven as with_driver
 from cottax.relational.contracts import RootFinding
-from cottax.consumers.execution import CallableGraph, run
+from cottax.consumers.execution import Runnable, run
 import purposes
 from cottax.pytree.path import NodePath, VarPath
 from cottax.core.realisation import implemented
@@ -70,13 +68,13 @@ SQUARE = graph_of(OrderedMap({
     N('res'): call([V('w'), V('z')], [V('r')], lambda w, z: w * w - z),
     N('h')  : driven([Relation(V('r'), None, Eq)], [V('u')]),
 }))
-prove(SQUARE, CallableGraph)
+Runnable.prove(SQUARE)
 
 COSINE = graph_of(OrderedMap({
     N('g')  : call([V('u'), V('a')], [V('gu')], lambda u, a: a * jnp.cos(u)),
     N('fix'): driven([Relation(V('u'), V('gu'), Eq)], [V('u')]),
 }))
-prove(COSINE, CallableGraph)
+Runnable.prove(COSINE)
 
 NESTED = graph_of(OrderedMap({
     N('Mesh')     : call([V('x')], [V('k')], lambda x: 1.0 + x),
@@ -87,7 +85,7 @@ NESTED = graph_of(OrderedMap({
     N('Aim')      : call([V('f'), V('t')], [V('g')], lambda f, t: f - t),
     N('target')   : driven([Relation(V('g'), None, Eq)], [V('x')]),
 }), OrderedMap({N('close'): N('target')}))
-prove(NESTED, CallableGraph)
+Runnable.prove(NESTED)
 
 
 def of(graph, wanted):

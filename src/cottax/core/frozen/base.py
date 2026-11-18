@@ -9,7 +9,7 @@ from abc import ABC
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, fields, replace
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Hashable, Iterator
 import functools
 from functools import cached_property
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Self, get_origin
@@ -220,23 +220,22 @@ def _cached_hash(self) -> int:
 
 class remembered[T]:
     '''
-    Cached property for functions not on the class.
-
-    The function must be of the value alone: nothing else it reads may change (i.e. don't read global state in such a function)
+    Cached property for functions not on the class combined with an additional Hashable key (to support _proven(graph, SomeRule)).
+    Answer should only depend on those (pure function!).
 
     Tested to a few uses in cottax (limit the cache size on the object)
     '''
 
-    def __init__(self, fn: Callable[[Any], T]) -> None:
+    def __init__(self, fn: Callable[..., T]) -> None:
         self.fn = fn
         functools.update_wrapper(self, fn)
 
-    def __call__(self, value: Any) -> T:
+    def __call__(self, value: Any, *key: Hashable) -> T:
         memo = value.__dict__.setdefault('_remembered', {})
         try:
-            return memo[self]
+            return memo[(self, *key)]
         except KeyError:
-            memo[self] = answer = self.fn(value)
+            memo[(self, *key)] = answer = self.fn(value, *key)
             return answer
 
 

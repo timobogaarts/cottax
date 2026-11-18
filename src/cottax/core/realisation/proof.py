@@ -1,16 +1,17 @@
 '''
 What a graph answers to before anything runs it: every node carrying what runs it, over
-`driven.DrivenGraph`. It does not ask whether a backend *can* run what it finds -- that is
+`driven.Driven`. It does not ask whether a backend *can* run what it finds -- that is
 the backend's proof, a level under this.
 '''
 
 from collections.abc import Iterator
 
-from ...core import Label, NodeDefinition, Place, Rules, Violation, each_node
-from ..driven import DrivenGraph
+from ...core import Label, NodeDefinition, Place, Rules, Violation, per_node_check
+from ..driven import Driven
 from .implemented import check_implementation_fits, is_implemented
 
 
+@per_node_check
 def check_implemented[N: Label, V: Place](name: N, node: NodeDefinition[V]) -> Iterator[Violation]:
     '''Every node carries what runs it -- a function its body, a problem its driver's
     implementation. An executable graph holds no bare condition, so that is every node.'''
@@ -21,10 +22,10 @@ def check_implemented[N: Label, V: Place](name: N, node: NodeDefinition[V]) -> I
 class RealisedNodes(Rules):
     '''Every node carries what runs it, where it fits. The realised layer's two node rules;
     `Implement` asks the second before the graph is touched.'''
-    rules = (each_node(check_implemented), each_node(check_implementation_fits))
+    rules = (check_implemented, check_implementation_fits)
 
 
-class RealisedGraph(DrivenGraph, RealisedNodes):
+class Realised(Driven, RealisedNodes):
     '''A driven graph with what runs every node: what a backend's proof strengthens.'''
 
 

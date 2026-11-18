@@ -10,7 +10,7 @@ from collections.abc import Iterator, Sequence
 
 from ...core import (
     Attribute, ComposedOp, FunctionalNode, GraphOp, Label, Graph, NodeDefinition, Place,
-    RemoveAttribute, SetAttribute, Violation,
+    RemoveAttribute, SetAttribute, Violation, per_node_check,
 )
 from ...core.frozen import OrderedMap, name_of
 from ...core import is_driven
@@ -25,6 +25,7 @@ class Implementation:
     '''
 
 
+@per_node_check
 def check_implementation_fits[N: Label, V: Place](name: N, node: NodeDefinition[V]
                                                  ) -> Iterator[Violation]:
     '''An implementation is on a function, or on a condition node with a driver: something
@@ -37,7 +38,7 @@ def check_implementable(op: 'Implement', graph: Graph) -> Iterator[Violation]:
     '''Each node named can carry an implementation: asked of the node it would be, before
     the graph is touched.'''
     for name, value in op.values.items():
-        yield from check_implementation_fits(name, implemented(graph[name], value))
+        yield from check_implementation_fits.node(name, implemented(graph[name], value))
 
 
 def is_implemented(node: NodeDefinition) -> bool:

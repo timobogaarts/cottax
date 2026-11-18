@@ -4,7 +4,7 @@ stated over the models that compute its conditions; and `Drive` over a problem o
 language.
 '''
 
-from cottax.core import prove, dependencies
+from cottax.core import dependencies
 
 import math
 
@@ -16,7 +16,7 @@ from cottax.core.frozen import OrderedMap
 from cottax.core.plan import Plan
 from cottax.core.driven import DriverContract
 from cottax.relational.contracts import CONTRACTS, RootFinding
-from cottax.consumers.execution import CallableGraph, run
+from cottax.consumers.execution import Runnable, run
 from cottax.consumers.execution.interface import DriverImplementation
 from cottax.assemblies.jax import Drive, N, flat
 from cottax.relational import Le, is_root_find

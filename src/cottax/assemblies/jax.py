@@ -12,7 +12,7 @@ from ..core import (
 from ..consumers.architectures.cut_rules import (
     ByName, GaussSeidel, GaussSeidelMinimal, GaussSeidelOrdered, Jacobi, NoCuts,
 )
-from ..core import prove, steps, unproved
+from ..core import steps
 from ..core.frozen import OrderedMap, choice
 from ..core.driven import Start, driven
 from ..consumers.architectures import (
@@ -20,8 +20,8 @@ from ..consumers.architectures import (
     Architecting, CloseFunctionalCycles, Combine, Coupled, Disciplines, IndividualFeasible, Monolithic,
     MultidisciplinaryFeasible, Resolution, Simultaneous, Solves,
 )
-from ..consumers.execution import CallableGraph, Drive, Driving, Inputs, Results, Running
-from ..consumers.execution.jax_jit import JitGraph, Traced
+from ..consumers.execution import Runnable, Drive, Driving, Inputs, Results, Running
+from ..consumers.execution.jax_jit import Jittable, Traced
 from ..consumers.architectures.interface import Closing
 from ..pytree.path import DictKey, GetAttrKey, SequenceKey
 from ..pytree.consumers.execution import completed
@@ -201,8 +201,8 @@ __all__ = [
     'OdeDeclaring', 'Rate', 'Dt', 'OdeCondition', 'Integration', 'Integrator',
     'Times', 'Trajectory',
     'Newton', 'Picard', 'BFGS', 'ScipyMinimize', 'HostMinimiser', 'HostProblem',
-    'canonical', 'box', 'Box', 'NotSquare', 'JitGraph', 'prove', 'unproved', 'steps',
-    'Running', 'Results', 'Inputs', 'Traced', 'Start', 'driven', 'CallableGraph', 'completed',
+    'canonical', 'box', 'Box', 'NotSquare', 'Jittable', 'steps',
+    'Running', 'Results', 'Inputs', 'Traced', 'Start', 'driven', 'Runnable', 'completed',
     'PlainFormat', 'LatexFormatter', 'render_xdsm_svg', 'render_matrix_svg', 'by_namespace',
     'render_html', 'draw', 'render', 'to_dot', 'Style', 'STYLES', 'TERRACOTTA', 'PYXDSM', 'DARK',
 ]

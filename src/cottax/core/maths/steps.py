@@ -1,12 +1,11 @@
 '''An executable graph read as steps: `Run` a function node, `Solve` a cycle.'''
 
 from ..frozen import Frozen, checked, remembered
-from .executable import ExecutableGraph
+from .executable import Executable
 from .dependencies import dependencies
 from .graph import Graph
 from .nesting import nesting
 from .places import Label, Place
-from .rules import prove, proved
 
 
 class Run[N: Label](Frozen):
@@ -29,7 +28,7 @@ type Step[N: Label, V: Place] = Run[N] | Solve[N, V]
 
 
 @remembered
-@checked(proved(ExecutableGraph))
+@checked(Executable.check)
 def steps[N: Label, V: Place](graph: Graph[N, V]) -> tuple[Step[N, V], ...]:
     '''
     One per component, in dependency order, of a graph proved executable. One node is
@@ -45,6 +44,6 @@ def steps[N: Label, V: Place](graph: Graph[N, V]) -> tuple[Step[N, V], ...]:
         else:
             problem, = (p for p in component if p in outer)
             interior = nesting(graph).interior(problem)
-            prove(interior, ExecutableGraph)
+            Executable.prove(interior)
             found.append(Solve(problem, interior))
     return tuple(found)

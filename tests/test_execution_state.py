@@ -6,7 +6,6 @@ its locator reading a string as a `Word`.
 '''
 
 from toy_places import Segmented
-from cottax.core import prove
 
 from dataclasses import dataclass
 
@@ -14,7 +13,7 @@ import pytest
 
 from cottax.core.frozen import OrderedMap, answers, violations
 from cottax.consumers.surface.interface import Locator
-from cottax.consumers.execution import CallableGraph, Inputs, Running, read_from, slots
+from cottax.consumers.execution import Runnable, Inputs, Running, read_from, slots
 from cottax.consumers.execution.interface import DataStructure
 from cottax.consumers.execution.refusals import ValuedTwice
 from cottax.core import FunctionalNode, Graph, answer_for_places
@@ -117,7 +116,7 @@ def test_a_start_shared_by_two_unknowns_is_valued_twice():
     graph = Graph(
         definitions() | {W('DiscC'): call([v, X], [r_v], lambda v, x: v - x),
                          W('Other'): other}, OrderedMap())
-    prove(graph, CallableGraph)
+    Runnable.prove(graph)
     with pytest.raises(ValueError) as refused:
         s.valued(graph, read_from=held(OrderedMap({X: 1.0, U: 2.0, v: 3.0})))
     assert refused.value.violation == ValuedTwice(START, ('read_from[Start] at ' + repr(U),

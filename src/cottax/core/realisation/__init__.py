@@ -11,7 +11,7 @@ implemented                      (Implementation, the attribute a node carries; 
  ||                               implementation_of / is_implemented; Implement /
  ||                               Unimplement, ImplementDrivers; the rule an implementation
  \/                               fits its node by, check_implementation_fits)
-proof                            (RealisedGraph over driven.DrivenGraph: every node implemented,
+proof                            (Realised over driven.Driven: every node implemented,
                                   each where it fits)
 
 '''
@@ -20,10 +20,10 @@ from .implemented import (
     Implement, Implementation, Unimplement, ImplementDrivers,
     check_implementation_fits, implementation_of, implemented, is_implemented,
 )
-from .proof import RealisedGraph, RealisedNodes
+from .proof import Realised, RealisedNodes
 
 __all__ = [
     'Implementation', 'implemented', 'implementation_of',
     'is_implemented', 'check_implementation_fits', 'Implement', 'Unimplement', 'ImplementDrivers',
-    'RealisedGraph', 'RealisedNodes',
+    'Realised', 'RealisedNodes',
 ]

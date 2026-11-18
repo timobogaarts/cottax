@@ -10,14 +10,14 @@ interface      refusals          (interface: what a feature registers, of a plac
  ||             ||                DataStructure for its class; what a study chooses, what
  \/             ||                runs a driver (DriverImplementation);
 run <-----------'                 refusals: every refusal kind)
- ||                              (run: CallableGraph over realisation.RealisedGraph, every
+ ||                              (run: Runnable over realisation.Realised, every
  ||                               implementation callable, a driver's one of it; run,
- ||                               proving the graph a CallableGraph; walk, its
+ ||                               proving the graph a Runnable; walk, its
  ||                               loop over the steps with an Env and a Solve handed to an
  ||                               AtSolve; InteriorConditionMap,
  ||                               a problem posed by its interior)
  \/
-jax_jit                          (JitGraph, every node a jit cache key; Traced, the run
+jax_jit                          (Jittable, every node a jit cache key; Traced, the run
                                   traced once: the graph's jaxpr, every place's shape)
 
 interface, refusals
@@ -43,10 +43,10 @@ Imported by name, not here: `jax_jit`; `run`'s `blamed`.
 '''
 
 from .valued import GraphWithValues
-from .run import CallableGraph, run
+from .run import Runnable, run
 from .structures import Assessed, Inputs, read_from, slots, unasked, unvalued, valued_once, write_back, write_role
 from .drive import Drive
 from .part import Driving, Results, Running
 
-__all__ = ['GraphWithValues', 'CallableGraph', 'run', 'Inputs', 'read_from', 'slots', 'unasked', 'unvalued', 'valued_once', 'write_back', 'write_role', 'Drive', 'Driving',
+__all__ = ['GraphWithValues', 'Runnable', 'run', 'Inputs', 'read_from', 'slots', 'unasked', 'unvalued', 'valued_once', 'write_back', 'write_role', 'Drive', 'Driving',
            'Running', 'Results', 'Assessed']

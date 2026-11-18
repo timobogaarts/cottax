@@ -15,16 +15,16 @@ roles                            (Start / Steps, the places the shipped contract
  \/        \/
 ops       proof                  (ops: Assign / Undrive; AssignByRule, an Assign at the places
                                   a rule gives; `driven`, a node built driven; proof:
-                                  DrivenGraph, every problem driven -- what an export reads)
+                                  Driven, every problem driven -- what an export reads)
 
 '''
 
 from .driver import Driver, DriverContract, PerProblem, PerUnknown, Role, entry_for
 from .roles import Start, Steps, role_slots
 from .ops import Assign, AssignByRule, Undrive, driven, driving_violations
-from .proof import DrivenGraph, DrivenNodes, check_driver_fits
+from .proof import Driven, DrivenNodes, check_driver_fits
 
 __all__ = [
     'Driver', 'DriverContract', 'PerProblem', 'PerUnknown', 'Role', 'entry_for', 'role_slots', 'driven', 'driving_violations', 'Assign', 'AssignByRule', 'Undrive',
-    'DrivenGraph', 'DrivenNodes', 'check_driver_fits', 'Start', 'Steps',
+    'Driven', 'DrivenNodes', 'check_driver_fits', 'Start', 'Steps',
 ]

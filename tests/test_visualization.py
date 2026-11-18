@@ -7,7 +7,7 @@ installed everywhere. What is tested is the seam these two share with the XDSMs:
 not that name.
 '''
 
-from cottax.core import prove, dependencies
+from cottax.core import dependencies
 
 import re
 import sys
@@ -18,7 +18,7 @@ import pytest
 from jax.tree_util import DictKey, GetAttrKey
 
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core import ExecutableGraph, FunctionalNode, ExecutableGraph
+from cottax.core import Executable, FunctionalNode, Executable
 from cottax.core.plan import Cut, Plan
 from cottax.core.realisation import implemented
 from cottax.core.frozen import OrderedMap
@@ -311,7 +311,7 @@ def test_every_picture_draws_a_graph_a_plan_and_a_proved_graph_alike(sellar):
     closed = FixedPointCut((Cut(V('y2'), (N('d1'),), purposes.Copy()),), purposes.Solve()(N('y2')))
     graph = closed(sellar)
     proved = closed(sellar)
-    prove(proved, ExecutableGraph)
+    Executable.prove(proved)
     handed = (graph, Plan(sellar) + closed, proved)
     for each in handed:
         assert to_dot(each, blocks=True) == to_dot(graph, blocks=True)

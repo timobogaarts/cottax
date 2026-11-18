@@ -10,7 +10,7 @@ place is `test_core`'s written again rather than imported, since that module tak
 
 import dataclasses
 from toy_places import Segmented
-from cottax.core import is_proved, prove, unproved
+from proofs import recalled
 
 import copy
 import pickle
@@ -29,14 +29,14 @@ from cottax.core.refusal_kinds import OwnsInsideDriven
 from cottax.core.realisation.implemented import ImplementationWithoutDriver
 from cottax.relational.rewrites import Undetermine
 from cottax.core.frozen import OrderedMap
-from cottax.core.driven import Assign, driven as with_driver, driving_violations, DrivenGraph, Undrive
+from cottax.core.driven import Assign, driven as with_driver, driving_violations, Driven, Undrive
 from cottax.core import is_driven
 from cottax.core.driven import DriverContract, PerProblem, PerUnknown, Role
 from cottax.core.driven.driver import NotAccepted, RoleMisplaced, RoleTwice, RoleUnsized, SlotsMiscounted
 from cottax.core.driven.ops import DrivenTwice, NotAConditionalNode, NotDriven
 from cottax.core.driven.proof import Undriven
 from cottax.core.realisation import (
-    Implement, check_implementation_fits, implemented, RealisedGraph, Unimplement,
+    Implement, check_implementation_fits, implemented, Realised, Unimplement,
     implementation_of, is_implemented,
 )
 from cottax.core.realisation.proof import NoImplementation
@@ -389,7 +389,7 @@ def test_the_outer_layer_comes_off_first():
     done   = Implement(OrderedMap({W('solve'): print})).apply(driven)
     again  = Implement(OrderedMap({W('solve'): print}))
     undriven = Undrive(W('solve')).apply(done)
-    assert ImplementationWithoutDriver in kinds(unproved(undriven, RealisedGraph))
+    assert ImplementationWithoutDriver in kinds(Realised.check(undriven))
     assert kinds(refusals(Assign(W('solve'), Bare(), *NONE), done)) == [DrivenTwice]
     assert kinds(refusals(again, done))                              == [AttributeAlreadySet]
     assert kinds(refusals(Undetermine(W('solve')), done)) == [OwnsInsideDriven]
@@ -400,7 +400,7 @@ def test_an_implementation_goes_on_a_function_or_a_driven_node():
     is on. The realised layer's rule, asked by `Implement` before the graph is touched and by
     a realised graph; built by hand, the node exists until then.'''
     bare = implemented(Holds((r,), (u,)), print)
-    assert kinds(check_implementation_fits(W('solve'), bare)) == [ImplementationWithoutDriver]
+    assert kinds(check_implementation_fits.node(W('solve'), bare)) == [ImplementationWithoutDriver]
     assert kinds(refusals(Implement(OrderedMap({W('solve'): print})), graph())) == [ImplementationWithoutDriver]
     with pytest.raises(TypeError, match='Implementation does not fit a ConditionalNode'):
         Implement(OrderedMap({W('solve'): print})).apply(graph())
@@ -445,10 +445,10 @@ def test_driven_then_realised():
     g0     = graph()
     driven = Assign(W('solve'), Solo(), *placed()).apply(g0)
     done   = Implement(OrderedMap({W('body'): len, W('solve'): print})).apply(driven)
-    assert kinds(unproved(g0, DrivenGraph)) == [Undriven]
-    assert kinds(unproved(driven, RealisedGraph)) == [NoImplementation, NoImplementation]
-    prove(done, RealisedGraph)
-    assert is_proved(done, DrivenGraph)
+    assert kinds(Driven.check(g0)) == [Undriven]
+    assert kinds(Realised.check(driven)) == [NoImplementation, NoImplementation]
+    Realised.prove(done)
+    assert recalled(done, Driven)
 
 
 def test_a_role_is_one_slot():

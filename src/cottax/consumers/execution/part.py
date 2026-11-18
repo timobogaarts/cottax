@@ -16,7 +16,7 @@ from .refusals import NoRoleAt, NotAnInput, NotAnUnknown, NotDriverData, TakesNo
 from .drive import Drive
 from .structures import (Assessed, Inputs, Slot, read_from as _read_from, slots,
                          write_back as _write_back, write_role as _write_role)
-from .run import CallableGraph, run as _run
+from .run import Runnable, run as _run
 from .valued import GraphWithValues
 
 
@@ -101,7 +101,7 @@ class Running(Part):
 
     def valued(self, model: Graph | Model, values: Mapping[type, Mapping[Any, Any]] = OrderedMap(),
                read_from: Mapping[type, Any] = OrderedMap(), *,
-               proof: type[Rules] = CallableGraph) -> GraphWithValues:
+               proof: type[Rules] = Runnable) -> GraphWithValues:
         '''
         `model` (a graph, or a `Model`: a `Declared`), proved a `proof` (a rule group), with a
         value at each boundary input, from exactly one source: the declaration's own values;
@@ -115,7 +115,7 @@ class Running(Part):
 
     def assess(self, model: Graph | Model, values: Mapping[type, Mapping[Any, Any]] = OrderedMap(),
                read_from: Mapping[type, Any] = OrderedMap(), *,
-               proof: type[Rules] = CallableGraph) -> Assessed:
+               proof: type[Rules] = Runnable) -> Assessed:
         '''
         `valued`'s lookup, stopped before holding it to one value per input: an input without
         a value and a place given twice are asked of what it returns, and refused by its

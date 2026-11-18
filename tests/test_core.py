@@ -9,7 +9,7 @@ to the laws the vocabulary states.
 
 from toy_places import Segmented
 from cottax.core import conditions
-from cottax.core import prove, unproved, dependencies, nesting
+from cottax.core import dependencies, nesting
 
 import dataclasses
 import itertools
@@ -29,13 +29,13 @@ from cottax.core import (
     RemoveAttribute, SetAttribute,
     Violation, NodeDefinition, Insert, Delete,
     violations, comparables_in, first,
-    answer_for_labels, answer_for_places, WellFormed, unproved,
+    answer_for_labels, answer_for_places, WellFormed,
 )
 from cottax.core.plan.primitive import (
     Nest, Unnest, check_delete_keeps_nesting_whole, check_nesting, check_unnesting,
 )
 from cottax.core.refusal_kinds import DoesNotRead, ReadOnBothSides
-from cottax.core.maths.executable import ExecutableGraph
+from cottax.core.maths.executable import Executable
 from cottax.core.frozen import Answer, OrderedMap, answers
 from cottax.core.maths.wellformed import EndOwnsNothingInside, Unbound
 from cottax.core.maths.nesting import BoxOwnsNothing, check_blocks_own_something, check_blocks_partition
@@ -171,7 +171,7 @@ def proof(graph, op, define):
     '''Why `op` of `define` does not apply to `graph`, and the rules of the bindings that
     would result, as data.'''
     return list(refusals(op(OrderedMap(define)), graph)) + \
-           list(unproved(Graph(OrderedMap(graph.definitions | define)), WellFormed))
+           list(WellFormed.check(Graph(OrderedMap(graph.definitions | define))))
 
 
 def on_insert(new, standing=None):
@@ -277,10 +277,10 @@ def test_an_ownership_violation_names_each_owner():
     found = proof(G({a: toy([], ['y'])}), Insert, {c: toy([], ['y'])})
     assert found == [OwnedTwice(place=Word('y'), node=c, other=a)]
     three = {a: toy([], ['y']), b: toy([], ['y']), c: toy([], ['y'])}
-    assert list(unproved(Graph(OrderedMap(three)), WellFormed)) == [
+    assert list(WellFormed.check(Graph(OrderedMap(three)))) == [
         OwnedTwice(place=Word('y'), node=b, other=a), OwnedTwice(place=Word('y'), node=c, other=a)]
     around = {a: toy([], ['s.u']), b: toy([], ['s.v']), c: toy([], ['s'])}
-    assert list(unproved(Graph(OrderedMap(around)), WellFormed)) == [
+    assert list(WellFormed.check(Graph(OrderedMap(around)))) == [
         OwnAroundOwner(Word('s'), Word('s.u'), c, a), OwnAroundOwner(Word('s'), Word('s.v'), c, b)]
 
 
@@ -288,8 +288,8 @@ def test_a_nesting_with_a_bad_end_is_listed_not_raised():
     """A pair with a bad end is the one rule's that names it."""
     a, t = Word('a'), Word('t')
     graph = Graph(OrderedMap({a: states([], ['x']), t: toy([], ['y'])}))
-    assert [type(v) for v in unproved(Graph(graph.definitions, OrderedMap({Word('zz'): a})), WellFormed)] == [Unbound]
-    assert [type(v) for v in unproved(Graph(graph.definitions, OrderedMap({t: a})), WellFormed)] == [EndOwnsNothingInside]
+    assert [type(v) for v in WellFormed.check(Graph(graph.definitions, OrderedMap({Word('zz'): a})))] == [Unbound]
+    assert [type(v) for v in WellFormed.check(Graph(graph.definitions, OrderedMap({t: a})))] == [EndOwnsNothingInside]
 
 
 def test_a_contraction_refuses_a_block_owning_nothing():
@@ -428,31 +428,31 @@ def test_every_case_a_rule_can_name_has_wording():
 
     cyc = {a: states(['y'], ['x']), b: states(['x'], ['y']), t: toy(['x'], ['w'])}
     with pytest.raises(KeyError, match='not a node of this graph'):     # `check_nesting_ends_bound`
-        prove(G({a: states([], ['x'])}, {a: b}), WellFormed)
+        WellFormed.prove(G({a: states([], ['x'])}, {a: b}))
     seen(check_delete_keeps_nesting_whole(Delete((a,)), G(cyc, {a: b})))  # one end lost
-    seen(unproved(Graph(G({a: states([], ['x'])}).definitions, OrderedMap({a: b})), WellFormed))   # unbound
-    seen(unproved(Graph(G(cyc).definitions, OrderedMap({a: t})), WellFormed))            # t not a problem
+    seen(WellFormed.check(Graph(G({a: states([], ['x'])}).definitions, OrderedMap({a: b}))))   # unbound
+    seen(WellFormed.check(Graph(G(cyc).definitions, OrderedMap({a: t}))))            # t not a problem
     seen(check_nesting(Nest(a, b), G(cyc, {a: b})))                             # already
-    seen(unproved(Graph(G(cyc).definitions, OrderedMap({a: a})), WellFormed))            # inside itself
+    seen(WellFormed.check(Graph(G(cyc).definitions, OrderedMap({a: a}))))            # inside itself
     seen(check_nesting(Nest(a, b), G(cyc, {b: a})))                             # loop
-    seen(unproved(G({a: states([], ['x']), b: states([], ['y'])}, {a: b}), ExecutableGraph))   # unreachable
+    seen(Executable.check(G({a: states([], ['x']), b: states([], ['y'])}, {a: b})))   # unreachable
     seen(check_blocks_own_something(G({a: states(['x'], []), b: states(['y'], [])}), ((a, b),)))  # a box owning nothing
     seen(check_blocks_partition(G({a: toy([], ['x']), b: toy([], ['y'])}), ((a,), (a, b))))  # a short block, a node twice
     S = G
-    seen(unproved(S({a: body(['u'], ['x']), b: body(['x'], ['u'])}), ExecutableGraph))     # coupled, no problem
-    seen(unproved(S({a: body(['u'], ['x']), b: body(['x'], ['u']),
-                                        t: driven(['x'], ['w'])}), ExecutableGraph))                          # a-b still cyclic
-    seen(unproved(S({t: driven(['x'], ['w']), a: body([], ['x'])}), ExecutableGraph))   # every condition constant: off the cycle
-    seen(unproved(S({t: driven([], ['w'])}), ExecutableGraph))                   # no condition at all: off the cycle
-    seen(unproved(S({a: states([], ['x']), b: states([], ['y'])}), ExecutableGraph))
-    seen(unproved(S({a: body([], ['x']), b: states(['x'], [])}), ExecutableGraph))         # a bare condition
-    seen(unproved(S({t: driven(['k', 'y'], ['u']), a: body(['u'], ['y'])}), ExecutableGraph))   # one constant
-    seen(unproved(S({t: driven(['x'], ['u'], ['g']), a: body(['u'], ['x', 'g'])}), ExecutableGraph))   # g, read unheld, produced on t's cycle
-    seen(unproved(S({t: driven(['x'], ['u'], reports=['r']), a: body(['u', 'r'], ['x'])}), ExecutableGraph))  # r, owned unanswered, read on t's cycle
-    seen(unproved(S({a: body(['u'], ['x']), b: body(['x'], ['u'])}), ExecutableGraph))        # a cycle nobody answers
-    seen(unproved(S(cyc), ExecutableGraph))                                                   # unresolved: two outermost
-    seen(unproved(S({a: body(['u', 'w'], ['x']), b: body(['x'], ['u']),
-                                 t: driven(['x'], ['w'])}), ExecutableGraph))                              # a-b still cyclic inside t
+    seen(Executable.check(S({a: body(['u'], ['x']), b: body(['x'], ['u'])})))     # coupled, no problem
+    seen(Executable.check(S({a: body(['u'], ['x']), b: body(['x'], ['u']),
+                                        t: driven(['x'], ['w'])})))                          # a-b still cyclic
+    seen(Executable.check(S({t: driven(['x'], ['w']), a: body([], ['x'])})))   # every condition constant: off the cycle
+    seen(Executable.check(S({t: driven([], ['w'])})))                   # no condition at all: off the cycle
+    seen(Executable.check(S({a: states([], ['x']), b: states([], ['y'])})))
+    seen(Executable.check(S({a: body([], ['x']), b: states(['x'], [])})))         # a bare condition
+    seen(Executable.check(S({t: driven(['k', 'y'], ['u']), a: body(['u'], ['y'])})))   # one constant
+    seen(Executable.check(S({t: driven(['x'], ['u'], ['g']), a: body(['u'], ['x', 'g'])})))   # g, read unheld, produced on t's cycle
+    seen(Executable.check(S({t: driven(['x'], ['u'], reports=['r']), a: body(['u', 'r'], ['x'])})))  # r, owned unanswered, read on t's cycle
+    seen(Executable.check(S({a: body(['u'], ['x']), b: body(['x'], ['u'])})))        # a cycle nobody answers
+    seen(Executable.check(S(cyc)))                                                   # unresolved: two outermost
+    seen(Executable.check(S({a: body(['u', 'w'], ['x']), b: body(['x'], ['u']),
+                                 t: driven(['x'], ['w'])})))                              # a-b still cyclic inside t
     seen(violations(answer_for_labels, Said, G({})))                                          # no node to ask
     seen(violations(GraphWithValues, G({a: body(['k'], ['x'])}),
                     OrderedMap({Word('x'): 1.0, Word('z'): 2.0})))      # k missing, x owned, z none

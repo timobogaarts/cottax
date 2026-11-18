@@ -5,14 +5,14 @@ variable name.
 Names are built by hand from key entries, as in `test_algebra.py`.
 '''
 
-from cottax.core import prove, dependencies
+from cottax.core import dependencies
 
 import re
 
 import pytest
 from jax.tree_util import DictKey, GetAttrKey, SequenceKey
 
-from cottax.core.maths.executable import ExecutableGraph
+from cottax.core.maths.executable import Executable
 from cottax.relational import Min, Objective
 from cottax.core.plan import Plan
 from cottax.core.frozen import OrderedMap
@@ -148,7 +148,7 @@ def test_the_figure_and_the_page_key_alike_and_once(sellar, nestable):
     from cottax.consumers.visualization.xdsm_html import xdsm_view
     two = graph_of(OrderedMap({**nestable.definitions, N('pre'): call([], ['k'])}))
     nested = (Plan(two) + Nest(N('h'), N('opt'))).graph
-    prove(nested, ExecutableGraph)
+    Executable.prove(nested)
     assert {(b['ring'], b['depth']) for b in xdsm_struct(nested, blocks=True)['blocks']
             if b['ring'] == 'run'} == {('run', 0), ('run', 1)}
     for graph, blocks in ((nested, True), (sellar, True)):
@@ -388,7 +388,7 @@ def test_a_nested_solve_is_a_ring_inside_a_ring(nestable):
     '''The interior draws its own blocks, so nesting shows as containment and the colour
     is left to say *which level* -- level 0 the solver colour, level 1 the next.'''
     nested = (Plan(nestable) + Nest(N('h'), N('opt'))).graph
-    prove(nested, ExecutableGraph)
+    Executable.prove(nested)
 
     # Un-nested, the two problems share one block and no blocking exists; `blocks=True`
     # still rings the component, since the drawing walks `entries(graph.graph)`.
@@ -408,7 +408,7 @@ def test_the_outer_problem_leads_so_every_interior_is_contiguous(nestable, sella
     interior occupying the rest of it -- at every depth. A block no problem answers leads
     with every problem it holds.'''
     nested = (Plan(nestable) + Nest(N('h'), N('opt'))).graph
-    prove(nested, ExecutableGraph)
+    Executable.prove(nested)
     assert xdsm_struct(nested, blocks=True)['steps'][0] == '.opt'   # the outer problem leads
 
     for graph, blocks in ((nested, True), (nestable, True), (sellar, True),
@@ -431,7 +431,7 @@ def test_the_outer_problem_leads_so_every_interior_is_contiguous(nestable, sella
 
 def test_nesting_the_other_way_leads_with_the_other_problem(nestable):
     nested = (Plan(nestable) + Nest(N('opt'), N('h'))).graph
-    prove(nested, ExecutableGraph)
+    Executable.prove(nested)
     assert xdsm_struct(nested, blocks=True)['steps'][0] == '.h'
 
 
@@ -519,7 +519,7 @@ def prelude():
 
 
 def test_ordered_graph_is_the_binding_in_run_order():
-    """Run order is a presentation, so it is spelled here and not on `ExecutableGraph` --
+    """Run order is a presentation, so it is spelled here and not on `Executable` --
     a diagonal is one line, and a run never needs the whole graph in one order."""
     from cottax.consumers.visualization.sequencing import ordered_graph
 

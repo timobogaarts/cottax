@@ -11,7 +11,7 @@ finding the `x` that makes `f - t` vanish: one iteration of it a whole inner sol
 from toy_places import Segmented
 from cottax.core import Place
 from cottax.core import steps
-from cottax.core import is_proved, prove, unproved
+from proofs import recalled
 
 import math
 from collections.abc import Callable
@@ -25,11 +25,11 @@ from cottax.core import (
 )
 from cottax.consumers.execution.valued import InputMissing, NotAPlace, OwnedGiven
 from cottax.core.frozen import OrderedMap
-from cottax.core.driven import driven as with_driver, DrivenGraph, DrivenNodes
+from cottax.core.driven import driven as with_driver, Driven, DrivenNodes
 from cottax.core import is_driven
 from cottax.core.driven import DriverContract, PerProblem, PerUnknown, Role
-from cottax.consumers.execution import CallableGraph, run
-from cottax.consumers.execution.run import CallableNodes
+from cottax.consumers.execution import Runnable, run
+from cottax.consumers.execution.run import RunnableNodes
 from cottax.consumers.execution.interface_types import ConditionMap, Context, Posed
 from cottax.consumers.execution.refusals import (
     DataMissing, ImplementsAnother, NotADriverImplementation, NotCallable,
@@ -38,7 +38,7 @@ from cottax.consumers.execution.refusals import (
 from cottax.consumers.execution.interface import DriverImplementation
 from cottax.consumers.execution.run import InteriorConditionMap
 from cottax.core.realisation import (
-    ImplementDrivers, implemented, RealisedGraph, RealisedNodes, Unimplement,
+    ImplementDrivers, implemented, Realised, RealisedNodes, Unimplement,
 )
 from cottax.relational import Eq, Relation, RelationalCondition, is_root_find
 from cottax.consumers.execution import GraphWithValues
@@ -172,19 +172,19 @@ def definitions(close=newton) -> OrderedMap:
     })
 
 
-def flat(changes=OrderedMap()) -> CallableGraph:
+def flat(changes=OrderedMap()) -> Runnable:
     graph = Graph(definitions() | changes, OrderedMap())
-    prove(graph, CallableGraph)
+    Runnable.prove(graph)
     return graph
 
 
-def nested() -> CallableGraph:
+def nested() -> Runnable:
     outer = driven(TARGET, RelationalCondition((Relation(G, None, Eq),), (), (X,), ()))
     aim   = call([F, T], [G], lambda f, t: f - t)
     graph = Graph(definitions() | {W('Aim'): aim,
                                                                      TARGET: outer},
                                       OrderedMap({CLOSE: TARGET}))
-    prove(graph, CallableGraph)
+    Runnable.prove(graph)
     return graph
 
 
@@ -213,7 +213,7 @@ def test_a_run_computes_every_place_and_the_report_lands_at_its_place():
 def test_the_data_arrives_one_tuple_per_role_and_the_conditions_as_values():
     spy = Spy()
     graph = Graph(definitions(close=spy), OrderedMap())
-    prove(graph, CallableGraph)
+    Runnable.prove(graph)
     run(GraphWithValues(graph, OrderedMap({X: 1.0, W('^start.u'): 2.0, W('^budget.DiscA.close'): 7})))
     posed, context, data = spy.seen[0]
     conditions = posed.conditions
@@ -238,7 +238,7 @@ def test_the_condition_map_holds_no_value_and_one_serves_every_context():
     spy = Spy()
     graph = Graph(definitions(close=spy),
                                        OrderedMap())
-    prove(graph, CallableGraph)
+    Runnable.prove(graph)
     for x in (1.0, 2.0):
         run(GraphWithValues(graph, OrderedMap({X: x, W('^start.u'): 1.0, W('^budget.DiscA.close'): 50})))
     (first, one, _), (second, two, _) = spy.seen
@@ -268,10 +268,10 @@ def test_a_run_proves_the_graph_callable_itself():
     it is callable, the proof remembered on it, and one that is not is refused by name,
     before anything runs.'''
     graph = Graph(definitions(), OrderedMap())
-    prove(graph, RealisedGraph)
-    assert not is_proved(graph, CallableGraph)
+    Realised.prove(graph)
+    assert not recalled(graph, Runnable)
     run(GraphWithValues(graph, OrderedMap({X: 1.0, **INNER})))
-    assert is_proved(graph, CallableGraph)
+    assert recalled(graph, Runnable)
     bad = Graph(definitions() | {W('b'): implemented(
         FunctionalNode((X,), (W('extra'),)), 'not callable')}, OrderedMap())
     valued = GraphWithValues(bad, OrderedMap({X: 1.0, **INNER}))
@@ -281,10 +281,10 @@ def test_a_run_proves_the_graph_callable_itself():
 def test_what_a_run_proves_is_read_off_it():
     """Declared with the function, not inside it: a run proves the graph callable, a trace
     the same, and the steps are of a graph proved executable."""
-    from cottax.core import ExecutableGraph, proves, steps
+    from cottax.core import Executable, steps
     from cottax.consumers.execution.jax_jit import Traced
-    assert proves(run) == (CallableGraph,) == proves(Traced)
-    assert proves(steps) == (ExecutableGraph,)
+    assert run.checks == (Runnable.check,) and Runnable.check in Traced.checks
+    assert steps.checks == (Executable.check,)
 
 
 def test_what_comes_back_is_counted():
@@ -298,7 +298,7 @@ def test_what_comes_back_is_counted():
                          (lambda c, x, d: (1.0, 3), TypeError)):
         graph = Graph(definitions(close=Returns(close)),
                                            OrderedMap())
-        prove(graph, CallableGraph)
+        Runnable.prove(graph)
         with pytest.raises(error):
             ran(graph)
 
@@ -312,9 +312,9 @@ def test_a_nested_solve_holds_the_same_proof_at_every_depth():
     outer, = [s for s in steps(graph) if isinstance(s, Solve)]
     inner, = [s for s in steps(outer.interior) if isinstance(s, Solve)]
     assert (outer.problem, inner.problem) == (TARGET, CLOSE)
-    for level in (DrivenNodes, RealisedNodes, CallableNodes):
-        prove(outer.interior, level)
-        prove(inner.interior, level)
+    for level in (DrivenNodes, RealisedNodes, RunnableNodes):
+        level.prove(outer.interior)
+        level.prove(inner.interior)
 
 
 # ---------------------------------------------------------------- what the proof refuses
@@ -326,7 +326,7 @@ class RepoRef:
 
 
 def kinds(graph: Graph) -> list[type]:
-    return [type(x) for x in unproved(graph, CallableGraph)]
+    return [type(x) for x in Runnable.check(graph)]
 
 
 def test_a_description_is_refused_a_call():

@@ -1,6 +1,6 @@
 '''
 The proof that a graph is executable: every entry, at every depth, is answered by one
-encloser whose edges lie right against its cycle. A rule group (`ExecutableGraph`), proved
+encloser whose edges lie right against its cycle. A rule group (`Executable`), proved
 of a graph and remembered on it.
 '''
 
@@ -136,7 +136,7 @@ def check_other_owns_off_cycle(g: Graph) -> Iterator[Violation]:
             yield OwnReadInsideCycle(p, tuple(v for v, _ in inside), tuple(r for _, r in inside))
 
 
-class ExecutableGraph(WellFormed):
+class Executable(WellFormed):
     '''A well-formed graph that can be run: every cycle answered by one problem, the rest
     functionally acyclic.'''
     rules = (check_nestings_share_a_cycle,

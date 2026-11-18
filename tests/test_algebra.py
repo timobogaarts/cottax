@@ -12,7 +12,7 @@ from jax.tree_util import GetAttrKey
 
 from cottax.core.frozen import OrderedMap
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core import FunctionalNode, body_of, conditions, dependencies, nesting, WellFormed, prove
+from cottax.core import FunctionalNode, body_of, conditions, dependencies, nesting, WellFormed
 from cottax.core.maths.nesting import BlockTooSmall, NodeInTwoBlocks, check_blocks_partition
 from cottax.core.realisation import implemented
 from cottax.relational import Eq, Relation, RelationalCondition
@@ -76,7 +76,7 @@ def test_a_graph_binds_names_to_nodes(sellar):
 
 def test_a_variable_still_has_exactly_one_producer():
     with pytest.raises(ValueError, match='owned by both'):
-        prove(graph_of(OrderedMap({N('a'): source('x'), N('b'): source('x')})), WellFormed)
+        WellFormed.prove(graph_of(OrderedMap({N('a'): source('x'), N('b'): source('x')})))
 
 
 def nested(reads, owns):
@@ -89,8 +89,8 @@ def test_one_producer_is_by_containment_not_only_by_equality():
     # `.s` already holds `.s.u`'s storage, so two nodes would determine one place. The
     # same violation as owning the same name, one step up the prefix order.
     with pytest.raises(ValueError, match='lies inside'):
-        prove(graph_of(OrderedMap({N('a'): nested([], [('s',)]),
-                        N('b'): nested([], [('s', 'u')])})), WellFormed)
+        WellFormed.prove(graph_of(OrderedMap({N('a'): nested([], [('s',)]),
+                        N('b'): nested([], [('s', 'u')])})))
 
 
 def test_a_read_inside_an_output_is_refused():
@@ -98,15 +98,15 @@ def test_a_read_inside_an_output_is_refused():
     # and `b`'s dependency on `a` would vanish rather than be refused. Projection is
     # what would make it legal, and it is not implemented.
     with pytest.raises(ValueError, match='would silently be a boundary input'):
-        prove(graph_of(OrderedMap({N('a'): nested([], [('s',)]),
-                        N('b'): nested([('s', 'u')], [('y',)])})), WellFormed)
+        WellFormed.prove(graph_of(OrderedMap({N('a'): nested([], [('s',)]),
+                        N('b'): nested([('s', 'u')], [('y',)])})))
 
 
 def test_an_output_inside_a_read_is_refused():
     # The mirror: `b` reads `.s` wholesale, so it would silently miss `.s.u`.
     with pytest.raises(ValueError, match='would silently miss this output'):
-        prove(graph_of(OrderedMap({N('a'): nested([], [('s', 'u')]),
-                        N('b'): nested([('s',)], [('y',)])})), WellFormed)
+        WellFormed.prove(graph_of(OrderedMap({N('a'): nested([], [('s', 'u')]),
+                        N('b'): nested([('s',)], [('y',)])})))
 
 
 def test_resolving_an_unknown_name_says_so(sellar):

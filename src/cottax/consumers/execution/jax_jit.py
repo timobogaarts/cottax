@@ -1,5 +1,5 @@
 '''
-`JitGraph`: a callable graph that can be a jit cache key. `Traced`: the run traced once by
+`Jittable`: a callable graph that can be a jit cache key. `Traced`: the run traced once by
 jax, nothing computed: the graph's jaxpr and every place's shape.
 '''
 
@@ -13,14 +13,15 @@ import jax
 import numpy as np
 from jax.tree_util import tree_leaves
 
-from ...core import Label, Graph, NodeDefinition, Place, Violation, each_node, proved
+from ...core import Label, Graph, NodeDefinition, Place, Violation, per_node_check
 from ...core.frozen import Frozen, OrderedMap
 from ...core.realisation import RealisedNodes, implementation_of, is_implemented
-from .run import CallableGraph, blamed, run
+from .run import Runnable, blamed, run
 from .refusals import BodyByIdentity, PartialBody, TraceFailed, Unhashable
 from .valued import GraphWithValues
 
 
+@per_node_check
 def check_hashable[N: Label, V: Place](name: N, node: NodeDefinition[V]
                                        ) -> Iterator[Violation]:
     '''
@@ -55,6 +56,7 @@ def _unhashable(x: object) -> Iterator[str]:
             yield type(leaf).__name__
 
 
+@per_node_check
 def check_reassembles[N: Label, V: Place](name: N, node: NodeDefinition[V]
                                           ) -> Iterator[Violation]:
     '''
@@ -74,10 +76,10 @@ def check_reassembles[N: Label, V: Place](name: N, node: NodeDefinition[V]
 class JitKeyNodes(RealisedNodes):
     '''Every node a jit cache key: it hashes, and what runs it compares by value. Asks only
     that what runs it is there, not that it is callable.'''
-    rules = (each_node(check_hashable), each_node(check_reassembles))
+    rules = (check_hashable, check_reassembles)
 
 
-class JitGraph(CallableGraph, JitKeyNodes):
+class Jittable(Runnable, JitKeyNodes):
     '''A callable graph whose every node is a jit cache key.'''
 
 
@@ -113,7 +115,12 @@ class Traced[N: Label, V: Place](Frozen):
 
     valued : GraphWithValues[Graph[N, V], V]
 
-    checks = (proved(CallableGraph, at='valued.graph'), check_traces)
+    checks = (Runnable.check, check_traces)
+
+    @property
+    def graph(self) -> Graph[N, V]:
+        '''The graph traced: what `Runnable.check` proves.'''
+        return self.valued.graph
 
     @functools.cached_property
     def _traced(self) -> tuple[Any, OrderedMap[V, Any]]:

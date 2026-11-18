@@ -8,7 +8,7 @@ floats over a toy `Word` place.
 '''
 
 from cottax.core import conditions
-from cottax.core import prove, steps, unproved
+from cottax.core import steps
 
 import math
 import re
@@ -22,7 +22,7 @@ import cottax.assemblies.jax as cx
 
 from cottax.core import (
     ConditionalNode,
-    ExecutableGraph, FunctionalNode, 
+    Executable, FunctionalNode, 
     Graph, Rename,
 )
 from cottax.consumers.architectures.cut_rules import GaussSeidel
@@ -33,10 +33,10 @@ from cottax.core.refusal_kinds import OwnsInsideNotAChoice
 from cottax.relational.rewrites import Determine, Undetermine
 from cottax.core.frozen import OrderedMap, choice, violations
 from cottax.core.plan import Nest, Plan, refusals
-from cottax.core.driven import Assign, DrivenGraph, Start
+from cottax.core.driven import Assign, Driven, Start
 from cottax.core.realisation import Implement, implemented
 from cottax.consumers.declaration import declare
-from cottax.consumers.execution import CallableGraph, run
+from cottax.consumers.execution import Runnable, run
 from cottax.consumers.execution.interface import DriverImplementation
 from cottax.consumers.json import read_json, write_json
 from cottax.consumers.visualization import render_html, render_matrix_svg, render_xdsm_svg, to_dot
@@ -116,9 +116,9 @@ def oscillator(x, v, w):
     return v, -w * w * x
 
 
-def driven(*models, implementation) -> CallableGraph:
+def driven(*models, implementation) -> Runnable:
     built = (Plan(declare(*models).graph) + drive(implementation)).graph
-    prove(built, CallableGraph)
+    Runnable.prove(built)
     return built
 
 
@@ -139,7 +139,7 @@ def test_the_rate_declares_a_body_and_beside_it_the_ode():
         s.place(cx.rate('x')), s.place(cx.initial('x')), span_of('x'))
     assert ode.owns == ode.owns_inside == (s.place('x'),)
     assert is_ode(ode)
-    prove(g, ExecutableGraph)
+    Executable.prove(g)
 
 
 def test_a_state_twice_or_a_state_that_is_a_rate_is_refused_by_core():
@@ -188,13 +188,13 @@ def test_over_a_toy_place_an_ode_is_proved_rewritten_driven_and_run_on_floats():
         w('body'): implemented(FunctionalNode((w('x'), w('k')), (w('r'),)), lambda x, k: -k * x),
         w('ode') : ConditionalNode(OdeCondition((Dt(w('x'), w('r'), w('x0')),), w('span'))),
     }), OrderedMap())
-    prove(g, ExecutableGraph)
+    Executable.prove(g)
     moved = Rename(w('ode'), ((w('r'), w('q')),)).apply(
         Rename(w('body'), ((w('r'), w('q')),)).apply(g))
     assert moved[w('ode')].condition.rates == (w('q'),)
     solved = (Plan(g) + Assign(w('ode'), Integration(trajectory=False), (), ())
               + Implement(OrderedMap({w('ode'): Euler(10_000)}))).graph
-    prove(solved, DrivenGraph)
+    Driven.prove(solved)
     out = run(GraphWithValues(solved,
                               OrderedMap({w('k'): 1.0, w('x0'): 1.0, w('span'): (0.0, 1.0)})))
     assert out[w('x')] == pytest.approx(math.exp(-1.0), rel=1e-4)
@@ -320,13 +320,13 @@ def test_two_odes_on_one_cycle_are_refused_until_combined_and_then_integrate_as_
     one by `+`.'''
     g = declare(position, velocity).graph
     at, other = solve_at('position'), solve_at('velocity')
-    assert [type(v) for v in unproved(g, ExecutableGraph)] == [SeveralOutermost]
+    assert [type(v) for v in Executable.check(g)] == [SeveralOutermost]
     plan = Plan(g) + Combine(at, (at, other), OdeCondition)
     assert plan.graph[at].condition == OdeCondition((
         Dt(s.place('x'), s.place(cx.rate('x')), s.place(cx.initial('x'))),
         Dt(s.place('v'), s.place(cx.rate('v')), s.place(cx.initial('v')))), s.place('span'))
     graph = (plan + drive(diffrax_run())).graph
-    prove(graph, CallableGraph)
+    Runnable.prove(graph)
     values = {s.place('w'): 2.0, s.place(cx.initial('x')): 1.0, s.place(cx.initial('v')): 0.0}
     out = run(GraphWithValues(graph, OrderedMap({**values, s.place('span'): (0.0, 1.5)})))
     one = run(GraphWithValues(driven(oscillator, implementation=diffrax_run()),
@@ -368,7 +368,7 @@ def index_one(c):
     ode, inner = solve_at('relaxing'), solve_at('algebraic')
     plan = Plan(declare(relaxing, algebraic).graph) + Nest(inner, ode)
     graph = (plan + drive(Newton(rtol=1e-12, atol=1e-12), diffrax_run())).graph
-    prove(graph, CallableGraph)
+    Runnable.prove(graph)
     return run(GraphWithValues(graph, OrderedMap({
         s.place('c'): c, **ivp((0.0, 0.8), x=1.5),
         s.place(cx.start('z')): 0.0})))
@@ -376,7 +376,7 @@ def index_one(c):
 
 def test_an_algebraic_constraint_nested_in_an_ode_is_solved_at_every_rate():
     g = declare(relaxing, algebraic).graph
-    assert [type(v) for v in unproved(g, ExecutableGraph)] == [SeveralOutermost]
+    assert [type(v) for v in Executable.check(g)] == [SeveralOutermost]
     out = index_one(2.0)
     assert out[s.place('x')] == pytest.approx(1.5 * math.exp(-1.6), rel=1e-8)
     assert out[s.place('z')] == pytest.approx(2.0 * 1.5 * math.exp(-1.6), rel=1e-8)
@@ -415,7 +415,7 @@ def test_mdf_and_idf_nest_the_ode_as_any_implicit_model_and_fit_its_rate(final):
     from cottax.relational.consumers.execution.jax_solvers import BFGS
     plan = Plan(fitted().graph) + architecture(final)
     assert dict(plan.graph.within) == {solve_at('decay'): node('opt')}
-    prove(plan.graph, ExecutableGraph)
+    Executable.prove(plan.graph)
     plan += drive(BFGS(rtol=1e-10, atol=1e-10), diffrax_run())
     tree = s.run(plan.graph, {cx.Inputs: ivp((0.0, 1.0), x=1.0)},
                  read_from=from_state({'k': 0.1, 'target': math.exp(-0.7)}))
@@ -450,7 +450,7 @@ def test_mdf_and_idf_nest_the_algebraic_constraint_in_the_ode_and_the_ode_in_the
     ode, inner = solve_at('relaxing'), solve_at('algebraic')
     plan = Plan(fitted_index_one().graph) + architecture(final)
     assert dict(plan.graph.within) == {inner: ode, ode: node('opt')}
-    prove(plan.graph, ExecutableGraph)
+    Executable.prove(plan.graph)
     by_hand = Plan(fitted_index_one().graph) + Nest(inner, ode) + Nest(ode, node('opt'))
     c = fit_index_one(plan)
     assert c == pytest.approx(2.0, rel=1e-6)
@@ -466,7 +466,7 @@ def test_an_mda_nests_the_algebraic_constraint_in_the_ode():
     plan = Plan(declare(relaxing, algebraic).graph) + MDA(GaussSeidel(), CLOSING)
     assert dict(plan.graph.within) == {solve_at('algebraic'): solve_at('relaxing')}
     graph = (plan + drive(Newton(rtol=1e-12, atol=1e-12), diffrax_run())).graph
-    prove(graph, CallableGraph)
+    Runnable.prove(graph)
     out = run(GraphWithValues(graph, OrderedMap({
         s.place('c'): 2.0, **ivp((0.0, 0.8), x=1.5),
         s.place(cx.start('z')): 0.0})))
@@ -486,7 +486,7 @@ def test_an_mda_cuts_nothing_inside_the_odes_loop_and_integrates_the_logistic():
     plan = Plan(g) + MDA(GaussSeidel(), CLOSING)
     assert plan.graph == g
     graph = (plan + drive(diffrax_run())).graph
-    prove(graph, CallableGraph)
+    Runnable.prove(graph)
     x = final(graph, {s.place('k'): 1.0, **ivp((0.0, 0.5), x=0.1)})
     assert x == pytest.approx(logistic_at(0.5), rel=1e-8)
 
@@ -516,7 +516,7 @@ def test_a_closure_written_by_hand_through_the_loop_is_a_model_of_its_own():
     plan = (Plan(declare(squared, logistic, doubled).graph) + closure
             + Nest(solve_at('logistic'), closure.at))
     graph = (plan + drive(Picard(rtol=1e-12, atol=1e-12), diffrax_run())).graph
-    prove(graph, CallableGraph)
+    Runnable.prove(graph)
     x = final(graph, {s.place('k'): 1.0, **ivp((0.0, 0.5), x=0.1),
                       s.place(cx.start(cx.copy('x'))): 0.1})
     assert x == pytest.approx(np.asarray(x * x + (0.1 - x * x) * math.exp(0.5)), rel=1e-8)

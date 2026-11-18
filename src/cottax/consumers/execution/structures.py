@@ -9,7 +9,7 @@ a structure (`at`), is the caller's.
 from collections.abc import Callable, Collection, Iterable, Mapping
 from typing import Any, NamedTuple
 
-from ...core import Label, Graph, Place, Rules, answer_for_places, comparable, dependencies, prove
+from ...core import Label, Graph, Place, Rules, answer_for_places, comparable, dependencies
 from ...core.driven import role_slots
 from ...core import conditions, is_driven
 from ...core.driven import PerUnknown
@@ -177,7 +177,7 @@ class Assessed[N: Label, V: Place](Frozen):
     def valued(self) -> GraphWithValues:
         '''The graph, proved, with its one value per input; refused as `Running.valued` says.'''
         found = valued_once(self.table, self._inputs, self.candidates)
-        prove(self.graph, self.proof)
+        self.proof.prove(self.graph)
         return GraphWithValues(self.graph, found)
 
 

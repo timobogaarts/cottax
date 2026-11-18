@@ -4,7 +4,6 @@ a model run on it through the surface's `run(..., read_from=)` and written back.
 '''
 
 from toy_places import Segmented
-from cottax.core import prove
 
 import dataclasses
 
@@ -20,7 +19,7 @@ from cottax.core.driven import driven
 from cottax.relational.contracts import RootFinding
 from cottax.core.driven import Start
 import cottax.assemblies.jax as cx
-from cottax.consumers.execution import CallableGraph
+from cottax.consumers.execution import Runnable
 from cottax.consumers.execution.refusals import ForeignPlace, Unvalued, ValuedTwice
 from cottax.consumers.execution.interface import DataStructure
 from cottax.core import answer_for_places
@@ -50,7 +49,7 @@ def N(name: str) -> NodePath:
 START = purposes.Start()
 
 
-def square(start=START(V('u'))) -> CallableGraph:
+def square(start=START(V('u'))) -> Runnable:
     '''`u * u == z`, a root find from a start at `start`.'''
     condition = RelationalCondition((Relation(V('r'), None, Eq),), (), (V('u'),), ())
     graph = graph_of({
@@ -60,7 +59,7 @@ def square(start=START(V('u'))) -> CallableGraph:
                                            ((start,),), ()),
                                     Newton(rtol=1e-10, atol=1e-10)),
     })
-    prove(graph, CallableGraph)
+    Runnable.prove(graph)
     return graph
 
 
@@ -98,7 +97,7 @@ def test_a_lookalike_of_a_var_path_is_refused_by_name():
         N('g'): implemented(FunctionalNode((V('c'),), (V('a'),)), lambda c: 10 * c),
         N('f'): implemented(FunctionalNode((a,), (V('b'),)), lambda a: a + 1),
     })
-    prove(graph, CallableGraph)
+    Runnable.prove(graph)
     with pytest.raises(TypeError) as refused:
         on_tree(graph, {'a': 1.0, 'b': 0.0, 'c': 2.0})
     assert refused.value.args[0] == ForeignPlace(
@@ -233,10 +232,10 @@ def test_a_place_is_read_under_the_key_it_is_given_under():
 def test_a_place_inside_what_a_slot_reads_whole_is_read():
     inside = graph_of({N('f'): implemented(FunctionalNode((V('area', 'x'),), (V('y'),)),
                                                                  lambda x: x)})
-    prove(inside, CallableGraph)
+    Runnable.prove(inside)
     whole = graph_of({N('f'): implemented(FunctionalNode((V('area'),), (V('y'),)),
                                                                  lambda area: area)})
-    prove(whole, CallableGraph)
+    Runnable.prove(whole)
     tree   = {'area': {'x': 1.0, 'w': 2.0}}
     # what is beside the read, inside the area, is not read; all of an area read whole is.
     assert cx.flat.assess(inside, read_from={cx.Inputs: tree}).unread == (V('area', 'w'),)
@@ -247,7 +246,7 @@ def test_a_place_inside_what_a_slot_reads_whole_is_read():
 def test_a_start_the_graph_computes_reads_nothing():
     warm = implemented(FunctionalNode((V('z'),), (START(V('u')),)), lambda z: z)
     graph = graph_of({**square().definitions, N('warm'): warm})
-    prove(graph, CallableGraph)
+    Runnable.prove(graph)
     tree  = {'u': 1.0, 'z': 9.0}
     assessed = cx.flat.assess(graph, read_from={cx.Inputs: tree, Start: tree})      # `u` is the root find's unknown
     assert (assessed.unread, assessed.overwritten) == ((), (V('u'),))

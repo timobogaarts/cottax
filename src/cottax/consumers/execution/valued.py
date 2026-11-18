@@ -29,7 +29,7 @@ def check_only_inputs_given(g: 'GraphWithValues') -> Iterator[Violation]:
 class GraphWithValues[G: Graph, V: Place](Frozen):
     '''
     A graph and a value at exactly each of its boundary inputs. Its checks read the graph's
-    structure alone, so any proof holds; a consumer says which it takes (`proved`).
+    structure alone, so any proof holds; a consumer says which it takes (`Runnable.check`).
     '''
 
     graph  : G
