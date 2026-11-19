@@ -6,7 +6,7 @@ inner -> outer -- makes every consumer read one answer instead of being told, an
 the ways a rewrite could quietly void it refusals rather than surprises.
 """
 
-from cottax.core import Rules, Valid, dependencies, nesting
+from cottax.core import Rules, Valid, Dependencies, Nesting
 
 import pytest
 from jax.tree_util import GetAttrKey as G
@@ -134,7 +134,7 @@ def test_a_nested_pair_shares_a_cycle_at_its_own_level():
         n('k')  : call(['z'],        ['w']),             # ... and mda reaches x only through opt's z
         n('obj'): call(['y'],        ['f']),
     }))
-    assert n('x') in dependencies(g).descendants([n('mda')]) and n('mda') in dependencies(g).descendants([n('x')])   # one cycle, in the graph
+    assert n('x') in Dependencies.of(g).descendants([n('mda')]) and n('mda') in Dependencies.of(g).descendants([n('x')])   # one cycle, in the graph
     outer = Plan(g) + Nest(n('mda'), n('opt'))
     stale = (outer + Nest(n('x'), n('mda'))).graph
     with pytest.raises(ValueError, match='not on one cycle'):
@@ -144,8 +144,8 @@ def test_a_nested_pair_shares_a_cycle_at_its_own_level():
     # Nested in `opt` directly, `x` is at opt's level, where the cycle is: fine, and the
     # tree has two levels under opt's block.
     both = (outer + Nest(n('x'), n('opt'))).graph
-    interior = nesting(both).interior(n('opt'))
-    assert set(nesting(interior).outermost) == {n('mda'), n('x')}     # two, side by side
+    interior = Nesting.of(both).interior(n('opt'))
+    assert set(Nesting.of(interior).outermost) == {n('mda'), n('x')}     # two, side by side
 
 
 def test_a_pair_whose_inner_is_outside_its_outers_component_is_refused(mdf):
@@ -159,7 +159,7 @@ def test_a_pair_whose_inner_is_outside_its_outers_component_is_refused(mdf):
     g = graph_of(OrderedMap({**dict(mdf.definitions.items()),
                         n('p'): root_find((v('s'),), (v('r'),)),
                         n('e'): call(['r'], ['s'])}))
-    assert n('p') not in dependencies(g).descendants([n('mda')]) and n('mda') not in dependencies(g).descendants([n('p')])
+    assert n('p') not in Dependencies.of(g).descendants([n('mda')]) and n('mda') not in Dependencies.of(g).descendants([n('p')])
     for stale in ((Plan(g) + Nest(n('mda'), n('opt')) + Nest(n('p'), n('mda'))).graph,
                   (Plan(g) + Nest(n('p'), n('mda')) + Nest(n('mda'), n('opt'))).graph,
                   graph_of(g.definitions, OrderedMap({n('mda'): n('opt'), n('p'): n('mda')}))):
@@ -176,8 +176,8 @@ def test_nesting_changes_equality_and_the_hash(mdf, nested):
 
 
 def test_roots_is_what_a_block_answers(nested):
-    assert nesting(nested).outermost == (n('opt'),)
-    assert nesting(nesting(nested).interior(n('opt'))).outermost == (n('mda'),)   # the outer gone, the inner leads
+    assert Nesting.of(nested).outermost == (n('opt'),)
+    assert Nesting.of(Nesting.of(nested).interior(n('opt'))).outermost == (n('mda'),)   # the outer gone, the inner leads
 
 
 def test_a_statement_that_determines_nothing_cannot_be_an_end(mdf):
@@ -231,7 +231,7 @@ def test_restricting_to_what_contributes_keeps_both_ends_or_neither(nested):
     # what a variable needs keeps both or drops both, and the state
     # `check_delete_keeps_nesting_whole` would refuse is unreachable this way. (It is
     # reachable after a `Cut` splits the pair, a graph only `Executable` refuses.)
-    contributing = lambda g, var: g.subgraph(dependencies(g).ancestors((dependencies(g).owners[var],)))
+    contributing = lambda g, var: g.subgraph(Dependencies.of(g).ancestors((Dependencies.of(g).owners[var],)))
     assert dict(contributing(nested, v('f')).within) == {n('mda'): n('opt')}
     beside = (Plan(nested) + Insert(OrderedMap({n('src'): call([], ['w'])}))).graph
     assert dict(contributing(beside, v('w')).within) == {}
@@ -243,7 +243,7 @@ def test_a_subgraph_is_the_induced_one_and_a_delete_may_not_strand(nested):
     # op's check (`Stranded`), since a nesting is a decision the plan recorded.
     assert dict(nested.subgraph([n('mda'), n('d')]).within) == {}
     assert dict(nested.subgraph(nested.nodes).within) == {n('mda'): n('opt')}
-    assert dict(nesting(nested).interior(n('opt')).within) == {}
+    assert dict(Nesting.of(nested).interior(n('opt')).within) == {}
     # Both ends kept and the cycle between them not: the pair survives the restriction
     # and stands on nothing. Carried, not dropped -- the graph does not decide a stated
     # nesting no longer applies -- and refused by the proof that it is executable.
@@ -304,7 +304,7 @@ def test_two_siblings_share_one_outer(mdf):
         n('obj') : call(['y', 'w'],   ['f']),
     }))
     g = (Plan(g) + Nest(n('mda'), n('opt')) + Nest(n('mda2'), n('opt'))).graph
-    assert nesting(g).outermost == (n('opt'),)
+    assert Nesting.of(g).outermost == (n('opt'),)
     assert set(g.within) == {n('mda'), n('mda2')}
 
 
@@ -322,9 +322,9 @@ def test_three_levels_are_two_pairs_in_either_order():
     up   = (Plan(g) + Nest(n('mda2'), n('mda')) + Nest(n('mda'), n('opt'))).graph
     down = (Plan(g) + Nest(n('mda'), n('opt')) + Nest(n('mda2'), n('mda'))).graph
     assert dict(up.within) == dict(down.within) == {n('mda2'): n('mda'), n('mda'): n('opt')}
-    assert nesting(up).outermost == (n('opt'),)
-    assert nesting(nesting(up).interior(n('opt'))).outermost == (n('mda'),)
-    assert nesting(nesting(nesting(up).interior(n('opt'))).interior(n('mda'))).outermost == (n('mda2'),)
+    assert Nesting.of(up).outermost == (n('opt'),)
+    assert Nesting.of(Nesting.of(up).interior(n('opt'))).outermost == (n('mda'),)
+    assert Nesting.of(Nesting.of(Nesting.of(up).interior(n('opt'))).interior(n('mda'))).outermost == (n('mda2'),)
 
 
 # ---------------------------------------------------------------- interior
@@ -334,15 +334,15 @@ def test_interior_is_the_block_without_the_problem_and_is_valid(mdf, nested):
     taken out; a function node iterates nothing; a name not here is not here. What
     comes back is a valid graph, the nesting rule re-asked of it as `subgraph` does.'''
     with pytest.raises(ValueError, match='owns nothing inside'):
-        nesting(nested).interior(n('d'))
+        Nesting.of(nested).interior(n('d'))
     with pytest.raises(KeyError, match='not a node'):
-        nesting(nested).interior(n('nope'))
-    interior = nesting(nested).interior(n('opt'))
+        Nesting.of(nested).interior(n('nope'))
+    interior = Nesting.of(nested).interior(n('opt'))
     assert n('opt') not in interior and dict(interior.within) == {}
     assert graph_of(interior.definitions, interior.within) == interior  # rebuilt with every check, the same
     # The nested one, asked of the whole graph, is what asking it of opt's interior gives.
-    assert nesting(nested).interior(n('mda')) == nesting(interior).interior(n('mda'))
-    assert set(nesting(nested).cycle_of(n('mda'))) == {n('mda'), n('d')}
+    assert Nesting.of(nested).interior(n('mda')) == Nesting.of(interior).interior(n('mda'))
+    assert set(Nesting.of(nested).cycle_of(n('mda'))) == {n('mda'), n('d')}
 
 
 def test_interior_of_a_sibling_carries_the_nesting_it_severs():
@@ -358,9 +358,9 @@ def test_interior_of_a_sibling_carries_the_nesting_it_severs():
         n('fi') : call(['hp'], ['i']),
     }))
     g = (Plan(g) + Nest(n('i'), n('o'))).graph
-    assert set(nesting(g).outermost) == {n('o'), n('p')}
-    assert dict(nesting(g).interior(n('o')).within) == {}    # the outer: its pair goes with it
-    severed = nesting(g).interior(n('p'))                    # the sibling: severs (i, o)
+    assert set(Nesting.of(g).outermost) == {n('o'), n('p')}
+    assert dict(Nesting.of(g).interior(n('o')).within) == {}    # the outer: its pair goes with it
+    severed = Nesting.of(g).interior(n('p'))                    # the sibling: severs (i, o)
     assert dict(severed.within) == {n('i'): n('o')}
     with pytest.raises(ValueError, match='not on one cycle'):
         Executable.prove(severed)
@@ -369,11 +369,11 @@ def test_interior_of_a_sibling_carries_the_nesting_it_severs():
 def test_contract_drops_a_pair_with_an_end_in_a_block_and_keeps_the_rest(nested):
     # A box is no problem, so a pair touching one goes. A pair outside keeps its
     # cycle, since a contraction only adds paths.
-    boxed = nesting(nested).contract(((n('mda'), n('d')),))
+    boxed = Nesting.of(nested).contract(((n('mda'), n('d')),))
     assert dict(boxed.within) == {}
     assert boxed.nodes == (n('opt'), n('mda'), n('obj'))
     assert boxed[n('mda')] == FunctionalNode((v('z'),), (v('hy'), v('y')))
-    kept = nesting(nested).contract(((n('d'), n('obj')),))
+    kept = Nesting.of(nested).contract(((n('d'), n('obj')),))
     assert dict(kept.within) == {n('mda'): n('opt')}
     from cottax.core.maths.graph import Graph
-    assert isinstance(nesting(nested).contract(()), Graph)
+    assert isinstance(Nesting.of(nested).contract(()), Graph)

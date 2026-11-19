@@ -9,7 +9,7 @@ to the laws the vocabulary states.
 
 from toy_places import Segmented
 from cottax.core import conditions
-from cottax.core import dependencies, nesting
+from cottax.core import Dependencies, Nesting
 
 import dataclasses
 import itertools
@@ -231,7 +231,7 @@ def test_components_ready_at_once_run_in_binding_order(bound, run):
     """Dependency order first, binding order among what is ready: a graph bound in
     dependency order runs as bound."""
     g = Graph(OrderedMap({Word(n): declared(*io) for n, io in bound.items()}))
-    assert [c[0] for c in dependencies(g).components] == [Word(n) for n in run]
+    assert [c[0] for c in Dependencies.of(g).components] == [Word(n) for n in run]
 
 
 def test_a_rule_yields_data_and_never_a_sentence():
@@ -297,7 +297,7 @@ def test_a_contraction_refuses_a_block_owning_nothing():
     g = G({a: states(['x'], []), b: states(['y'], [])})
     assert list(check_blocks_own_something(g, ((a, b),))) == [BoxOwnsNothing((a, b))]
     with pytest.raises(ValueError, match='owns nothing'):
-        nesting(g).contract(((a, b),))
+        Nesting.of(g).contract(((a, b),))
 
 
 class Said(Answer):
@@ -549,5 +549,5 @@ def test_components_are_computed_from_ports_alone():
     a, b, c = Word('a'), Word('b'), Word('c')
     defs = {a: toy(['y'], ['x']), b: toy(['x'], ['y']), c: toy(['y'], ['z'])}
     assert set(nx_dependencies(defs).edges) == {(a, b), (b, a), (b, c)}
-    assert dependencies(G(defs)).components == ((a, b), (c,))
-    assert dependencies(G({b: defs[b], a: defs[a]})).components == ((b, a),)      # members in the order given
+    assert Dependencies.of(G(defs)).components == ((a, b), (c,))
+    assert Dependencies.of(G({b: defs[b], a: defs[a]})).components == ((b, a),)      # members in the order given

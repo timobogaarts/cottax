@@ -7,7 +7,7 @@ from typing import Any
 
 from ...core import (
     ConditionalNode, FunctionalNode,  Label, Graph, NodeDefinition,
-    Place, per_node_check, Rules, Run, Violation, is_driven, steps, dependencies)
+    Place, per_node_check, Rules, Run, Violation, is_driven, steps)
 from ...core.frozen import OrderedMap, checked
 from ...core.realisation import Realised, implementation_of, is_implemented
 from .interface import DriverImplementation
@@ -190,7 +190,7 @@ class InteriorConditionMap[N: Label, V: Place](ConditionMap):
         stated   = node.condition.reads
         produced = set(interior.owned_variables)
         fixed    = tuple(dict.fromkeys(
-            p for p in (*dependencies(interior).boundary_inputs, *stated)
+            p for p in (*interior.boundary_inputs, *stated)
             if p not in solved and p not in produced))
         return cls(interior, node.owns_inside, fixed, stated)
 

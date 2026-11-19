@@ -23,10 +23,9 @@ from .maths import (
     Label, Place, PlaceToPlace, comparable, comparables_in,
     NodeDefinition, Renaming, relabelled, Attribute,
     AbstractConditionalNode, FunctionalNode, conditions, owns_inside,
-    Graph,
+    Graph, View,
     Rules, per_node_check,
-    Dependencies, Valid, ValidDependencies, ValidNesting, dependencies, Nesting, nesting,
-    Executable, body_of, outline,
+    Dependencies, Valid, ValidDependencies, ValidNesting, Nesting, Executable, body_of, outline,
     Run, Solve, Step, steps,
 )
 from .mints import Closure, Copy, Mint, Minting, mint_of, minted, unminted

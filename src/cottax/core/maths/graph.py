@@ -1,14 +1,16 @@
 '''
 The graph: node definitions bound to names, and the nesting over them (`within`, inner ->
 outer). Stored, and read as data. Nothing checked at definition except what is implied through its types.
-Its methods do not assume more than this either.
+Its methods do not assume more than this either. 
+
+For additional facts which need guarantees, use a `View`: facts read off one graph alone and cached on it.
 '''
 
 from collections.abc import Iterable
 from typing import Self
 from functools import cached_property
 
-from ..frozen import Frozen, OrderedMap
+from ..frozen import Frozen, OrderedMap, remembered
 from .definition import NodeDefinition
 from .places import Label, Place
 
@@ -51,6 +53,18 @@ class Graph[N: Label, V: Place](Frozen):
     def read_variables(self) -> tuple[V, ...]:
         return tuple(dict.fromkeys(var for name in self.nodes for var in self[name].reads))
 
+    @cached_property
+    def boundary_inputs(self) -> tuple[V, ...]:
+        '''Variables read but owned by no node: what the graph is handed.'''
+        owned = set(self.owned_variables)
+        return tuple(var for var in self.read_variables if var not in owned)
+
+    @cached_property
+    def boundary_outputs(self) -> tuple[V, ...]:
+        '''Variables owned by a node but never read.'''
+        read = set(self.read_variables)
+        return tuple(var for var in self.owned_variables if var not in read)
+
     # ------------------------------------------------------------ resolution
 
     def __getitem__(self, name: N) -> NodeDefinition[V]:        
@@ -88,3 +102,31 @@ class Graph[N: Label, V: Place](Frozen):
         return self._carried(definitions=OrderedMap((n, self.definitions[n]) for n in order),
                              within=OrderedMap((i, o) for i, o in self.within.items()
                                                if i in kept and o in kept))
+
+
+# ---------------------------------------------------------------- views
+
+class View[N: Label, V: Place](Frozen):
+    '''
+    Pure functions of the graph that depend on a particular validity check
+    the base graph does not know about. The views (and their own cached properties) are cached on the graph.
+
+        class Dependencies(View):
+            checks = (ValidDependencies.check,)
+
+        Dependencies.of(graph).owners
+    
+    '''
+
+    graph : Graph[N, V]
+
+    @classmethod
+    def of(cls, graph: Graph[N, V]) -> Self:
+        '''The view of `graph`: built the first time, then the same one.'''
+        return _view(graph, cls)
+
+
+@remembered
+def _view(graph: Graph, cls: type[View]) -> View:
+    '''One view of each kind per graph: the only place a view is constructed.'''
+    return cls(graph)

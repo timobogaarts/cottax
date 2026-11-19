@@ -4,7 +4,6 @@ and which are refused, the arithmetic SLSQP is handed, and a real IDF through th
 written by name, given as a value, computed by a node, and written out. Float64.
 '''
 
-from cottax.core import dependencies
 import json
 
 import jax
@@ -285,9 +284,9 @@ def test_a_key_of_another_architecture_is_refused_when_it_runs():
 def test_a_scaling_is_a_read_of_the_graph_and_drawn():
     ran = study(contracts=cx.SCALED)
     place = flat.place(cx.scales('OPT'))
-    assert place in dependencies(ran.graph).boundary_inputs
+    assert place in ran.graph.boundary_inputs
     assert 'scales' in cx.render_xdsm_svg(ran)
-    assert place not in dependencies(study().graph).boundary_inputs
+    assert place not in study().graph.boundary_inputs
 
 
 def test_a_node_may_compute_the_scaling():

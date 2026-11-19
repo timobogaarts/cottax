@@ -1,6 +1,6 @@
 '''
 The nesting read with the edges: the cycle a problem is on, what one iteration of it runs,
-blocks contracted into boxes. A view of a well-formed graph, as `dependencies` is.
+blocks contracted into boxes. A view of a valid graph (`View`), as `Dependencies` is.
 '''
 
 from collections.abc import Iterable, Iterator
@@ -8,11 +8,11 @@ from dataclasses import replace
 
 from functools import cached_property
 
-from ..frozen import Frozen, OrderedMap, Violation, first, remembered
+from ..frozen import OrderedMap, Violation, first, remembered
 from .definition import NodeDefinition
-from .dependencies import dependencies
-from .valid import Valid, ValidNesting
-from .graph import Graph
+from .dependencies import Dependencies
+from .valid import Valid
+from .graph import Graph, View
 from .kinds import FunctionalNode, owns_inside
 from .places import Label, Place
 
@@ -32,7 +32,7 @@ def check_nesting_ends_on_one_cycle(g: 'Graph') -> Iterator[Violation]:
     a nested pair apart and `Unnest` it after. `Executable` asks it.
     '''
     for inner, outer in g.within.items():
-        if inner not in nesting(g).cycle_of(outer):
+        if inner not in Nesting.of(g).cycle_of(outer):
             yield Unreachable(inner, outer)
 
 
@@ -59,15 +59,14 @@ def check_blocks_own_something(g: 'Graph', blocks: Iterable[Iterable]) -> Iterat
 
 # ---------------------------------------------------------------- the view
 
-class Nesting[N: Label, V: Place](Frozen):
+class Nesting[N: Label, V: Place](View[N, V]):
     '''
-    The cycles of a well-formed graph's problems, read with the nesting. Built from a graph
-    proved `ValidNesting`: getting the view is the proof.
+    The cycles of a valid graph's problems, read with the nesting. Asks `Valid`, both
+    halves: the cycles are read off the dependencies of each level. Getting the view is
+    the proof.
     '''
 
-    graph : Graph[N, V]
-
-    checks = (ValidNesting.check,)
+    checks = (Valid.check,)
 
     @cached_property
     def outermost(self) -> tuple[N, ...]:
@@ -92,12 +91,6 @@ class Nesting[N: Label, V: Place](Frozen):
             at = self.graph.within.get(at)
         return tuple(chain)
 
-    @cached_property
-    def _levels(self) -> dict[frozenset, Graph[N, V]]:
-        '''The graph with each set of problems taken out, built once per set: the problems
-        nested alike share their level, and its dependencies.'''
-        return {}
-
     def cycle_of(self, problem: N) -> tuple[N, ...]:
         '''
         The cycle `problem` is on, and itself: its strongly connected component in the
@@ -105,10 +98,7 @@ class Nesting[N: Label, V: Place](Frozen):
 
         S_p = {k ∊ N \\ A(p) : k ~ p in N \\ A(p)}   (~ in the induced subgraph, not in G)
         '''
-        out = frozenset(self.enclosing(problem))
-        if (level := self._levels.get(out)) is None:
-            level = self._levels[out] = self.graph.subgraph(set(self.graph.nodes) - out)
-        deps  = dependencies(level)
+        deps  = Dependencies.of(_level(self.graph, frozenset(self.enclosing(problem))))
         below = set(deps.descendants([problem]))
         return tuple(n for n in deps.ancestors([problem]) if n in below)
 
@@ -150,11 +140,11 @@ class Nesting[N: Label, V: Place](Frozen):
         return result
 
 
-
 @remembered
-def nesting[N: Label, V: Place](graph: Graph[N, V]) -> Nesting[N, V]:
-    '''The nesting view of `graph`, proving it `ValidNesting`; one per graph.'''
-    return Nesting(graph)
+def _level[N: Label, V: Place](graph: Graph[N, V], out: frozenset[N]) -> Graph[N, V]:
+    '''The graph with the problems `out` taken out, once per set: the problems nested alike
+    share their level, and so its dependencies.'''
+    return graph.subgraph(set(graph.nodes) - out)
 
 
 # ----------------------------------------------------------------- violation finals

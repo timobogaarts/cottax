@@ -9,7 +9,7 @@ a structure (`at`), is the caller's.
 from collections.abc import Callable, Collection, Iterable, Mapping
 from typing import Any, NamedTuple
 
-from ...core import Label, Graph, Place, Rules, answer_for_places, comparable, dependencies
+from ...core import Label, Graph, Place, Rules, answer_for_places, comparable
 from ...core.driven import role_slots
 from ...core import conditions, is_driven
 from ...core.driven import PerUnknown
@@ -51,7 +51,7 @@ def slots[N: Label, V: Place](graph: Graph[N, V], at: Callable[[V], V]) -> tuple
                           for r in graph[n].driver.contract.takes)
     return (*(Slot(place, role, problem, unknown, None if unknown is None else at(unknown))
               for role in roles for place, problem, unknown in role_slots(graph, role)),
-            *(Slot(p, Inputs, at=p) for p in dependencies(graph).boundary_inputs))
+            *(Slot(p, Inputs, at=p) for p in graph.boundary_inputs))
 
 
 def read_from[N: Label, V: Place](graph: Graph[N, V], table: tuple[Slot[V, N], ...],
@@ -63,7 +63,7 @@ def read_from[N: Label, V: Place](graph: Graph[N, V], table: tuple[Slot[V, N], .
     `None` gives nothing. Refused: a per-problem role, a role no driver takes.
     '''
     structure = answer_for_places(DataStructure, graph)
-    open_ = set(dependencies(graph).boundary_inputs)
+    open_ = set(graph.boundary_inputs)
     found = []
     for key, state in structures.items():
         if key is not Inputs and not issubclass(key, PerUnknown):
@@ -86,7 +86,7 @@ def unasked[N: Label, V: Place](graph: Graph[N, V], table: tuple[Slot[V, N], ...
     does not, the same structure given under both, is asked.
     '''
     structure = answer_for_places(DataStructure, graph)
-    open_ = set(dependencies(graph).boundary_inputs)
+    open_ = set(graph.boundary_inputs)
     held, asked = {}, set()
     for key, state in structures.items():
         ats = [s.at for s in table if s.key is key and s.place in open_]
@@ -136,7 +136,7 @@ class Assessed[N: Label, V: Place](Frozen):
 
     @property
     def _inputs(self) -> tuple[V, ...]:
-        return dependencies(self.nesting).boundary_inputs
+        return self.nesting.boundary_inputs
 
     @property
     def _proposed(self) -> dict[V, tuple[str, ...]]:

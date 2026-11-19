@@ -7,7 +7,7 @@ installed everywhere. What is tested is the seam these two share with the XDSMs:
 not that name.
 '''
 
-from cottax.core import dependencies
+from cottax.core import Dependencies
 
 import re
 import sys
@@ -301,8 +301,8 @@ def test_the_drawings_graph_is_not_the_algebras(sellar):
     # A caller may decorate what it is handed; the core's bare projection is never it.
     handed = networkx_graph(sellar)
     handed.nodes[N('obj')]['pos'] = (0, 0)
-    assert 'pos' not in dependencies(sellar)._nx_dependencies.nodes[N('obj')]
-    assert 'kind' not in dependencies(sellar)._nx_dependencies.nodes[N('obj')]
+    assert 'pos' not in Dependencies.of(sellar)._nx_dependencies.nodes[N('obj')]
+    assert 'kind' not in Dependencies.of(sellar)._nx_dependencies.nodes[N('obj')]
 
 
 def test_every_picture_draws_a_graph_a_plan_and_a_proved_graph_alike(sellar):

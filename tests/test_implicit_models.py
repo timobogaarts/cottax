@@ -4,7 +4,7 @@ stated over the models that compute its conditions; and `Drive` over a problem o
 language.
 '''
 
-from cottax.core import dependencies
+from cottax.core import Dependencies
 
 import math
 
@@ -59,7 +59,7 @@ def test_an_implicit_model_is_a_body_and_a_problem(sellar):
 
 def test_the_pair_is_a_coupled_block_with_a_problem(sellar):
     '''Implicitness is structural: nothing declares it, the cycle is it.'''
-    assert not dependencies(sellar).is_acyclic
+    assert not Dependencies.of(sellar).is_acyclic
     assert conditions(sellar.definitions) == (cx.absolute.node(cx.solve(N['disc1'])),)
     solve, _ = entries(sellar)
     assert isinstance(solve, Solve) and solve.problem == cx.absolute.node(cx.solve(N['disc1']))
@@ -131,8 +131,8 @@ def test_the_optimise_pairs_with_the_models_that_compute_its_conditions():
                          'margin': flat.function(margin, 'margin'),
                          'design': flat.optimise(minimise='cost', design=('R0', 'B0')).condition
                                    .join(flat.requirement('margin', Le))}).graph
-    assert dependencies(graph).components == ((n('cost'), n('margin'), n('design')),)
-    assert dependencies(graph).boundary_inputs == ()
+    assert Dependencies.of(graph).components == ((n('cost'), n('margin'), n('design')),)
+    assert graph.boundary_inputs == ()
 
 
 # ---------------------------------------------------------------- a problem of another language

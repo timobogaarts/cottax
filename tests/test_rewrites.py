@@ -14,7 +14,7 @@ from jax.tree_util import GetAttrKey
 from cottax.core.frozen import OrderedMap
 from cottax.relational import Min, Objective
 from cottax.core.plan import Cut, Insert, Plan, refusals
-from cottax.core import Condition, ConditionalNode, FunctionalNode, body_of, conditions, dependencies
+from cottax.core import Condition, ConditionalNode, FunctionalNode, body_of, conditions, Dependencies
 from cottax.core.driven import Assign, driven as with_driver
 from cottax.core import is_driven
 from cottax.core.driven import DriverContract
@@ -108,7 +108,7 @@ def looped():
 def opening(graph, var):
     '''`Cut(var, ..., HAT)` aimed at whatever closes the cycle -- what a caller writes.
     The cut's own tests are `test_core_ops.py`'s; here it is what a closure is made of.'''
-    return Cut(var, dependencies(graph).closing_readers(var), HAT)
+    return Cut(var, Dependencies.of(graph).closing_readers(var), HAT)
 
 
 def closure(graph, var, place=None):
@@ -133,12 +133,12 @@ def test_a_fixed_point_cut_is_one_node_and_stays_cyclic(looped):
     o = closure(looped, Y1)
     g = o(looped)
     assert names(g) == ['.d1', '.d2', '.obj', '^solve.y1']
-    assert not dependencies(g).is_acyclic
+    assert not Dependencies.of(g).is_acyclic
     assert conditions(g.definitions) == (o.at,)
     assert is_fixed_point(g[o.at].condition)
     assert g[o.at].condition.relations == (Relation(o.copies[0], Y1, Eq),)   # `^copy.y1 = y1`
     assert g[o.at].owns == o.copies and g[o.at].reads == o.vars
-    assert dependencies(body_of(g)).is_acyclic
+    assert Dependencies.of(body_of(g)).is_acyclic
 
 
 def test_the_closure_is_exactly_its_parts(looped):
@@ -156,7 +156,7 @@ def test_the_minted_names_follow_their_own_roots(looped):
     fp  = FixedPointCut((cut,), PROBLEM(NodePath(cut.var.segments)))
     assert cut.copy.spelling == '^guess.y1'
     assert fp.at.spelling == '^solve.y1'
-    assert dependencies(fp(looped)).owners[cut.copy] == fp.at
+    assert Dependencies.of(fp(looped)).owners[cut.copy] == fp.at
 
 
 def test_closure_repr(looped):
@@ -253,9 +253,9 @@ def test_combine_is_the_join_written_by_hand(two_problems):
 
 def test_combining_makes_one_component(two_problems):
     '''The whole point: the blocking follows, so nothing has to state it.'''
-    assert len(dependencies(two_problems).cycles) == 2
+    assert len(Dependencies.of(two_problems).cycles) == 2
     g = Combine(PROBLEM(N('mda')), (N('ha'), N('hb'),), RelationalCondition)(two_problems)
-    assert [[n.spelling for n in c] for c in dependencies(g).cycles] == [['.fa', '.fb', '^solve.mda']]
+    assert [[n.spelling for n in c] for c in Dependencies.of(g).cycles] == [['.fa', '.fb', '^solve.mda']]
 
 
 def test_combining_pulls_in_what_lies_between():
@@ -268,7 +268,7 @@ def test_combining_pulls_in_what_lies_between():
         N('hb')  : root_find((Y2,), (Z,)),
     }))
     h = Combine(PROBLEM(N('mda')), (N('ha'), N('hb'),), RelationalCondition)(g)
-    assert sorted(n.spelling for n in dependencies(h).cycles[0]) == ['.fa', '.fb', '.glue', '^solve.mda']
+    assert sorted(n.spelling for n in Dependencies.of(h).cycles[0]) == ['.fa', '.fb', '.glue', '^solve.mda']
 
 
 @pytest.fixture
@@ -427,7 +427,7 @@ def test_assign_derives_one_start_per_unknown(sellar):
 
     assert is_driven(node) and is_fixed_point(node.condition)
     assert node.driver.data == ((START(HAT(Y2)),),)
-    assert START(HAT(Y2)) in dependencies(g).boundary_inputs
+    assert START(HAT(Y2)) in g.boundary_inputs
 
 
 def test_assign_derives_nothing_for_a_driver_requiring_nothing(sellar):

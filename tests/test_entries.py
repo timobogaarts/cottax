@@ -5,7 +5,7 @@ every depth. A graph always has entries; a blocking exists where they are execut
 """
 
 from cottax.core import conditions
-from cottax.core import outline, dependencies
+from cottax.core import outline, Dependencies
 from proofs import recalled
 
 from itertools import permutations
@@ -82,10 +82,10 @@ def test_a_graph_has_entries_where_a_blocking_refuses(two_problems, cycle_nobody
                              (cycle_nobody_solves, 'no problem', Cycle)):
         with pytest.raises(ValueError, match=message):
             Executable.prove(g)
-        assert [e.nodes for e in entries(g)] == list(dependencies(g).components)
+        assert [e.nodes for e in entries(g)] == list(Dependencies.of(g).components)
         # No single problem is answered at the coupled component's level: nothing to
         # answer, or two with nothing saying which -- an entry that says so, not a refusal.
-        coupled, = [e for e in entries(g) if not dependencies(e.subgraph).is_acyclic]
+        coupled, = [e for e in entries(g) if not Dependencies.of(e.subgraph).is_acyclic]
         assert isinstance(coupled, kind)
 
 

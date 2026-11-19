@@ -16,7 +16,7 @@ from jax.tree_util import GetAttrKey, tree_flatten, tree_structure
 
 from cottax.core.frozen import OrderedMap
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core import FunctionalNode, dependencies
+from cottax.core import FunctionalNode, Dependencies
 from cottax.core.realisation import implemented
 import purposes
 from graphs import graph_of
@@ -53,8 +53,8 @@ def acyclic() -> Graph:
 
 def ask_everything(g: Graph) -> None:
     '''Answer enough queries that every layer of cache is warm.'''
-    dependencies(g).topological_order, g.variables, dependencies(g).boundary_outputs, dependencies(g).boundary_inputs
-    dependencies(g).components, dependencies(g).owners, g.readers
+    Dependencies.of(g).topological_order, g.variables, g.boundary_outputs, g.boundary_inputs
+    Dependencies.of(g).components, Dependencies.of(g).owners, g.readers
     g[N('d1')]                                  # OrderedMap._index, one level down
 
 
@@ -63,7 +63,7 @@ def ask_everything(g: Graph) -> None:
 def test_a_query_caches_on_the_instance_where_the_flatten_never_looks():
     g = acyclic()
     ask_everything(g)
-    assert 'owners' in dependencies(g).__dict__        # ordinary instance state, on the dependency view...
+    assert 'owners' in Dependencies.of(g).__dict__        # ordinary instance state, on the dependency view...
     leaves, treedef = tree_flatten(g)
     assert treedef == tree_flatten(acyclic())[1]       # ...that the pytree cannot see
     assert leaves  == tree_flatten(acyclic())[0]
@@ -160,16 +160,16 @@ def test_every_primed_answer_is_what_the_query_would_have_computed():
     graphs = [p.graph for p in plans]
     for g in graphs:
         # not `topological_order`: the ring is cyclic until the last cut lands
-        g.nodes, g.variables, dependencies(g).boundary_outputs, dependencies(g).boundary_inputs, dependencies(g).is_acyclic
-        dependencies(g).components, dependencies(g).owners, g.readers, g.owned_variables, g.read_variables
-    assert every_cached_answer_is_the_real_one(*plans, *graphs, *(dependencies(g) for g in graphs)) > len(graphs)
+        g.nodes, g.variables, g.boundary_outputs, g.boundary_inputs, Dependencies.of(g).is_acyclic
+        Dependencies.of(g).components, Dependencies.of(g).owners, g.readers, g.owned_variables, g.read_variables
+    assert every_cached_answer_is_the_real_one(*plans, *graphs, *(Dependencies.of(g) for g in graphs)) > len(graphs)
 
 
 def test_the_guard_catches_a_wrong_answer():
     g = acyclic()
-    dependencies(g).__dict__['owners'] = {}
+    Dependencies.of(g).__dict__['owners'] = {}
     with pytest.raises(AssertionError, match='Dependencies.owners'):
-        every_cached_answer_is_the_real_one(dependencies(g))
+        every_cached_answer_is_the_real_one(Dependencies.of(g))
 
 
 def test_a_prefilled_answer_leaves_the_treedef_and_equality_alone():
@@ -177,7 +177,7 @@ def test_a_prefilled_answer_leaves_the_treedef_and_equality_alone():
     invisible to everything but the query it answers.'''
     g      = acyclic()
     before = tree_structure(g)
-    view   = dependencies(g)
+    view   = Dependencies.of(g)
     view.__dict__['owners'] = dict(type(view).owners.func(view))
     assert tree_structure(g) == before
     assert g == acyclic() and hash(g) == hash(acyclic())

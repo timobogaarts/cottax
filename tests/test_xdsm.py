@@ -5,7 +5,7 @@ variable name.
 Names are built by hand from key entries, as in `test_algebra.py`.
 '''
 
-from cottax.core import dependencies
+from cottax.core import Dependencies
 
 import re
 
@@ -125,7 +125,7 @@ def test_a_problem_leads_the_block_it_drives(sellar):
 def test_the_blocking_is_the_solver_blocking(sellar):
     blocked = [b['steps'] for b in xdsm_struct(sellar, blocks=True)['blocks']]
     assert blocked == [[n.spelling for n in c]
-                       for c in dependencies(sellar).components]
+                       for c in Dependencies.of(sellar).components]
 
 
 def test_only_a_coupled_block_is_ringed_as_one(sellar):

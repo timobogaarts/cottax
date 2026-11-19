@@ -4,7 +4,7 @@ name or read from a caller's structures, as a surface's methods.'''
 from collections.abc import Callable, Iterator, Mapping
 from typing import Any
 
-from ...core import Label, Minting, Graph, Place, PlaceToPlace, Rules, owns_inside, dependencies
+from ...core import Label, Minting, Graph, Place, PlaceToPlace, Rules, owns_inside, Dependencies
 from ...core.driven import AssignByRule, role_slots
 from ...core import is_driven
 from ...core.driven import DriverContract, Role
@@ -64,7 +64,7 @@ class Results(Mapping):
         '''Where the problem owning the unknown written has `role`: at that unknown, or, per
         problem, at its one place.'''
         unknown = self._surface.place(written, role=f'out[{role.__name__}, ...]')
-        owner = dependencies(self._graph).owners.get(unknown)
+        owner = Dependencies.of(self._graph).owners.get(unknown)
         for place, problem, at in role_slots(self._graph, role):
             if problem == owner and at in (unknown, None):
                 return place
@@ -123,7 +123,7 @@ class Running(Part):
         holds that no run takes is asked of it too, and no refusal: `unread`, `overwritten`.
         '''
         declared, nesting = _model(model)
-        inputs = dependencies(nesting).boundary_inputs
+        inputs = nesting.boundary_inputs
         table = slots(nesting, self._at(nesting))
         given = [(p, v, 'the declaration') for p, v in (declared.given.items() if declared is not None else ())
                  if p in inputs]
@@ -146,11 +146,11 @@ class Running(Part):
         any. Refused with why it gives none.'''
         if key is Inputs:
             place = self.place(written, role='an input')
-            if place not in dependencies(graph).boundary_inputs:
+            if place not in graph.boundary_inputs:
                 raise NotAnInput((place,)).raised
             return place
         unknown = self.place(written, role=f'`values[{key.__name__}]`')
-        at = dependencies(graph).owners.get(unknown)
+        at = Dependencies.of(graph).owners.get(unknown)
         node = graph[at] if at is not None else None
         if node is None or unknown not in owns_inside(node):
             why = ('which nothing owns' if node is None else
@@ -161,7 +161,7 @@ class Running(Part):
             why = ('which no driver answers' if not is_driven(node) else
                    f'whose driver takes {", ".join(r.__name__ for r in node.driver.contract.takes)}')
             raise NotDriverData(at, key.__name__, why).raised
-        if found[0].place not in dependencies(graph).boundary_inputs:
+        if found[0].place not in graph.boundary_inputs:
             raise TakesNoValue(at, key.__name__, found[0].place).raised
         return found[0].place
 

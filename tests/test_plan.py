@@ -11,7 +11,7 @@ from jax.tree_util import GetAttrKey
 from cottax.core.frozen import OrderedMap
 from cottax.core.plan import ComposedOp, Delete, GraphOp, Insert, Plan
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core import FunctionalNode, dependencies
+from cottax.core import FunctionalNode
 from cottax.core.realisation import implemented
 from graphs import graph_of
 
@@ -66,7 +66,7 @@ def looped():
 def test_delete_leaves_what_a_survivor_read_unowned(sellar):
     g = Delete((N('d1'),))(sellar)
     assert names(g) == ['.con', '.d2', '.obj', '.z']
-    assert Y1 in dependencies(g).boundary_inputs
+    assert Y1 in g.boundary_inputs
 
 
 def test_insert_refuses_a_name_or_an_output_already_taken(looped):

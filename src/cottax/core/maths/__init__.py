@@ -23,10 +23,10 @@ rules                        (Rules, per_node_check: what is proved of a graph, 
 valid                        (Valid: ValidNesting, the nesting's three rules, and
  ||                           ValidDependencies, the bindings' two -- each view asks its own)
  \/
-dependencies                 (`dependencies(graph)`, the view of owners, edges, components,
+dependencies                 (`Dependencies.of(graph)`, the view of owners, edges, components,
  ||                           order, reachability)
  \/
-nesting                      (`nesting(graph)`, the view of the outermost problems, what each
+nesting                      (`Nesting.of(graph)`, the view of the outermost problems, what each
  ||                           is nested in, its cycle and interior; `contract`)
  \/
 executable                   (the structural proof, a group implying Valid: cycles,
@@ -44,10 +44,10 @@ from .definition import (
     Attribute, NodeDefinition, Renaming, relabelled,
 )
 from .kinds import AbstractConditionalNode, FunctionalNode, conditions, owns_inside
-from .graph import Graph
+from .graph import Graph, View
 from .rules import Rules, per_node_check
 from .valid import Valid, ValidDependencies, ValidNesting
-from .dependencies import Dependencies, dependencies
-from .nesting import Nesting, nesting
+from .dependencies import Dependencies
+from .nesting import Nesting
 from .executable import Executable, body_of, outline
 from .steps import Run, Solve, Step, steps

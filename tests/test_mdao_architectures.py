@@ -6,7 +6,7 @@ and MDF and IDF driven agree. Fixtures and helpers are `test_cutting.py`'s.
 '''
 
 from cottax.core import conditions
-from cottax.core import nesting
+from cottax.core import Nesting
 
 import pytest
 
@@ -58,7 +58,7 @@ def test_a_box_is_a_problem_with_its_body(implicit):
     The contraction is `Graph.contract`'s, bound at the block's first member in
     binding order, the body here.'''
     assert body_of_problem(implicit, N('h1')) == (D1,)
-    folded = nesting(implicit).contract(((N('h1'), D1), (N('h2'), D2)))
+    folded = Nesting.of(implicit).contract(((N('h1'), D1), (N('h2'), D2)))
     assert folded[D1] == FunctionalNode((V('z'), V('y2')), (V('r1'), V('y1')))
     assert folded[D2] == FunctionalNode((V('z'), V('y1')), (V('r2'), V('y2')))
     assert N('h1') not in folded and folded.nodes == (OPT, D1, D2, N('obj'), N('con'))
@@ -73,9 +73,9 @@ def test_disciplines_is_every_problem_of_the_graph_handed(implicit, through_expl
     '''Under an architecture the graph handed is the top's interior, so this is every
     implicit model beneath the top. `hA` is a box even though its loop runs through
     `A2`: the box is `A1` with `hA`, `A2` stays outside, and the loop is still cut.'''
-    assert Disciplines().folded(nesting(implicit).interior(OPT)) == H12
-    assert Disciplines().folded(nesting(through_explicit).interior(OPT)) == (N('hA'), N('hB'))
-    assert per_functional_cycle_boxed(nesting(through_explicit).interior(OPT), Disciplines(), GaussSeidel()) == \
+    assert Disciplines().folded(Nesting.of(implicit).interior(OPT)) == H12
+    assert Disciplines().folded(Nesting.of(through_explicit).interior(OPT)) == (N('hA'), N('hB'))
+    assert per_functional_cycle_boxed(Nesting.of(through_explicit).interior(OPT), Disciplines(), GaussSeidel()) == \
         ({V('a2'): (N('A1'),)},)
 
 
@@ -101,14 +101,14 @@ def test_a_fixed_point_folds_as_a_root_find_does():
         N('h2') : fixed_point((V('v2'),), (V('y2'),)),
         N('obj'): call(['z', 'y1', 'y2'], ['f']),
     }))
-    assert per_functional_cycle_boxed(nesting(g).interior(OPT), Disciplines(), GaussSeidel()) == ({V('y2'): (D1,)},)
+    assert per_functional_cycle_boxed(Nesting.of(g).interior(OPT), Disciplines(), GaussSeidel()) == ({V('y2'): (D1,)},)
     m = (Plan(g) + mdf()).graph
     assert dict(m.within) == {Y2_MDA: OPT, N('h1'): Y2_MDA, N('h2'): Y2_MDA}
     Executable.prove(m)
     lone = graph_of(OrderedMap({OPT: optimise(V('f'), (V('z'),)),
                              D1: call(['z', 'u'], ['v']), N('h'): fixed_point((V('v'),), (V('u'),)),
                              N('obj'): call(['z', 'u'], ['f'])}))
-    assert per_functional_cycle_boxed(nesting(lone).interior(OPT), Disciplines(), GaussSeidel()) == ()
+    assert per_functional_cycle_boxed(Nesting.of(lone).interior(OPT), Disciplines(), GaussSeidel()) == ()
 
 
 # ================================================================ the one kind of model
@@ -126,7 +126,7 @@ def test_a_loop_through_an_explicit_and_a_state_coupling_at_once(sellar):
         N('hB') : root_find((V('rb'),), (V('ub'),)),
         N('obj'): call(['z', 'b1'], ['f']),
     }))
-    (group,) = per_functional_cycle_boxed(nesting(mixed).interior(OPT), Disciplines(), GaussSeidel())
+    (group,) = per_functional_cycle_boxed(Nesting.of(mixed).interior(OPT), Disciplines(), GaussSeidel())
     assert group == {V('a2'): (N('A1'),), V('ub'): (N('A1'),)}
     for arch in (mdf(), idf(), sand()):
         Executable.prove((Plan(mixed) + arch).graph)
@@ -446,7 +446,7 @@ def test_a_problem_reached_only_through_a_requirement_is_combined():
         N('lim'): call(['y1'], ['c']),
         N('req'): requirement(V('c')),
     }))
-    assert per_functional_cycle_boxed(nesting(g).interior(OPT), Disciplines(), GaussSeidel()) == ()      # off the optimiser's cycle
+    assert per_functional_cycle_boxed(Nesting.of(g).interior(OPT), Disciplines(), GaussSeidel()) == ()      # off the optimiser's cycle
     out = (Plan(g) + mdf()).graph
     assert N('req') not in out
     assert Relation(V('c'), None, Le) in out[OPT].condition.relations
@@ -515,7 +515,7 @@ def test_two_closures_on_one_cycle_are_one_mda_under_mdf(implicit):
     class AtVariable(At):
         def __call__(self, cycle, group):
             return purposes.Closure()(NodePath(next(iter(group)).segments))
-    assert len(per_functional_cycle_boxed(nesting(implicit).interior(OPT), Disciplines(), OnePerVariable())) == 2
+    assert len(per_functional_cycle_boxed(Nesting.of(implicit).interior(OPT), Disciplines(), OnePerVariable())) == 2
     with pytest.raises(ValueError, match='two closures bound at'):
         Plan(implicit) + mdf(OnePerVariable())
     apart = FixedPointClosing(HAT, AtVariable())

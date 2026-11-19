@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import networkx as nx
 
-from ...core import Graph, Plan, dependencies
+from ...core import Graph, Plan, Dependencies
 from ...core import is_driven
 from ...core.realisation import is_implemented
 from .lookup import spelling
@@ -59,22 +59,22 @@ def networkx_graph(graph: Graph, *, boundary: bool = False) -> nx.DiGraph:
     `boundary`, one per boundary variable (`kind` `'free'` or `'sink'`); each edge carries
     the variables along it (`vars`). Refuses a boundary variable spelt as a node is.
     '''
-    owner = dependencies(graph).owners
+    owner = Dependencies.of(graph).owners
     g = nx.DiGraph()
     for name in graph.nodes:
         g.add_node(name, node=graph[name])
 
     if boundary:
         labels = {spelling(name) for name in graph.nodes}
-        clash  = {spelling(var) for var in dependencies(graph).boundary_inputs + dependencies(graph).boundary_outputs} & labels
+        clash  = {spelling(var) for var in graph.boundary_inputs + graph.boundary_outputs} & labels
         if clash:
             raise ValueError(
                 f'boundary variable(s) {sorted(clash)} are written the same as a node; '
                 f'they cannot both be drawn'
             )
-        for var in dependencies(graph).boundary_inputs:
+        for var in graph.boundary_inputs:
             g.add_node(var, kind='free', node=None)
-        for var in dependencies(graph).boundary_outputs:
+        for var in graph.boundary_outputs:
             g.add_node(var, kind='sink', node=None)
 
     for name in graph.nodes:
@@ -92,7 +92,7 @@ def networkx_graph(graph: Graph, *, boundary: bool = False) -> nx.DiGraph:
 
     if boundary:
         # One edge per sink, never merged: a sink vertex *is* one variable.
-        for var in dependencies(graph).boundary_outputs:
+        for var in graph.boundary_outputs:
             g.add_edge(owner[var], var, vars=(var,))
     return g
 

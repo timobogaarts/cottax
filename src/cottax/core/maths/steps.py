@@ -2,9 +2,9 @@
 
 from ..frozen import Frozen, checked, remembered
 from .executable import Executable
-from .dependencies import dependencies
+from .dependencies import Dependencies
 from .graph import Graph
-from .nesting import nesting
+from .nesting import Nesting
 from .places import Label, Place
 
 
@@ -36,14 +36,14 @@ def steps[N: Label, V: Place](graph: Graph[N, V]) -> tuple[Step[N, V], ...]:
     of its one outermost problem over the interior. Remembered on the graph, as its proofs
     are.
     '''
-    outer = set(nesting(graph).outermost)
+    outer = set(Nesting.of(graph).outermost)
     found : list[Step[N, V]] = []
-    for component in dependencies(graph).components:
+    for component in Dependencies.of(graph).components:
         if len(component) == 1:
             found.append(Run(component[0]))
         else:
             problem, = (p for p in component if p in outer)
-            interior = nesting(graph).interior(problem)
+            interior = Nesting.of(graph).interior(problem)
             Executable.prove(interior)
             found.append(Solve(problem, interior))
     return tuple(found)

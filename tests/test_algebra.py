@@ -12,7 +12,7 @@ from jax.tree_util import GetAttrKey
 
 from cottax.core.frozen import OrderedMap
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core import FunctionalNode, body_of, conditions, dependencies, nesting, Valid
+from cottax.core import FunctionalNode, body_of, conditions, Dependencies, Nesting, Valid
 from cottax.core.maths.nesting import BlockTooSmall, NodeInTwoBlocks, check_blocks_partition
 from cottax.core.realisation import implemented
 from cottax.relational import Eq, Relation, RelationalCondition
@@ -150,35 +150,35 @@ def test_a_graph_is_hashable(sellar):
 # ---------------------------------------------------------------- ordering
 
 def test_topological_order_is_dependency_order(chain):
-    assert names(dependencies(chain).topological_order) == ['.a', '.b', '.c']
+    assert names(Dependencies.of(chain).topological_order) == ['.a', '.b', '.c']
 
 
 def test_topological_order_raises_on_a_cycle_by_name(sellar):
     with pytest.raises(ValueError, match=r"\(NodePath\(\.d1\), NodePath\(\.d2\)\)"):
-        dependencies(sellar).topological_order
+        Dependencies.of(sellar).topological_order
 
 
 def test_condensation_groups_the_cycle(sellar):
-    assert [names(c) for c in dependencies(sellar).components] == [
+    assert [names(c) for c in Dependencies.of(sellar).components] == [
         ['.z'], ['.d1', '.d2'], ['.obj'], ['.con']]
 
 
 def test_condensation_of_an_acyclic_graph_is_a_topological_order(chain):
-    assert dependencies(chain).is_acyclic
-    assert [names(c) for c in dependencies(chain).components] == [['.a'], ['.b'], ['.c']]
+    assert Dependencies.of(chain).is_acyclic
+    assert [names(c) for c in Dependencies.of(chain).components] == [['.a'], ['.b'], ['.c']]
 
 
 def test_run_order_is_a_query(sellar):
     # Every node once, in dependency order -- what a drawing puts on its diagonal
     # (`sequencing.ordered_graph` rebinds a graph in it); the graph itself keeps binding order.
-    assert names(dependencies(sellar).components_order) == ['.z', '.d1', '.d2', '.obj', '.con']
+    assert names(Dependencies.of(sellar).components_order) == ['.z', '.d1', '.d2', '.obj', '.con']
 
 
 # ---------------------------------------------------------------- coupling
 
 def test_cycles_are_the_coupled_components(sellar):
-    assert [names(c) for c in dependencies(sellar).cycles] == [['.d1', '.d2']]
-    assert not dependencies(sellar).is_acyclic
+    assert [names(c) for c in Dependencies.of(sellar).cycles] == [['.d1', '.d2']]
+    assert not Dependencies.of(sellar).is_acyclic
 
 
 def test_a_node_may_not_read_what_it_owns():
@@ -192,46 +192,46 @@ def test_a_node_may_not_read_what_it_owns():
 # ---------------------------------------------------------------- reachability
 
 def test_reach_is_transitive(chain):
-    assert names(dependencies(chain).reach([V('a')])) == ['.c', '.b']       # binding order
+    assert names(Dependencies.of(chain).reach([V('a')])) == ['.c', '.b']       # binding order
 
 
 def test_owning_a_varying_variable_does_not_dirty_the_owner(chain):
     # The driven case: `b`'s value changes for reasons outside `b`, so `b` itself
     # need not re-run -- only what reads it.
-    assert names(dependencies(chain).reach([V('b')])) == ['.c']
+    assert names(Dependencies.of(chain).reach([V('b')])) == ['.c']
 
 
 def test_reach_reaches_round_a_cycle(sellar):
     # `d1` owns y1 and so is not dirtied directly, but `d2` reads y1 and `d1` reads
     # what `d2` owns.
-    assert names(dependencies(sellar).reach([V('y1')])) == ['.d1', '.d2', '.obj', '.con']
+    assert names(Dependencies.of(sellar).reach([V('y1')])) == ['.d1', '.d2', '.obj', '.con']
 
 
 def test_reach_rejects_a_name_that_is_not_a_variable(sellar):
     with pytest.raises(KeyError, match='nope'):
-        dependencies(sellar).reach([V('nope')])
+        Dependencies.of(sellar).reach([V('nope')])
 
 
 def test_ancestors_and_descendants_are_inclusive(sellar):
-    assert names(dependencies(sellar).ancestors([N('obj')])) == ['.z', '.d1', '.d2', '.obj']
-    assert names(dependencies(sellar).descendants([N('d1')])) == ['.d1', '.d2', '.obj', '.con']
+    assert names(Dependencies.of(sellar).ancestors([N('obj')])) == ['.z', '.d1', '.d2', '.obj']
+    assert names(Dependencies.of(sellar).descendants([N('d1')])) == ['.d1', '.d2', '.obj', '.con']
 
 
 def test_the_two_namespaces_do_not_meet_in_a_query(sellar):
     # A name that is not one is simply not in the graph, and no query may be lenient
     # about which namespace it was handed.
     with pytest.raises(KeyError, match='not node'):
-        dependencies(sellar).ancestors([V('obj')])
+        Dependencies.of(sellar).ancestors([V('obj')])
     with pytest.raises(KeyError, match='not variable'):
-        dependencies(sellar).reach([N('y1')])
+        Dependencies.of(sellar).reach([N('y1')])
 
 
 # ---------------------------------------------------------------- reduction
 
 def test_subgraph_leaves_severed_reads_as_unowned_inputs(sellar):
     sub = sellar.subgraph([N('obj')])
-    assert set(dependencies(sub).boundary_inputs) == {V('z'), V('y1'), V('y2')}
-    assert dependencies(sub).boundary_outputs == (V('f'),)
+    assert set(sub.boundary_inputs) == {V('z'), V('y1'), V('y2')}
+    assert sub.boundary_outputs == (V('f'),)
 
 
 def test_subgraph_rejects_an_unknown_node(sellar):
@@ -269,33 +269,33 @@ def test_the_body_drops_the_problem_and_leaves_what_it_owned_unowned():
     g = graph_of(OrderedMap({N('a'): call(['u'], ['r_u']), N('close'): problem}))
     assert names(conditions(g.definitions)) == ['.close']
     assert names(body_of(g).nodes) == ['.a']
-    assert dependencies(body_of(g)).boundary_inputs == (V('u'),)
+    assert body_of(g).boundary_inputs == (V('u'),)
 
 
 def test_closing_readers_is_the_set_that_closes_the_loop(sellar):
-    assert names(dependencies(sellar).closing_readers(V('y1'))) == ['.d2']
-    assert dependencies(sellar).closing_readers(V('f')) == ()
+    assert names(Dependencies.of(sellar).closing_readers(V('y1'))) == ['.d2']
+    assert Dependencies.of(sellar).closing_readers(V('f')) == ()
 
 
 def test_feedback_variables_are_the_ones_a_cut_could_name(sellar):
     # `y1` and `y2` close the d1/d2 loop; `z` feeds it and `f` hangs off it.
-    assert dependencies(sellar).feedback_variables == (V('y1'), V('y2'))
+    assert Dependencies.of(sellar).feedback_variables == (V('y1'), V('y2'))
 
 
 def test_an_acyclic_graph_has_no_feedback_variables(chain):
-    assert dependencies(chain).feedback_variables == ()
+    assert Dependencies.of(chain).feedback_variables == ()
 
 
 def test_a_feedback_variable_is_one_with_closing_readers(sellar):
     # The two halves of a cut: which variables, and for one of them which readers.
-    assert set(dependencies(sellar).feedback_variables) == {
-        var for var in sellar.owned_variables if dependencies(sellar).closing_readers(var)
+    assert set(Dependencies.of(sellar).feedback_variables) == {
+        var for var in sellar.owned_variables if Dependencies.of(sellar).closing_readers(var)
     }
 
 
 def test_closing_readers_needs_a_producer(sellar):
     with pytest.raises(KeyError, match='no producer'):
-        dependencies(sellar).closing_readers(V('z2'))
+        Dependencies.of(sellar).closing_readers(V('z2'))
 
 
 # ---------------------------------------------------------------- contraction
@@ -303,20 +303,20 @@ def test_closing_readers_needs_a_producer(sellar):
 def test_contract_is_the_quotient_by_the_blocks(sellar):
     '''One node per block, reading what the block reads from outside and owning what
     it owns, bound at the first member's place; the other members gone.'''
-    g = nesting(sellar).contract(((N('d2'), N('d1')),))
+    g = Nesting.of(sellar).contract(((N('d2'), N('d1')),))
     assert g.nodes == (N('z'), N('d1'), N('obj'), N('con'))
     assert g[N('d1')] == FunctionalNode((V('z'),), (V('y1'), V('y2')))     # y1 / y2 internal, not read
-    assert dependencies(g).is_acyclic
-    assert nesting(sellar).contract(()) == sellar
+    assert Dependencies.of(g).is_acyclic
+    assert Nesting.of(sellar).contract(()) == sellar
 
 
 def test_contract_coarsens_and_never_refines(sellar):
     '''A path through a box may appear where none was: `obj` and `con` in one box
     puts `con` downstream of `y2`, which it never read.'''
-    g = nesting(sellar).contract(((N('obj'), N('con')),))
+    g = Nesting.of(sellar).contract(((N('obj'), N('con')),))
     assert g[N('obj')] == FunctionalNode((V('z'), V('y1'), V('y2')), (V('f'), V('c')))
-    assert set(dependencies(g).descendants([N('d2')])) >= {N('obj')}
-    assert set(dependencies(sellar).descendants([N('d2')])) >= {N('obj'), N('con')}
+    assert set(Dependencies.of(g).descendants([N('d2')])) >= {N('obj')}
+    assert set(Dependencies.of(sellar).descendants([N('d2')])) >= {N('obj'), N('con')}
 
 
 def test_contract_refuses_a_short_block_a_node_in_two_blocks_and_an_unknown_one(sellar):
@@ -325,10 +325,10 @@ def test_contract_refuses_a_short_block_a_node_in_two_blocks_and_an_unknown_one(
     for short in ((N('d1'),), (N('d1'), N('d1')), ()):
         assert list(check_blocks_partition(sellar, (short,))) == [BlockTooSmall(short)]
         with pytest.raises(ValueError, match='is not two nodes'):
-            nesting(sellar).contract((short,))
+            Nesting.of(sellar).contract((short,))
     twice = ((N('d1'), N('d2')), (N('d2'), N('obj')))
     assert list(check_blocks_partition(sellar, twice)) == [NodeInTwoBlocks((N('d2'),))]
     with pytest.raises(ValueError, match='each in two blocks'):
-        nesting(sellar).contract(twice)
+        Nesting.of(sellar).contract(twice)
     with pytest.raises(KeyError, match='nope'):
-        nesting(sellar).contract(((N('d1'), N('nope')),))
+        Nesting.of(sellar).contract(((N('d1'), N('nope')),))

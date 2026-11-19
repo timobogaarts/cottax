@@ -4,13 +4,13 @@ execution's, not the maths': a value at a place is a run's input, not the graph'
 from collections.abc import Iterator
 from typing import Any
 
-from ...core import Graph, Place, dependencies
+from ...core import Graph, Place
 from ...core.frozen import Frozen, OrderedMap, Violation
 from .refusals import InputMissing, NotAPlace, OwnedGiven
 
 
 def check_every_input_given(g: 'GraphWithValues') -> Iterator[Violation]:
-    if missing := tuple(p for p in dependencies(g.graph).boundary_inputs if p not in g.values):
+    if missing := tuple(p for p in g.graph.boundary_inputs if p not in g.values):
         yield InputMissing(missing)
 
 

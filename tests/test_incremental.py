@@ -15,7 +15,7 @@ from typing import Any, NamedTuple
 import pytest
 from jax.tree_util import GetAttrKey, SequenceKey
 
-from cottax.core import Graph, Rename, Valid, ValidNesting, dependencies
+from cottax.core import Graph, Rename, Valid, ValidNesting, Dependencies
 from proofs import recalled
 from cottax.core.plan import ComposedOp, GraphOp, Nest, Primitive, Rebind, StagedOp, Unnest
 from cottax.consumers.architectures import Combine
@@ -390,19 +390,19 @@ QUERIES = ('nodes', 'owners', 'readers', 'owned_variables', 'read_variables',
 
 TUPLE_QUERIES = ('nodes', 'owned_variables', 'read_variables', 'variables', 'boundary_inputs', 'boundary_outputs')
 
-ON_THE_EDGES = {'owners', 'boundary_inputs', 'boundary_outputs'}
+ON_THE_EDGES = {'owners'}
 '''The queries the dependency view answers; the rest are read off the stored graph.'''
 
 
 def ask(g: Graph, name: str):
-    return getattr(dependencies(g) if name in ON_THE_EDGES else g, name)
+    return getattr(Dependencies.of(g) if name in ON_THE_EDGES else g, name)
 
 
 def ask_everything(g: Graph) -> None:
     '''Answer every query, so every layer of cache is warm.'''
     for name in QUERIES:
         ask(g, name)
-    dependencies(g).components, dependencies(g).is_acyclic, conditions(g.definitions)
+    Dependencies.of(g).components, Dependencies.of(g).is_acyclic, conditions(g.definitions)
 
 
 # ---------------------------------------------------------------- the result itself

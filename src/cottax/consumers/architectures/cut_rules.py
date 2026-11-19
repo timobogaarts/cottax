@@ -7,7 +7,7 @@ from abc import abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
 from functools import cached_property
 
-from ...core import FunctionalNode, Label, Graph, Place, Violation, dependencies, first
+from ...core import FunctionalNode, Label, Graph, Place, Violation, Dependencies, first
 from ...core.frozen import Frozen
 from .refusals import CycleTooLarge, KeyRepeats, NoRule, OrderMismatch, SeveralRules
 
@@ -42,7 +42,7 @@ def cuts_per_cycle[N: Label, V: Place](graph: Graph[N, V], rule: CutRule[N, V]
     bodies = graph.subgraph(n for n, d in graph.definitions.items()
                             if isinstance(d, FunctionalNode))
     return tuple((component, rule.to_cuts(bodies.subgraph(component)))
-                 for component in dependencies(bodies).components if len(component) > 1)
+                 for component in Dependencies.of(bodies).components if len(component) > 1)
 
 
 def per_functional_cycle[N: Label, V: Place](graph: Graph[N, V], rule: CutRule[N, V]
@@ -55,7 +55,7 @@ def per_functional_cycle[N: Label, V: Place](graph: Graph[N, V], rule: CutRule[N
 
 def coupling_reads[N: Label, V: Place](graph: Graph[N, V]) -> ToCut[N, V]:
     '''Every read of every variable owned in the graph handed, holding nothing back.'''
-    return {var: readers for var in dependencies(graph).owners if (readers := graph.readers.get(var, ()))}
+    return {var: readers for var in Dependencies.of(graph).owners if (readers := graph.readers.get(var, ()))}
 
 
 def gauss_seidel[N: Label, V: Place](graph: Graph[N, V],
@@ -65,7 +65,7 @@ def gauss_seidel[N: Label, V: Place](graph: Graph[N, V],
     at = {n: i for i, n in enumerate(order)}
     out: dict[V, tuple[N, ...]] = {}
     for var, readers in coupling_reads(graph).items():
-        if back := tuple(r for r in readers if at[r] < at[dependencies(graph).owners[var]]):
+        if back := tuple(r for r in readers if at[r] < at[Dependencies.of(graph).owners[var]]):
             out[var] = back
     return out
 
@@ -88,7 +88,7 @@ def minimal_feedback_order[N: Label, V: Place](graph: Graph[N, V],
         mask = 0
         for reader in readers:
             mask |= 1 << index[reader]
-        owned[index[dependencies(graph).owners[var]]].append(mask)
+        owned[index[Dependencies.of(graph).owners[var]]].append(mask)
     best: list = [None] * (1 << n)          # (cost, last node) per subset placed as a prefix
     best[0] = (0, -1)
     for subset in range(1 << n):

@@ -2,7 +2,7 @@
 is no implicit model; offers its closing, `FixedPointClosing`, each group of cuts closed by a
 `FixedPointCut`.'''
 
-from ...core import Cut, FunctionalNode, Label, Place, PlaceToPlace, Violation, dependencies
+from ...core import Cut, FunctionalNode, Label, Place, PlaceToPlace, Violation, Dependencies
 from ...consumers.architectures.interface_types import ToCut
 from ...core.frozen import answers, choice
 from ...consumers.architectures.interface import Closing, ModelReading
@@ -20,7 +20,7 @@ class RelationalModel(ModelReading):
     join.'''
 
     def not_implicit(self, graph, problem):
-        node, owners = graph[problem], dependencies(graph).owners
+        node, owners = graph[problem], Dependencies.of(graph).owners
         if not is_equalities(node.condition):
             return (NotEqualities(str(problem)),)
         if off := tuple(c for c in node.reads_inside
@@ -32,7 +32,7 @@ class RelationalModel(ModelReading):
         return ()
 
     def body(self, graph, problem):
-        owners = dependencies(graph).owners
+        owners = Dependencies.of(graph).owners
         return tuple(dict.fromkeys(owners[c] for c in graph[problem].reads_inside if c in owners))
 
     def combines_as(self, condition):

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Sequence
 from itertools import chain
-from ...core import Graph, dependencies
+from ...core import Graph, Dependencies
 from ...core import Plan
 from ...core import is_driven
 from ...core import Label, Place
@@ -152,7 +152,7 @@ def xdsm_struct(
     else:
         # the diagonal in binding order, each component's problems moved to its front
         names = problems_first(
-            graph.nodes, dependencies(graph).components, lambda n: problem_type_of(graph[n]) is not None,
+            graph.nodes, Dependencies.of(graph).components, lambda n: problem_type_of(graph[n]) is not None,
         ) if problem_first else list(graph.nodes)
 
     def step(name: Label) -> str:
@@ -173,7 +173,7 @@ def xdsm_struct(
         'reads'   : {step(n): list(dict.fromkeys(var(v) for v in graph[n].reads))
                      for n in names},
         'writes'  : {step(n): [var(v) for v in graph[n].owns] for n in names},
-        'producer': {var(v): step(owner) for v, owner in dependencies(graph).owners.items()},
+        'producer': {var(v): step(owner) for v, owner in Dependencies.of(graph).owners.items()},
         'shown_steps': {step(n): shown(n, formatter) for n in names},
         'shown_vars' : {var(v): shown(v, formatter) for v in graph.variables},
         'problem_types'  : {step(n): s for n in names

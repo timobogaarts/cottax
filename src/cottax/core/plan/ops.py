@@ -12,7 +12,7 @@ from ..maths.definition import (
     Attribute, NodeDefinition, Renaming,
 )
 from ..frozen import AbstractClassVar, OrderedMap, Violation, name_of
-from ..maths.dependencies import dependencies
+from ..maths.dependencies import Dependencies
 from ..maths.graph import Graph
 from ..maths.places import Label, Place, PlaceToPlace
 from .primitive import Redefine
@@ -87,7 +87,7 @@ def check_readers(op: 'Cut') -> Iterator[Violation]:
 def check_cuts_a_produced_place(op: 'Cut', graph: Graph) -> Iterator[Violation]:
     '''`var` is produced (a boundary input has nothing to close the cut against), and its
     copy is not in use (a second cut would add readers to the first copy).'''
-    owners = dependencies(graph).owners
+    owners = Dependencies.of(graph).owners
     if op.var not in owners:
         yield NotProduced(op.var)
     elif op.copy in owners or op.copy in graph.readers:

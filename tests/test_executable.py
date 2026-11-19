@@ -4,8 +4,8 @@
 Names are built by hand from key entries, as everywhere below the declaration surface.
 '''
 
-from cottax.core import nesting
-from cottax.core import Rules, per_node_check, steps, dependencies
+from cottax.core import Nesting
+from cottax.core import Rules, per_node_check, steps, Dependencies
 from proofs import recalled
 
 import pytest
@@ -335,7 +335,7 @@ def test_the_subgraphs_are_one_pass_over_the_parent(two_problems):
     '''
     subs = [e.subgraph for e in entries(two_problems)]
 
-    assert [s.nodes for s in subs] == list(dependencies(two_problems).components)
+    assert [s.nodes for s in subs] == list(Dependencies.of(two_problems).components)
     assert [n for s in subs for n in s.nodes] == sorted(
         (n for s in subs for n in s.nodes), key=two_problems.nodes.index)
     assert {n for s in subs for n in s.nodes} == set(two_problems.nodes)
@@ -384,7 +384,7 @@ def test_entries_are_runs_and_flat_solves_where_nothing_is_nested(two_problems):
     answers is a `Run`, and a `Solve` with nothing nested iterates its body, whose
     entries are runs.'''
     g = two_problems
-    assert len(entries(g)) == len(dependencies(g).components)
+    assert len(entries(g)) == len(Dependencies.of(g).components)
     assert [[x.nodes for x in entries(e.interior)] if isinstance(e, Solve) else None for e in entries(g)] == [
         [(n,) for n in e.nodes if n != e.problem] if isinstance(e, Solve) else None
         for e in entries(g)]
@@ -448,11 +448,11 @@ def test_a_problem_in_no_cycle_of_its_block_cannot_be_answered_there():
 
 def test_enclosing_walks_up_the_forest(mdf):
     '''`enclosing(q)` is every problem `q` is nested in, empty before anything is nested.'''
-    assert nesting(mdf).enclosing(N('opt')) == () and nesting(mdf).enclosing(MDA) == ()
+    assert Nesting.of(mdf).enclosing(N('opt')) == () and Nesting.of(mdf).enclosing(MDA) == ()
     nested = (Plan(mdf) + Nest(MDA, N('opt'))).graph
-    assert nesting(nested).enclosing(MDA) == (N('opt'),) and nesting(nested).enclosing(N('opt')) == ()
+    assert Nesting.of(nested).enclosing(MDA) == (N('opt'),) and Nesting.of(nested).enclosing(N('opt')) == ()
     with pytest.raises(ValueError, match='owns nothing inside'):
-        nesting(nested).enclosing(N('D1'))
+        Nesting.of(nested).enclosing(N('D1'))
 
 
 def test_a_level_exists_only_where_a_statement_encloses_another(mdf):

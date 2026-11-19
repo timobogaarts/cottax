@@ -10,7 +10,7 @@ empty listed.
 
 from toy_places import Segmented
 from cottax.core import Place
-from cottax.core import dependencies
+from cottax.core import Dependencies
 
 from dataclasses import dataclass
 import math
@@ -354,7 +354,7 @@ class ZeroModel(ModelReading):
     def combines_as(self, condition):       return None
 
     def body(self, graph, problem):
-        owners = dependencies(graph).owners
+        owners = Dependencies.of(graph).owners
         return tuple(dict.fromkeys(owners[c] for c in graph[problem].reads_inside))
 
 

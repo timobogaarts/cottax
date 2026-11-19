@@ -7,7 +7,7 @@ types said -- and two things they could not: a condition node whose unknowns are
 yet, and one that mixes an equality with an inequality.
 """
 
-from cottax.core import dependencies
+from cottax.core import Dependencies
 
 import pytest
 from jax.tree_util import DictKey
@@ -410,7 +410,7 @@ def test_drawing_blocking_and_pruning_are_all_fine():
     g = graph_with(stated(Relation(v('r'), None, Eq)))
     assert tuple(e.nodes for e in entries(g)) == ((n('m'),), (n('c'),))
     assert xdsm_struct(g)['problem_types'] == {'c': 'stated'}
-    assert dependencies(g).ancestors((dependencies(g).owners[v('cost')],)) == (n('m'),)
+    assert Dependencies.of(g).ancestors((Dependencies.of(g).owners[v('cost')],)) == (n('m'),)
 
 
 def test_deleting_it_is_how_a_graph_asserting_nothing_runs():

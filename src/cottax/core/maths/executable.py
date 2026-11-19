@@ -6,10 +6,10 @@ of a graph and remembered on it.
 
 from collections.abc import Iterator
 
-from .dependencies import dependencies
+from .dependencies import Dependencies
 from .valid import Valid
 from .graph import Graph
-from .nesting import check_nesting_ends_on_one_cycle, nesting
+from .nesting import check_nesting_ends_on_one_cycle, Nesting
 from .kinds import AbstractConditionalNode, owns_inside
 from .places import Label, Place
 from ..frozen import Violation
@@ -62,10 +62,10 @@ def check_body_is_dag(g: Graph) -> Iterator[Violation]:
 
     |S_k| = 1  ∀ S_k ∊ SCC[G \\ N_P]
     '''
-    for cycle in dependencies(body_of(g)).cycles:
-        held = [p for p in _problems(g) if set(cycle) <= set(nesting(g).cycle_of(p))]
+    for cycle in Dependencies.of(body_of(g)).cycles:
+        held = [p for p in _problems(g) if set(cycle) <= set(Nesting.of(g).cycle_of(p))]
         if held:
-            yield StillCyclic(max(held, key=lambda p: len(nesting(g).enclosing(p))), cycle)
+            yield StillCyclic(max(held, key=lambda p: len(Nesting.of(g).enclosing(p))), cycle)
         else:
             yield NoProblem(cycle)
 
@@ -85,7 +85,7 @@ def check_one_encloser_per_level(g: Graph) -> Iterator[Violation]:
     '''
     ps = set(_problems(g))
     for q in _problems(g):
-        cycle    = nesting(g).cycle_of(q)
+        cycle    = Nesting.of(g).cycle_of(q)
         siblings = tuple(p for p in cycle if p in ps and g.within.get(p) == g.within.get(q))
         if len(siblings) > 1 and siblings[0] == q:                  # said once, by the first
             yield SeveralOutermost(cycle, siblings)
@@ -102,11 +102,11 @@ def check_all_conditions_on_cycle(g: Graph) -> Iterator[Violation]:
     unknown can move it. A read nothing produces at all (a boundary input) is one.
     '''
     for p in _problems(g):
-        cycle = nesting(g).cycle_of(p)
+        cycle = Nesting.of(g).cycle_of(p)
         d     = g.definitions[p]
         if len(cycle) == 1:
             yield OutsideCycle(p, tuple(d.owns_inside))
-        elif constant := tuple(v for v in d.reads_inside if dependencies(g).owners.get(v) not in cycle):
+        elif constant := tuple(v for v in d.reads_inside if Dependencies.of(g).owners.get(v) not in cycle):
             yield Constant(p, constant)
 
 
@@ -118,8 +118,8 @@ def check_other_reads_off_cycle(g: Graph) -> Iterator[Violation]:
     '''
     for p in _problems(g):
         d    = g.definitions[p]
-        held = set(nesting(g).cycle_of(p))
-        if inside := tuple(v for v in d.reads_outside if dependencies(g).owners.get(v) in held):
+        held = set(Nesting.of(g).cycle_of(p))
+        if inside := tuple(v for v in d.reads_outside if Dependencies.of(g).owners.get(v) in held):
             yield ReadInsideCycle(p, inside)
 
 
@@ -131,7 +131,7 @@ def check_other_owns_off_cycle(g: Graph) -> Iterator[Violation]:
     readers = g.readers
     for p in _problems(g):
         d    = g.definitions[p]
-        held = set(nesting(g).cycle_of(p))
+        held = set(Nesting.of(g).cycle_of(p))
         if inside := [(v, r) for v in d.owns_outside
                       for r in readers.get(v, ()) if r in held]:
             yield OwnReadInsideCycle(p, tuple(v for v, _ in inside), tuple(r for _, r in inside))
@@ -149,13 +149,13 @@ class Executable(Valid):
 def outline(g: Graph) -> str:
     '''The top level in one line: each component in dependency order, a component
     answered by an outermost encloser as `solve(problem)[members]`, one node bare.'''
-    outer = set(nesting(g).outermost)
+    outer = set(Nesting.of(g).outermost)
     def one(component) -> str:
         members = ', '.join(str(n) for n in component)
         if held := [p for p in component if p in outer]:
             return f'solve({", ".join(str(p) for p in held)})[{members}]'
         return f'[{members}]' if len(component) > 1 else members
-    return ' -> '.join(one(c) for c in dependencies(g).components) or '-'
+    return ' -> '.join(one(c) for c in Dependencies.of(g).components) or '-'
 
 
 # ----------------------------------------------------------------- violation finals

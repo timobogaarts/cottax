@@ -148,8 +148,8 @@ def test_core_refusals_holds_every_kind_the_maths_defines():
 
 REMEMBERED = {
     ('cottax.core.maths.rules', '_satisfies'),
-    ('cottax.core.maths.dependencies', 'dependencies'),
-    ('cottax.core.maths.nesting', 'nesting'),
+    ('cottax.core.maths.graph', '_view'),
+    ('cottax.core.maths.nesting', '_level'),
     ('cottax.core.maths.steps', 'steps'),
 }
 '''Every function `remembered` on a value, by module: what a value keeps besides its fields
@@ -192,6 +192,29 @@ def test_what_is_remembered_on_a_value_is_listed_in_one_place():
             misuse[module] = other
     assert misuse == {}
     assert found == REMEMBERED
+
+
+def test_a_view_is_built_only_by_of():
+    '''A `View` is got with `View.of`, which keeps one per graph: nowhere in `src` is a view
+    class called directly -- only `_view`, in `graph.py`, builds one.'''
+    from cottax.core import View
+    for m in MODULES:
+        importlib.import_module(m)
+    def every(cls):
+        for sub in cls.__subclasses__():
+            yield sub
+            yield from every(sub)
+    views = {c.__name__ for c in every(View)}
+    src = pathlib.Path(__file__).parent.parent / 'src'
+    built = {}
+    for path in src.rglob('*.py'):
+        if path.name == 'graph.py' and path.parent.name == 'maths':
+            continue
+        for node in ast.walk(ast.parse(path.read_text())):
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                    and node.func.id in views):
+                built.setdefault(str(path.relative_to(src)), []).append(node.lineno)
+    assert views >= {'Dependencies', 'Nesting'} and built == {}
 
 
 def test_a_name_the_core_door_gives_is_imported_from_it():

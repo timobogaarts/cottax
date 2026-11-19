@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 from collections.abc import Callable, Iterable, Mapping, Sequence
 
-from ...core import Graph, Label, dependencies
+from ...core import Graph, Label, Dependencies
 from ...core import is_driven
 from .lookup import minted_from, namespace_of
 from .sequencing import Block, graph_drawn, ordered_graph, walk
@@ -174,7 +174,7 @@ def matrix_struct(graph, *, order: str | Sequence[Label] = 'structure',
                      'minted': minted_from(n) is not None, 'depth': depth[n],
                      'reads': reads, 'nr': nr, 'writes': writes, 'nw': nw})
 
-    owners = dependencies(g).owners
+    owners = Dependencies.of(g).owners
     flows: dict[tuple[int, int], list] = {}
     for n in names:
         for v in dict.fromkeys(g[n].reads):

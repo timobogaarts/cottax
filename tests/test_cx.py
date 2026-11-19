@@ -5,7 +5,7 @@ tree.
 '''
 
 from cottax.core import conditions
-from cottax.core import dependencies
+from cottax.core import Dependencies
 
 import dataclasses
 import enum
@@ -612,7 +612,7 @@ def test_a_fixed_point_cut_closes_every_cut_at_one_problem():
     out = (Plan(explicit) + op).graph
     assert op.at == cx.absolute.node(N.mda)
     assert out[op.at].condition.unknowns == (cx.absolute.place(cx.copy(V['y1'])), cx.absolute.place(cx.copy(V['y2'])))
-    assert dependencies(out).is_acyclic is False and out[n('disc2')].reads[-1] == cx.absolute.place(cx.copy(V['y1']))
+    assert Dependencies.of(out).is_acyclic is False and out[n('disc2')].reads[-1] == cx.absolute.place(cx.copy(V['y1']))
 
 
 

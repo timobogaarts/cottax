@@ -9,7 +9,7 @@ from collections.abc import Iterator, Sequence
 from functools import cached_property
 
 from ...core.frozen import AbstractVar, Frozen, OrderedMap
-from ...core import Plan, Label, Graph, body_of, conditions, dependencies, nesting
+from ...core import Plan, Label, Graph, body_of, conditions, Dependencies, Nesting
 
 
 def graph_drawn(handed: Graph | Plan) -> Graph:
@@ -99,14 +99,14 @@ def entries(g: Graph) -> tuple[Entry, ...]:
     binding order.
     '''
     out : list[Entry] = []
-    for component in dependencies(g).components:
+    for component in Dependencies.of(g).components:
         sub   = g.subgraph(component)
-        found = nesting(sub).outermost
+        found = Nesting.of(sub).outermost
         if len(found) > 1:
             out.append(Unresolved(sub, found))
         elif found:
             problem, = found
-            out.append(Solve(sub, problem, nesting(sub).interior(problem)))
+            out.append(Solve(sub, problem, Nesting.of(sub).interior(problem)))
         else:
             # a component of one node is acyclic (a node may not read what it owns);
             # of more it is a cycle, exactly
@@ -145,7 +145,7 @@ class Block(Frozen):
     @property
     def solved(self) -> bool:
         '''Whether it contains a cycle: a solve ring, else a run.'''
-        return not dependencies(self.entry.subgraph).is_acyclic
+        return not Dependencies.of(self.entry.subgraph).is_acyclic
 
 
 def walk(graph: Graph) -> tuple[Block, ...]:
@@ -156,7 +156,7 @@ def walk(graph: Graph) -> tuple[Block, ...]:
     def blocks(g: Graph, depth: int, open_: tuple[Label, ...]) -> Iterator[Block]:
         # `open_`: the outermost problems of the grey ring directly around `g`, if any
         for entry in entries(g):
-            ringed = isinstance(entry, Solve) and not dependencies(entry.subgraph).is_acyclic
+            ringed = isinstance(entry, Solve) and not Dependencies.of(entry.subgraph).is_acyclic
             block  = Block(entry, depth, ringed and entry.problem in open_)
             yield block
             if block.held is not None:
@@ -172,7 +172,7 @@ def draws_feedback(order: Sequence[Label], subgraph: Graph) -> bool:
     Whether some node in `order` reads a variable a later one owns: an edge drawn above
     the diagonal.
     '''
-    at, owners = {name: i for i, name in enumerate(order)}, dependencies(subgraph).owners
+    at, owners = {name: i for i, name in enumerate(order)}, Dependencies.of(subgraph).owners
     return any(at[owner] > i
                for i, name in enumerate(order)
                for var in subgraph[name].reads
@@ -200,7 +200,7 @@ def sequence(graph: Graph) -> tuple[Label, ...]:
             outside_body = [n for n in entry.nodes if n not in body.definitions]
             order        = [n for n in entry.nodes if n in body.definitions]
             if order and draws_feedback(order, body):
-                order = list(dependencies(body).components_order)
+                order = list(Dependencies.of(body).components_order)
             out.extend((*outside_body, *order))
     return tuple(out)
 

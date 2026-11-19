@@ -13,7 +13,7 @@ from typing import Any, ClassVar
 
 from ...core import (
     AbstractConditionalNode, FunctionalNode, Label, kind_of, Graph, Place, Violation,
-    owns_inside, GraphOp, Nest, StagedOp, refusals, dependencies, nesting)
+    owns_inside, GraphOp, Nest, StagedOp, refusals, Dependencies, Nesting)
 from ...core.frozen import AbstractVar, Frozen, OrderedMap, answer, first
 from .closing import closed
 from .combine import Combine
@@ -59,7 +59,7 @@ def lies_inside[N: Label](graph: Graph[N, Any], inner: N, outer: N,
     '''`inner` and its whole body on `outer`'s cycle, and its body part of `outer`'s, which
     holds more: it can be placed nowhere but inside `outer`.'''
     own, other = set(bodies[inner]), set(bodies[outer])
-    return own < other and {inner, *own} <= set(nesting(graph).cycle_of(outer))
+    return own < other and {inner, *own} <= set(Nesting.of(graph).cycle_of(outer))
 
 
 def inside[N: Label](graph: Graph[N, Any], bodies: dict[N, tuple[N, ...]]) -> OrderedMap[N, N]:
@@ -278,7 +278,7 @@ class Architecture[N: Label, V: Place](StagedOp[N, V]):
         bound = set(closures)
         under = self.scope(opened)
         out = []
-        for cycle in dependencies(under).cycles:
+        for cycle in Dependencies.of(under).cycles:
             heads = [p for p in cycle if owns_inside(under[p]) and p not in under.within]
             out.append(OnCycle(tuple(p for p in heads if p in bound),
                                tuple(p for p in heads if p not in bound)))
@@ -310,8 +310,8 @@ def check_top_combinable(op: 'Monolithic', graph: Graph) -> Iterator[Violation]:
 
 def reached_requirements[N: Label, V: Place](graph: Graph[N, V], top: N) -> tuple[N, ...]:
     '''Every requirement whose conditions the design of `top` reaches.'''
-    reach  = set(dependencies(graph).reach(graph[top].owns_inside))
-    owners = dependencies(graph).owners
+    reach  = set(Dependencies.of(graph).reach(graph[top].owns_inside))
+    owners = Dependencies.of(graph).owners
     return tuple(r for r, d in graph.definitions.items()
                  if isinstance(d, AbstractConditionalNode) and not d.owns_inside
                  and all(owners.get(c) in reach for c in d.reads_inside))
@@ -335,12 +335,12 @@ class Monolithic[N: Label, V: Place](Architecture[N, V]):
         return (self.top,)
 
     def scope(self, graph: Graph[N, V]) -> Graph[N, V]:
-        return nesting(graph).interior(self.top)
+        return Nesting.of(graph).interior(self.top)
 
     def outside(self, graph: Graph[N, V]) -> tuple[GraphOp[N, V], ...]:
         '''The analysis over the graph with the top's cycle taken out, its ops applied
         to the whole: a cycle off the top's is a component of its own.'''
-        on  = set(nesting(graph).cycle_of(self.top))
+        on  = set(Nesting.of(graph).cycle_of(self.top))
         off = graph.subgraph(n for n in graph.nodes if n not in on)
         if not off.nodes:
             return ()
@@ -467,7 +467,7 @@ def cuts_per_cycle_boxed[N: Label, V: Place](graph: Graph[N, V], boxes: Boxes[N,
                                     if var in graph[m].reads)
                          for var, readers in group.items()}
                         for group in groups))
-                 for cycle, groups in cuts_per_cycle(nesting(graph).contract(blocks), rule))
+                 for cycle, groups in cuts_per_cycle(Nesting.of(graph).contract(blocks), rule))
 
 
 def per_functional_cycle_boxed[N: Label, V: Place](graph: Graph[N, V], boxes: Boxes[N, V],

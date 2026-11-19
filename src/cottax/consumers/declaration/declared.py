@@ -6,7 +6,7 @@ from typing import Any
 
 from ...core import (
     Condition, ConditionalNode, Label, NodeDefinition, Place, Violation,
-    Graph, GraphOp, Plan, dependencies, Valid,
+    Graph, GraphOp, Plan, Valid,
 )
 from ...core.frozen import Frozen, OrderedMap, answer, answers, checked
 from ..surface.interface import DerivedNames, Written
@@ -41,7 +41,7 @@ class Declared[N: Label, V: Place](Frozen):
     def using(self, values: Mapping[V, Any]) -> 'Declared[N, V]':
         '''The same, with a value given at each of `values`, replaced or added: each a
         boundary input of the graph.'''
-        inputs = set(dependencies(self.graph).boundary_inputs)
+        inputs = set(self.graph.boundary_inputs)
         if stray := tuple(p for p in values if p not in inputs):
             raise NotAnInput(stray).raised
         return dataclasses.replace(self, given=OrderedMap({**self.given, **values}))

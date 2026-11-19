@@ -424,6 +424,72 @@ order violations are reported in is unchanged). `Dependencies.checks` asks only
 `apply`'s `keeps`, `declare`, `read_json`, `Nesting`'s rewrites) asks `Valid`. Proving
 `Valid` caches both halves. `test_incremental`'s probe wraps `ValidNesting`'s first rule.
 
+**Next: `dependencies.py` (discussed 2026-11-18, nothing built).** Everything up to and
+including `valid.py` is committed and pushed (owner). Findings:
+- Caching is two-level: `dependencies(g)` is `@remembered` (one view per graph, proving
+  `ValidDependencies` at construction), each fact a `cached_property` on the view.
+- networkx is used only for SCC condensation + tie-broken topological sort and BFS
+  reachability (~30 lines of plain Python), held as a *mutable* `nx.DiGraph` inside a frozen
+  view (`test_cache` special-cases it; `test_visualization:304` pokes `_nx_dependencies`).
+  Outside core only `consumers/visualization` uses networkx. Proposal: the view's data is the
+  edges (`successors` / `predecessors` maps), Tarjan + Kahn (tie-break by binding order) and
+  BFS in plain Python; networkx becomes an optional `[viz]` extra.
+- Unused surface: `topological_order` (0 src uses), `feedback_variables` and `closing_readers`
+  (tests only; owner to decide), `is_acyclic` (= `not cycles`, 2 uses), `components_order`
+  (1). `boundary_inputs` / `boundary_outputs` need no edges or proof (set differences).
+- Use counts in src: `.owners` 16, `.boundary_inputs` 12, `.components` 5,
+  `.boundary_outputs` 3; `nesting(g).cycle_of` 9.
+- The view pattern (Frozen with `graph`, `checks = (Group.check,)`, cached properties, one
+  `@remembered` accessor) is the template for any further view; a generic keyed
+  `view(graph, cls)` was considered and not recommended.
+- Built (uncommitted): `boundary_inputs` / `boundary_outputs` moved from `Dependencies` to
+  `Graph` (`cached_property`, next to `read_variables`); 25 call sites `dependencies(x).boundary_*`
+  -> `x.boundary_*`. They no longer prove `ValidDependencies` on the way (they need no
+  edges). processax `process/graphs/kinds.py:137` already reads `graph.graph.boundary_inputs`.
+- Decided: no forwarding/patching of view facts onto `Graph`; bind `deps = dependencies(g)`
+  locally where several facts are read; a `UserFacingGraph` later only if really needed.
+- Open question from the owner: `dependencies(g).owners` is verbose; can the facts be
+  reached from the graph? See the answer given at the end of the 2026-11-18 session
+  (options: local binding, delegating free functions, forwarding on `Graph`, patching).
+
+**Built (uncommitted): views are `View`s, got with `.of`.** `graph.py` holds `View(Frozen)`
+(field `graph`; `View.of(graph)` -> `_view(graph, cls)`, `@remembered`, keyed by the class) next
+to `Graph`: a view is a pure function of the graph alone, cached on it. `Dependencies` and
+`Nesting` subclass it; the accessors `dependencies(g)` / `nesting(g)` are gone (call sites
+`Dependencies.of(g)` / `Nesting.of(g)`, ~48 src + ~118 tests). Inventory: `_view` replaces the
+two accessors (`_satisfies`, `_view`, `steps` remain). New `test_layering` rule: no view class
+is called directly in `src` outside `graph.py`. Rule recorded in `View`'s docstring: anything
+that also depends on values is not a view. `steps(g)` stays a remembered function (a tuple).
+processax uses neither accessor.
+
+**Next: split the views by what they read (agreed in discussion 2026-11-18, not built).**
+`Nesting` mixes three things: `outermost` / `enclosing` (need `ValidNesting` only),
+`cycle_of` / `interior` (need both halves: they build `Dependencies.of(subgraph)` inside,
+so the dependency proof is asked deep down), and `contract` (an edit, not a fact; one use,
+`architectures.py:470`). Its `_levels` dict is a mutable cache filled by `cycle_of` (the
+`_proofs` smell again). Plan:
+1+2 BUILT (uncommitted, 2026-11-19): no separate `Cycles` view -- no caller wants a valid
+   nesting without valid dependencies (every `Nesting.of` in src is on a `Valid` or
+   `Executable` graph). `Nesting.checks = (Valid.check,)` (honest: `cycle_of` / `interior`
+   read both halves). The `_levels` dict is gone: `@remembered def _level(graph, out:
+   frozenset)` in `nesting.py`, pure and keyed (inventory: `_satisfies`, `_view`, `_level`,
+   `steps`). `ValidNesting` kept as a group though no view asks it alone (owner: it makes
+   the two halves of `Valid` explicit); order unchanged.
+3. `contract(graph, blocks)` a free function (still proves `Valid` of its result).
+4. `Steps(View)`, `checks = (Executable.check,)`, holding today's `steps(g)` tuple (property
+   name open: `.all` or `.order`); `steps` loses `@remembered @checked`. Inventory then
+   `_satisfies`, `_view`, `_level`. `steps(` is used in 2 src, ~19 tests, 2 processax sites.
+5. `body_of` is not a nesting fact (never reads `within`): keep a free function next to the
+   executable rules, renamed `body(graph)`, defined as "without condition nodes"
+   (`conditions(graph.definitions)`) rather than "without nodes owning inside" -- equal on
+   every graph the executable rules accept. Not a `Graph` property: that would bring `kinds`
+   back into `graph.py`. 5 uses.
+Also still open for `dependencies.py`: trim `topological_order`, `is_acyclic`
+(owner's call on `feedback_variables`, `closing_readers`); networkx stays (judged not worth
+replacing; only the mutable `nx.DiGraph` in a frozen view is a minor smell). User-facing
+facts: per-layer facts mixins composed in the assembly (`About`), built when the first
+higher-layer view lands.
+
 **Still open from earlier:**
 - `body_of` into the nesting view (`nesting(g).body`), recommended.
 - Optional: `Solve` holding its interior's steps (one tree); `checked` precomputing its

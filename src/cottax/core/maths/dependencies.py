@@ -1,8 +1,5 @@
 '''
-What follows from owns meeting reads: who owns each place, the edges, the components and
-their order, reachability. A view of the graph, got by proving its dependencies valid (`ValidDependencies`):
-only then does each place have one producer and each read meet an
-owned place exactly, so an edge is a fact of the nodes and cannot disagree with them.
+Dependency view with queries that depend on that validity.
 '''
 
 from collections.abc import Iterable, Mapping
@@ -10,22 +7,20 @@ from functools import cached_property
 
 import networkx as nx
 
-from ..frozen import Frozen, remembered
+
 from .definition import NodeDefinition
-from .graph import Graph
+from .graph import Graph, View
 from .places import Label, Place
 from .valid import ValidDependencies, owners_of
 
 
 # ---------------------------------------------------------------- the view
 
-class Dependencies[N: Label, V: Place](Frozen):
+class Dependencies[N: Label, V: Place](View[N, V]):
     '''
     The edges of a well-formed graph, and everything read off them. Built from a graph
     proved `ValidDependencies`: getting the view is the proof, so no query is left unguarded.
     '''
-
-    graph : Graph[N, V]
 
     checks = (ValidDependencies.check,)
 
@@ -48,17 +43,6 @@ class Dependencies[N: Label, V: Place](Frozen):
             tuple(sorted(condensed.nodes[c]['members'], key=rank.__getitem__))
             for c in nx.lexicographical_topological_sort(condensed, key=first.__getitem__)
         )
-
-    @cached_property
-    def boundary_inputs(self) -> tuple[V, ...]:
-        owned = set(self.graph.owned_variables)
-        return tuple(var for var in self.graph.read_variables if var not in owned)
-
-    @cached_property
-    def boundary_outputs(self) -> tuple[V, ...]:
-        '''Variables owned by a node but never read.'''
-        read = set(self.graph.read_variables)
-        return tuple(var for var in self.graph.owned_variables if var not in read)
 
 
     @cached_property
@@ -138,12 +122,6 @@ class Dependencies[N: Label, V: Place](Frozen):
             raise KeyError(f'{var!r} has no producer, so nothing closes a cycle on it')
         return tuple(reader for reader in self.graph.readers.get(var, ())
                      if owner in self.descendants([reader]))
-
-
-@remembered
-def dependencies[N: Label, V: Place](graph: Graph[N, V]) -> Dependencies[N, V]:
-    '''The dependency view of `graph`, proving it `ValidDependencies`; one per graph.'''
-    return Dependencies(graph)
 
 
 # ---------------------------------------------------------------- the projection

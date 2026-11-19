@@ -7,7 +7,7 @@ surface joining the vocabularies, as `tests/test_ode.py` is; run with `-s` for t
 '''
 
 import dataclasses
-from cottax.core import dependencies
+from cottax.core import Dependencies
 from proofs import recalled
 
 import math
@@ -257,9 +257,9 @@ def remembering(y, ys):
 
 def test_4_the_history_couples_its_reader_to_the_ode_from_the_declaration():
     g = declare(decay, area).graph
-    print(f'\n[4] area reads from {[str(n) for n in dependencies(g).ancestors((node("area"),))]}')
-    assert dependencies(g).ancestors((node('area'),)) == (node('decay'), problem('decay'), node('area'))
-    assert dependencies(g).owners[s.place('xs')] == problem('decay')
+    print(f'\n[4] area reads from {[str(n) for n in Dependencies.of(g).ancestors((node("area"),))]}')
+    assert Dependencies.of(g).ancestors((node('area'),)) == (node('decay'), problem('decay'), node('area'))
+    assert Dependencies.of(g).owners[s.place('xs')] == problem('decay')
     Driven.prove(g)
     assert recalled(g, Executable)
     kinds = [type(v).__name__ for v in Executable.check(declare(remembering).graph)]

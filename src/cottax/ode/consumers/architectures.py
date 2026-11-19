@@ -1,6 +1,6 @@
 '''Registers how an architecture places an ODE (`ModelReading`), with why one is no implicit model.'''
 
-from ...core import FunctionalNode, Violation, dependencies, nesting
+from ...core import FunctionalNode, Violation, Dependencies, Nesting
 from ...core.frozen import answers
 from ...consumers.architectures.interface import ModelReading
 from ..ode_condition import OdeCondition
@@ -15,14 +15,14 @@ class OdeModel(ModelReading):
     '''
 
     def not_implicit(self, graph, problem):
-        owners = dependencies(graph).owners
+        owners = Dependencies.of(graph).owners
         if unwritten := tuple(r for r in graph[problem].reads_inside
                               if r not in owners or not isinstance(graph[owners[r]], FunctionalNode)):
             return (RateUnwritten(str(problem), tuple(map(str, unwritten))),)
         return ()
 
     def body(self, graph, problem):
-        return tuple(n for n in nesting(graph).cycle_of(problem) if isinstance(graph[n], FunctionalNode))
+        return tuple(n for n in Nesting.of(graph).cycle_of(problem) if isinstance(graph[n], FunctionalNode))
 
     def combines_as(self, condition):
         return None
