@@ -475,7 +475,30 @@ so the dependency proof is asked deep down), and `contract` (an edit, not a fact
    frozenset)` in `nesting.py`, pure and keyed (inventory: `_satisfies`, `_view`, `_level`,
    `steps`). `ValidNesting` kept as a group though no view asks it alone (owner: it makes
    the two halves of `Valid` explicit); order unchanged.
-3. `contract(graph, blocks)` a free function (still proves `Valid` of its result).
+   THEN (2026-11-19, uncommitted): `_level` dropped again -- a keyed `remembered` over sets
+   of node names stretches its "constant keys" rule. `Nesting._cycles` (a `cached_property`,
+   complete when made: one entry per encloser, enclosers nested alike share a level built
+   once) replaces it; `cycle_of(e)` = `enclosing(e)` (to refuse a non-encloser) then
+   `_cycles[e]`. Inventory back to `_satisfies`, `_view`, `steps`. Cycles stay on `Nesting`,
+   not an executable view: the executable rules use `cycle_of` to decide executability.
+   Vocabulary: "problem" -> "encloser" (works for DoE / sweep / switch, not only solves).
+   `kinds.enclosers(definitions)` (condition nodes owning something inside; exported)
+   replaces `executable._problems` and `architectures.problems`; `Nesting` params and
+   docstrings, `body_of`, the layer diagram renamed. NOT renamed (separate decisions):
+   violation fields / messages in `executable.py` (`problem : Label`, "declares several
+   problems ..."), `Solve.problem` in `steps.py`, architecture domain names
+   (`TopNotAProblem`, `body_of_problem`). processax: `is_encloser` sites (5e) can use
+   `owns_inside(d)` / `enclosers(defs)`.
+3. BUILT (uncommitted, 2026-11-19): `contract` is the op `Contract(blocks)` in `plan/ops.py`, a
+   `ComposedOp` of `Unnest` (pairs touching a block), `Delete` (members but the first, in
+   binding order) and `Replace` (first member -> its box); no graph-building code of its own,
+   `Valid` kept by `apply`. `checks = (check_blocks_partition,)` (op alone: `BlockTooSmall`,
+   `NodeInTwoBlocks`), `checks_graph = (check_blocks_bound, check_blocks_own_something)`
+   (`NotBound` -- a KeyError as before -- and `BoxOwnsNothing`); the three finals moved to
+   `plan/ops.py`. `check_nesting_ends_on_one_cycle` folded into `executable`'s
+   `check_nestings_share_a_cycle` (it only wrapped it), `Unreachable` moved to
+   `executable.py`. `nesting.py` now holds only the view. Call sites: `architectures.py`
+   (`Contract(blocks).apply(graph)`) and 6 test sites.
 4. `Steps(View)`, `checks = (Executable.check,)`, holding today's `steps(g)` tuple (property
    name open: `.all` or `.order`); `steps` loses `@remembered @checked`. Inventory then
    `_satisfies`, `_view`, `_level`. `steps(` is used in 2 src, ~19 tests, 2 processax sites.

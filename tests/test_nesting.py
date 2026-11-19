@@ -6,7 +6,7 @@ inner -> outer -- makes every consumer read one answer instead of being told, an
 the ways a rewrite could quietly void it refusals rather than surprises.
 """
 
-from cottax.core import Rules, Valid, Dependencies, Nesting
+from cottax.core import Rules, Valid, Dependencies, Nesting, Contract
 
 import pytest
 from jax.tree_util import GetAttrKey as G
@@ -369,11 +369,11 @@ def test_interior_of_a_sibling_carries_the_nesting_it_severs():
 def test_contract_drops_a_pair_with_an_end_in_a_block_and_keeps_the_rest(nested):
     # A box is no problem, so a pair touching one goes. A pair outside keeps its
     # cycle, since a contraction only adds paths.
-    boxed = Nesting.of(nested).contract(((n('mda'), n('d')),))
+    boxed = Contract(((n('mda'), n('d')),)).apply(nested)
     assert dict(boxed.within) == {}
     assert boxed.nodes == (n('opt'), n('mda'), n('obj'))
     assert boxed[n('mda')] == FunctionalNode((v('z'),), (v('hy'), v('y')))
-    kept = Nesting.of(nested).contract(((n('d'), n('obj')),))
+    kept = Contract(((n('d'), n('obj')),)).apply(nested)
     assert dict(kept.within) == {n('mda'): n('opt')}
     from cottax.core.maths.graph import Graph
-    assert isinstance(Nesting.of(nested).contract(()), Graph)
+    assert isinstance(Contract(()).apply(nested), Graph)

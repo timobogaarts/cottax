@@ -8,17 +8,16 @@ from .maths.definition import (
 from .answers import NothingToAsk
 from .maths.executable import (
     Constant, NoProblem, OutsideCycle, OwnReadInsideCycle, ReadInsideCycle, RequirementUnanswered,
-    SeveralOutermost, StillCyclic,
+    SeveralOutermost, StillCyclic, Unreachable,
 )
 from .maths.valid import (
     OwnAroundOwner, OwnedTwice, OwnerInsideRead, OwnInsideOwner, ReadInsideOwner,
 )
 from .maths.kinds import OwnsNothing, ReadOnBothSides, StatesNothing
 from .maths.valid import EndOwnsNothingInside, NestingLoop, SelfNested, Unbound
-from .maths.nesting import BlockTooSmall, BoxOwnsNothing, NodeInTwoBlocks, Unreachable
 from .plan.ops import (
-    AlreadyCut, AttributeAlreadySet, AttributeNotSet, DoesNotRead, NoAttributeNamed,
-    NoReaders, NotProduced, NotRenamed,
+    AlreadyCut, AttributeAlreadySet, AttributeNotSet, BlockTooSmall, BoxOwnsNothing,
+    DoesNotRead, NoAttributeNamed, NoReaders, NodeInTwoBlocks, NotProduced, NotRenamed,
 )
 from .conditional.ops import OwnedInsideTwice, OwnsInsideDriven, OwnsInsideNotAChoice
 from .plan.primitive import (

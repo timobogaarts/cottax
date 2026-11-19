@@ -10,10 +10,10 @@ import jax
 import pytest
 from jax.tree_util import GetAttrKey
 
-from cottax.core.frozen import OrderedMap
+from cottax.core.frozen import OrderedMap, violations
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core import FunctionalNode, body_of, conditions, Dependencies, Nesting, Valid
-from cottax.core.maths.nesting import BlockTooSmall, NodeInTwoBlocks, check_blocks_partition
+from cottax.core import FunctionalNode, body_of, conditions, Dependencies, Nesting, Valid, Contract
+from cottax.core.plan.ops import BlockTooSmall, NodeInTwoBlocks
 from cottax.core.realisation import implemented
 from cottax.relational import Eq, Relation, RelationalCondition
 from cottax.consumers.visualization.sequencing import entries
@@ -303,17 +303,17 @@ def test_closing_readers_needs_a_producer(sellar):
 def test_contract_is_the_quotient_by_the_blocks(sellar):
     '''One node per block, reading what the block reads from outside and owning what
     it owns, bound at the first member's place; the other members gone.'''
-    g = Nesting.of(sellar).contract(((N('d2'), N('d1')),))
+    g = Contract(((N('d2'), N('d1')),)).apply(sellar)
     assert g.nodes == (N('z'), N('d1'), N('obj'), N('con'))
     assert g[N('d1')] == FunctionalNode((V('z'),), (V('y1'), V('y2')))     # y1 / y2 internal, not read
     assert Dependencies.of(g).is_acyclic
-    assert Nesting.of(sellar).contract(()) == sellar
+    assert Contract(()).apply(sellar) == sellar
 
 
 def test_contract_coarsens_and_never_refines(sellar):
     '''A path through a box may appear where none was: `obj` and `con` in one box
     puts `con` downstream of `y2`, which it never read.'''
-    g = Nesting.of(sellar).contract(((N('obj'), N('con')),))
+    g = Contract(((N('obj'), N('con')),)).apply(sellar)
     assert g[N('obj')] == FunctionalNode((V('z'), V('y1'), V('y2')), (V('f'), V('c')))
     assert set(Dependencies.of(g).descendants([N('d2')])) >= {N('obj')}
     assert set(Dependencies.of(sellar).descendants([N('d2')])) >= {N('obj'), N('con')}
@@ -323,12 +323,12 @@ def test_contract_refuses_a_short_block_a_node_in_two_blocks_and_an_unknown_one(
     '''A block of one is the identity or a change of kind, neither a view's to make;
     `Combine` refuses the same.'''
     for short in ((N('d1'),), (N('d1'), N('d1')), ()):
-        assert list(check_blocks_partition(sellar, (short,))) == [BlockTooSmall(short)]
+        assert list(violations(Contract, (short,))) == [BlockTooSmall(short)]
         with pytest.raises(ValueError, match='is not two nodes'):
-            Nesting.of(sellar).contract((short,))
+            Contract((short,)).apply(sellar)
     twice = ((N('d1'), N('d2')), (N('d2'), N('obj')))
-    assert list(check_blocks_partition(sellar, twice)) == [NodeInTwoBlocks((N('d2'),))]
+    assert list(violations(Contract, twice)) == [NodeInTwoBlocks((N('d2'),))]
     with pytest.raises(ValueError, match='each in two blocks'):
-        Nesting.of(sellar).contract(twice)
+        Contract(twice).apply(sellar)
     with pytest.raises(KeyError, match='nope'):
-        Nesting.of(sellar).contract(((N('d1'), N('nope')),))
+        Contract(((N('d1'), N('nope')),)).apply(sellar)

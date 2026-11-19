@@ -13,20 +13,13 @@ from typing import Any, ClassVar
 
 from ...core import (
     AbstractConditionalNode, FunctionalNode, Label, kind_of, Graph, Place, Violation,
-    owns_inside, GraphOp, Nest, StagedOp, refusals, Dependencies, Nesting)
+    enclosers, owns_inside, Contract, GraphOp, Nest, StagedOp, refusals, Dependencies, Nesting)
 from ...core.frozen import AbstractVar, Frozen, OrderedMap, answer, first
 from .closing import closed
 from .combine import Combine
 from .cut_rules import CutRule, Opened, ToCut, cuts_per_cycle
 from .interface import Closing, ModelReading
 from .refusals import BodyShared, NestedAlready, NotCombinable, TopNotAProblem, TopUnbound
-
-
-def problems[N: Label, V: Place](graph: Graph[N, V]) -> tuple[N, ...]:
-    '''The condition nodes that own something inside, in binding order: what an architecture
-    nests, opens and folds into. A requirement -- owning nothing inside -- is not one: it is
-    folded into a problem (`reached_requirements`).'''
-    return tuple(n for n, d in graph.definitions.items() if owns_inside(d))
 
 
 # ---------------------------------------------------------------- what a problem is, asked
@@ -179,7 +172,7 @@ def check_implicit_models(op: 'Architecture', graph: Graph) -> Iterator[Violatio
     into = combines_as(graph[op.design[0]]) if op.design and op.design[0] in graph else None
     free = Graph(graph.subgraph(n for n in graph.nodes if n not in own).definitions)
     bodies: dict = {}
-    for p in problems(free):
+    for p in enclosers(free.definitions):
         if refused := not_implicit(free, p):
             yield from refused
             continue
@@ -253,14 +246,14 @@ class Architecture[N: Label, V: Place](StagedOp[N, V]):
         scope    = self.scope(resolved)
         opened   = yield closed(cuts_per_cycle_boxed(scope, self.boxes, self.rule), self.closing)
         nested   = yield self.nesting_inside(scope)
-        yield self.combining(nested, tuple(p for p in problems(opened) if p not in set(problems(resolved))))
+        yield self.combining(nested, tuple(p for p in enclosers(opened.definitions) if p not in set(enclosers(resolved.definitions))))
 
     def nesting_inside(self, scope: Graph[N, V]) -> tuple[GraphOp[N, V], ...]:
         '''Each problem of the scope lying wholly inside another's body nested there, read
         before anything is cut; none where the final combines declared problems.'''
         if self.combines_declared:
             return ()
-        pairs = inside(scope, {p: body_of_problem(scope, p) for p in problems(scope)})
+        pairs = inside(scope, {p: body_of_problem(scope, p) for p in enclosers(scope.definitions)})
         return tuple(Nest(i, o) for i, o in pairs.items())
 
     def resolution(self, graph: Graph[N, V]) -> Resolution[N, V]:
@@ -450,10 +443,10 @@ def cuts_per_cycle_boxed[N: Label, V: Place](graph: Graph[N, V], boxes: Boxes[N,
     as a reader, those that read the variable -- under `check_implicit_models` always its
     body, since a problem reads nothing from outside its box. In the graph's own names.
     '''
-    bodies = {p: body_of_problem(graph, p) for p in problems(graph)}
+    bodies = {p: body_of_problem(graph, p) for p in enclosers(graph.definitions)}
     pairs  = inside(graph, bodies)
     trees: dict = {}
-    for p in problems(graph):
+    for p in enclosers(graph.definitions):
         trees.setdefault(chain(pairs, p)[-1], []).append(p)
     folded = set(boxes.folded(graph))
     blocks = tuple((*tree, *bodies[root]) if folded & set(tree) else bodies[root]
@@ -467,7 +460,7 @@ def cuts_per_cycle_boxed[N: Label, V: Place](graph: Graph[N, V], boxes: Boxes[N,
                                     if var in graph[m].reads)
                          for var, readers in group.items()}
                         for group in groups))
-                 for cycle, groups in cuts_per_cycle(Nesting.of(graph).contract(blocks), rule))
+                 for cycle, groups in cuts_per_cycle(Contract(blocks).apply(graph), rule))
 
 
 def per_functional_cycle_boxed[N: Label, V: Place](graph: Graph[N, V], boxes: Boxes[N, V],
@@ -493,7 +486,7 @@ class Disciplines[N: Label, V: Place](Boxes[N, V]):
     and under an architecture every implicit model in its scope.'''
 
     def folded(self, graph: Graph[N, V]) -> tuple[N, ...]:
-        return problems(graph)
+        return enclosers(graph.definitions)
 
     def __repr__(self) -> str:
         return 'disciplines'

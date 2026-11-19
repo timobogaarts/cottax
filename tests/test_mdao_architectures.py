@@ -5,7 +5,7 @@ graph on every fixture it is meant for, a study's own final is a few lines on a 
 and MDF and IDF driven agree. Fixtures and helpers are `test_cutting.py`'s.
 '''
 
-from cottax.core import conditions
+from cottax.core import conditions, Contract
 from cottax.core import Nesting
 
 import pytest
@@ -58,7 +58,7 @@ def test_a_box_is_a_problem_with_its_body(implicit):
     The contraction is `Graph.contract`'s, bound at the block's first member in
     binding order, the body here.'''
     assert body_of_problem(implicit, N('h1')) == (D1,)
-    folded = Nesting.of(implicit).contract(((N('h1'), D1), (N('h2'), D2)))
+    folded = Contract(((N('h1'), D1), (N('h2'), D2))).apply(implicit)
     assert folded[D1] == FunctionalNode((V('z'), V('y2')), (V('r1'), V('y1')))
     assert folded[D2] == FunctionalNode((V('z'), V('y1')), (V('r2'), V('y2')))
     assert N('h1') not in folded and folded.nodes == (OPT, D1, D2, N('obj'), N('con'))

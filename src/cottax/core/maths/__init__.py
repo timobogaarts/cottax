@@ -26,11 +26,11 @@ valid                        (Valid: ValidNesting, the nesting's three rules, an
 dependencies                 (`Dependencies.of(graph)`, the view of owners, edges, components,
  ||                           order, reachability)
  \/
-nesting                      (`Nesting.of(graph)`, the view of the outermost problems, what each
- ||                           is nested in, its cycle and interior; `contract`)
+nesting                      (`Nesting.of(graph)`, the view of the outermost enclosers, what each
+ ||                           is nested in, its cycle and interior)
  \/
 executable                   (the structural proof, a group implying Valid: cycles,
- ||                           problems, and every problem's edges against its cycle; outline)
+ ||                           enclosers, and every encloser's edges against its cycle; outline)
  \/
 steps                        (steps(graph): Run and Solve, every interior proved
                               executable and holding the graph's node groups)
@@ -43,7 +43,7 @@ from .places import (
 from .definition import (
     Attribute, NodeDefinition, Renaming, relabelled,
 )
-from .kinds import AbstractConditionalNode, FunctionalNode, conditions, owns_inside
+from .kinds import AbstractConditionalNode, FunctionalNode, conditions, enclosers, owns_inside
 from .graph import Graph, View
 from .rules import Rules, per_node_check
 from .valid import Valid, ValidDependencies, ValidNesting

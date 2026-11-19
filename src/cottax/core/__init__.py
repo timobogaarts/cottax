@@ -22,7 +22,7 @@ from .frozen import Violation, first, violations
 from .maths import (
     Label, Place, PlaceToPlace, comparable, comparables_in,
     NodeDefinition, Renaming, relabelled, Attribute,
-    AbstractConditionalNode, FunctionalNode, conditions, owns_inside,
+    AbstractConditionalNode, FunctionalNode, conditions, enclosers, owns_inside,
     Graph, View,
     Rules, per_node_check,
     Dependencies, Valid, ValidDependencies, ValidNesting, Nesting, Executable, body_of, outline,
@@ -32,7 +32,7 @@ from .mints import Closure, Copy, Mint, Minting, mint_of, minted, unminted
 from .answers import answer_for_labels, answer_for_places
 from .plan import (
     Plan, ComposedOp, GraphOp, StagedOp, refusals,
-    Rebind, Rebinding, Cut, Delete, Insert, Nest, Redefine, Rename, Replace, Rewire,
+    Rebind, Rebinding, Contract, Cut, Delete, Insert, Nest, Redefine, Rename, Replace, Rewire,
     SetAttribute, RemoveAttribute,
     Unnest,
 )

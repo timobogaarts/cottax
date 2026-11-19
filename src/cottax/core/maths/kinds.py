@@ -93,6 +93,13 @@ def conditions[N: Label](definitions: Mapping[N, NodeDefinition]) -> tuple[N, ..
     return tuple(n for n, d in definitions.items() if isinstance(d, AbstractConditionalNode))
 
 
+def enclosers[N: Label](definitions: Mapping[N, NodeDefinition]) -> tuple[N, ...]:
+    '''
+    All AbstractConditionalNodes that have owns inside (are enclosers)
+    '''    
+    return tuple(n for n, d in definitions.items() if owns_inside(d))
+
+
 # ----------------------------------------------------------------- violation finals
 
 class StatesNothing(Violation):

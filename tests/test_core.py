@@ -8,7 +8,7 @@ to the laws the vocabulary states.
 '''
 
 from toy_places import Segmented
-from cottax.core import conditions
+from cottax.core import conditions, Contract
 from cottax.core import Dependencies, Nesting
 
 import dataclasses
@@ -38,7 +38,7 @@ from cottax.core.refusal_kinds import DoesNotRead, ReadOnBothSides
 from cottax.core.maths.executable import Executable
 from cottax.core.frozen import Answer, OrderedMap, answers
 from cottax.core.maths.valid import EndOwnsNothingInside, Unbound
-from cottax.core.maths.nesting import BoxOwnsNothing, check_blocks_own_something, check_blocks_partition
+from cottax.core.plan.ops import BoxOwnsNothing, check_blocks_own_something
 from cottax.pytree.path import VarPath
 from cottax.core import Attachment, Mint, Minting, relabelled
 from cottax.consumers.execution import GraphWithValues
@@ -295,9 +295,9 @@ def test_a_nesting_with_a_bad_end_is_listed_not_raised():
 def test_a_contraction_refuses_a_block_owning_nothing():
     a, b = Word('a'), Word('b')
     g = G({a: states(['x'], []), b: states(['y'], [])})
-    assert list(check_blocks_own_something(g, ((a, b),))) == [BoxOwnsNothing((a, b))]
+    assert list(check_blocks_own_something(Contract(((a, b),)), g)) == [BoxOwnsNothing((a, b))]
     with pytest.raises(ValueError, match='owns nothing'):
-        Nesting.of(g).contract(((a, b),))
+        Contract(((a, b),)).apply(g)
 
 
 class Said(Answer):
@@ -436,8 +436,8 @@ def test_every_case_a_rule_can_name_has_wording():
     seen(Valid.check(Graph(G(cyc).definitions, OrderedMap({a: a}))))            # inside itself
     seen(check_nesting(Nest(a, b), G(cyc, {b: a})))                             # loop
     seen(Executable.check(G({a: states([], ['x']), b: states([], ['y'])}, {a: b})))   # unreachable
-    seen(check_blocks_own_something(G({a: states(['x'], []), b: states(['y'], [])}), ((a, b),)))  # a box owning nothing
-    seen(check_blocks_partition(G({a: toy([], ['x']), b: toy([], ['y'])}), ((a,), (a, b))))  # a short block, a node twice
+    seen(check_blocks_own_something(Contract(((a, b),)), G({a: states(['x'], []), b: states(['y'], [])})))  # a box owning nothing
+    seen(violations(Contract, ((a,), (a, b))))  # a short block, a node twice
     S = G
     seen(Executable.check(S({a: body(['u'], ['x']), b: body(['x'], ['u'])})))     # coupled, no problem
     seen(Executable.check(S({a: body(['u'], ['x']), b: body(['x'], ['u']),

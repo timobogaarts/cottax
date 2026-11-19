@@ -1,12 +1,13 @@
 '''
 Ops on `Redefine`: what a node reads and owns renamed (`Rewire`, `Rename`, `Cut`), a
 definition replaced (`Replace`), what a condition node owns inside set (`SetOwnsInside`), and
-what a node carries set and removed (`SetAttribute`, `RemoveAttribute`).
+what a node carries set and removed (`SetAttribute`, `RemoveAttribute`); and blocks
+contracted into boxes (`Contract`, composed of `Unnest`, `Delete` and `Replace`).
 '''
 
 from abc import abstractmethod
 import dataclasses
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 
 from ..maths.definition import (
     Attribute, NodeDefinition, Renaming,
@@ -15,7 +16,9 @@ from ..frozen import AbstractClassVar, OrderedMap, Violation, name_of
 from ..maths.dependencies import Dependencies
 from ..maths.graph import Graph
 from ..maths.places import Label, Place, PlaceToPlace
-from .primitive import Redefine
+from ..maths.kinds import FunctionalNode
+from .algebra import ComposedOp, GraphOp
+from .primitive import Delete, NotBound, Redefine, Unnest
 
 
 type Relabel[N: Label, V: Place] = Mapping[N, Renaming[V]]
@@ -191,6 +194,69 @@ class RemoveAttribute[N: Label, V: Place](Redefine[N, V]):
     def __repr__(self) -> str:
         return f'{type(self).__name__.lower()}({", ".join(map(str, self.nodes))})'
 
+# ---------------------------------------------------------------- contraction
+
+def check_blocks_partition(op: 'Contract') -> Iterator[Violation]:
+    '''Each block is at least two nodes, and no node is in two.'''
+    seen, twice = set(), {}
+    for block in op.blocks:
+        if len(set(block)) < 2:
+            yield BlockTooSmall(tuple(block))
+        for n in dict.fromkeys(block):
+            if n in seen:
+                twice[n] = None
+            seen.add(n)
+    if twice:
+        yield NodeInTwoBlocks(tuple(twice))
+
+
+def check_blocks_bound(op: 'Contract', graph: Graph) -> Iterator[Violation]:
+    '''Every node of a block is bound.'''
+    for n in dict.fromkeys(n for block in op.blocks for n in block):
+        if n not in graph:
+            yield NotBound(n)
+
+
+def check_blocks_own_something(op: 'Contract', graph: Graph) -> Iterator[Violation]:
+    '''A block contracts into a computation, so it owns something.'''
+    for block in op.blocks:
+        if all(n in graph for n in block) and not any(graph[n].owns for n in block):
+            yield BoxOwnsNothing(tuple(block))
+
+
+class Contract[N: Label, V: Place](ComposedOp[N, V]):
+    '''
+    Each block of at least two nodes contracted into one `FunctionalNode` at its first
+    member's place in binding order: reading what the block reads from outside, owning
+    what it owns; the other members gone. A pair with an end in a block is unnested, since
+    a box encloses nothing. A coarsening: a path through a box may appear where none was.
+    '''
+
+    blocks : tuple[tuple[N, ...], ...]
+
+    checks       = (check_blocks_partition,)
+    checks_graph = (check_blocks_bound, check_blocks_own_something)
+
+    def composed(self, graph: Graph[N, V]) -> Sequence[GraphOp[N, V]]:
+        position = graph._position
+        orders   = [tuple(sorted(dict.fromkeys(b), key=position.__getitem__)) for b in self.blocks]
+        members  = {n for order in orders for n in order}
+        boxes    = {}
+        for order in orders:
+            owns  = tuple(dict.fromkeys(v for m in order for v in graph[m].owns))
+            owned = set(owns)
+            reads = tuple(dict.fromkeys(v for m in order for v in graph[m].reads if v not in owned))
+            boxes[order[0]] = FunctionalNode(reads, owns)
+        ops : list[GraphOp[N, V]] = [Unnest(i) for i, o in graph.within.items()
+                                     if i in members or o in members]
+        if gone := tuple(n for n in graph.nodes if n in members and n not in boxes):
+            ops.append(Delete(gone))
+        ops += [Replace(n, box) for n, box in boxes.items()]
+        return ops
+
+    def __repr__(self) -> str:
+        return 'contract(' + ', '.join('{' + ', '.join(map(str, b)) + '}' for b in self.blocks) + ')'
+
 
 # ----------------------------------------------------------------- violation finals
 
@@ -242,3 +308,22 @@ class AlreadyCut(Violation):
     template = ('{var!r} is already cut: its copy {copy} exists. A variable is cut at '
                 'most once -- two cuts would assume two values for one place. Cut with '
                 'more readers at once to share a copy')
+
+
+class BlockTooSmall(Violation):
+    block : tuple[Label, ...]
+    error    = ValueError
+    template = 'block {block} is not two nodes -- a box contracts at least two into one'
+
+
+class NodeInTwoBlocks(Violation):
+    nodes : tuple[Label, ...]
+    error    = ValueError
+    template = '{nodes} each in two blocks -- a node is contracted into one box at most'
+
+
+class BoxOwnsNothing(Violation):
+    block : tuple[Label, ...]
+    error    = ValueError
+    template = ('block {block} owns nothing, so as one node it would compute nothing and be '
+                 'unreachable -- a box is a computation, so contract only what produces')

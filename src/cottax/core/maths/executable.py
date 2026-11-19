@@ -9,23 +9,17 @@ from collections.abc import Iterator
 from .dependencies import Dependencies
 from .valid import Valid
 from .graph import Graph
-from .nesting import check_nesting_ends_on_one_cycle, Nesting
-from .kinds import AbstractConditionalNode, owns_inside
+from .nesting import Nesting
+from .kinds import AbstractConditionalNode, enclosers
 from .places import Label, Place
 from ..frozen import Violation
 
 
-
-def _problems(g: Graph) -> list:
-    '''The nodes that iterate a cycle. Asked before `check_no_requirements` holds, so a
-    requirement -- a condition node owning nothing inside -- is not one.'''
-    return [n for n, d in g.definitions.items() if owns_inside(d)]
-
 def body_of[G: Graph](g: G) -> G:
     '''
-    The graph without its problems: what is run, never answered.
+    The graph without its enclosers: what is run, never answered.
     '''
-    ps = set(_problems(g))
+    ps = set(enclosers(g.definitions))
     return g.subgraph(n for n in g.nodes if n not in ps)
 
 
@@ -33,17 +27,24 @@ def body_of[G: Graph](g: G) -> G:
 
 def check_nestings_share_a_cycle(g: Graph) -> Iterator[Violation]:
     '''
-    Both ends of every nesting are on one cycle (`check_nesting_ends_on_one_cycle`): a pair
-    that is not is inert to the graph, and here it would name an encloser answered inside
-    an iteration that never re-runs it.
+    Both ends of every nesting are on one cycle: the inner lies in the outer's cycle. The
+    inner's output is required for the outer's inputs and vice-versa -- otherwise the inner
+    does not depend on the outer's iterate, or the outer never reads its answer, and it
+    could run outside. A pair that is not is inert to the graph, and here it would name an
+    encloser answered inside an iteration that never re-runs it.
 
-    p ~ q  in  N \\ A(q)   ∀ (p, q) ∊ W
+    p ~ q  in  N \\ A(q)   ∀ (p, q) ∊ W       i.e.  p ∊ S_q, the cycle of q
+
+    Not a rule of `Valid`: nothing that reads a nesting needs it, so a plan may cut a
+    nested pair apart and `Unnest` it after.
 
     Asked first, and of the whole graph: the level rules below read `within`, and a pair
     off its outer's cycle hides its inner from them (it is neither outermost nor a sibling
     of what shares its cycle), so they pass a graph `steps` cannot read.
     '''
-    yield from check_nesting_ends_on_one_cycle(g)
+    for inner, outer in g.within.items():
+        if inner not in Nesting.of(g).cycle_of(outer):
+            yield Unreachable(inner, outer)
 
 
 def check_no_requirements(g: Graph) -> Iterator[Violation]:
@@ -58,12 +59,12 @@ def check_no_requirements(g: Graph) -> Iterator[Violation]:
 
 def check_body_is_dag(g: Graph) -> Iterator[Violation]:
     '''
-    With the problems taken out no cycle is left: *functionally acyclic*.
+    With the enclosers taken out no cycle is left: *functionally acyclic*.
 
     |S_k| = 1  ∀ S_k ∊ SCC[G \\ N_P]
     '''
     for cycle in Dependencies.of(body_of(g)).cycles:
-        held = [p for p in _problems(g) if set(cycle) <= set(Nesting.of(g).cycle_of(p))]
+        held = [p for p in enclosers(g.definitions) if set(cycle) <= set(Nesting.of(g).cycle_of(p))]
         if held:
             yield StillCyclic(max(held, key=lambda p: len(Nesting.of(g).enclosing(p))), cycle)
         else:
@@ -72,10 +73,10 @@ def check_body_is_dag(g: Graph) -> Iterator[Violation]:
 
 def check_one_encloser_per_level(g: Graph) -> Iterator[Violation]:
     '''
-    No two problems nested in the same thing -- both outermost, or both answered
+    No two enclosers nested in the same thing -- both outermost, or both answered
     inside one encloser -- are on one cycle. 
 
-    The mirror of `check_nesting_ends_on_one_cycle`: a nested pair *must* share a
+    The mirror of `check_nestings_share_a_cycle`: a nested pair *must* share a
     cycle at the outer's level, siblings *must not*.
 
     q ≁ q'  in  N \\ A(q)   ∀ q ≠ q' ∊ N_P with A(q) = A(q')
@@ -83,8 +84,8 @@ def check_one_encloser_per_level(g: Graph) -> Iterator[Violation]:
     Same parent (`within`) is the same A(·): in a forest, equal ancestor sets means
     equal chains.
     '''
-    ps = set(_problems(g))
-    for q in _problems(g):
+    ps = set(enclosers(g.definitions))
+    for q in enclosers(g.definitions):
         cycle    = Nesting.of(g).cycle_of(q)
         siblings = tuple(p for p in cycle if p in ps and g.within.get(p) == g.within.get(q))
         if len(siblings) > 1 and siblings[0] == q:                  # said once, by the first
@@ -101,7 +102,7 @@ def check_all_conditions_on_cycle(g: Graph) -> Iterator[Violation]:
     A condition nothing on the cycle produces is a constant to the encloser: no
     unknown can move it. A read nothing produces at all (a boundary input) is one.
     '''
-    for p in _problems(g):
+    for p in enclosers(g.definitions):
         cycle = Nesting.of(g).cycle_of(p)
         d     = g.definitions[p]
         if len(cycle) == 1:
@@ -116,7 +117,7 @@ def check_other_reads_off_cycle(g: Graph) -> Iterator[Violation]:
 
     I^out_p ∩ O(S_p) = ∅   ∀ p ∊ N_P
     '''
-    for p in _problems(g):
+    for p in enclosers(g.definitions):
         d    = g.definitions[p]
         held = set(Nesting.of(g).cycle_of(p))
         if inside := tuple(v for v in d.reads_outside if Dependencies.of(g).owners.get(v) in held):
@@ -129,7 +130,7 @@ def check_other_owns_off_cycle(g: Graph) -> Iterator[Violation]:
     O^out_p ∩ I(S_p) = ∅   ∀ p ∊ N_P
     '''
     readers = g.readers
-    for p in _problems(g):
+    for p in enclosers(g.definitions):
         d    = g.definitions[p]
         held = set(Nesting.of(g).cycle_of(p))
         if inside := [(v, r) for v in d.owns_outside
@@ -138,7 +139,7 @@ def check_other_owns_off_cycle(g: Graph) -> Iterator[Violation]:
 
 
 class Executable(Valid):
-    '''A well-formed graph that can be run: every cycle answered by one problem, the rest
+    '''A well-formed graph that can be run: every cycle answered by one encloser, the rest
     functionally acyclic.'''
     rules = (check_nestings_share_a_cycle,
              check_no_requirements, check_one_encloser_per_level, check_body_is_dag,
@@ -148,7 +149,7 @@ class Executable(Valid):
 
 def outline(g: Graph) -> str:
     '''The top level in one line: each component in dependency order, a component
-    answered by an outermost encloser as `solve(problem)[members]`, one node bare.'''
+    answered by an outermost encloser as `solve(encloser)[members]`, one node bare.'''
     outer = set(Nesting.of(g).outermost)
     def one(component) -> str:
         members = ', '.join(str(n) for n in component)
@@ -159,6 +160,15 @@ def outline(g: Graph) -> str:
 
 
 # ----------------------------------------------------------------- violation finals
+
+class Unreachable(Violation):
+    inner : Label
+    outer : Label
+    error    = ValueError
+    template = ('{inner!r} and {outer!r} are not on one cycle, so no iteration of the one '
+                 're-runs the other and there is nothing for the nesting to mean -- '
+                 '`Unnest` it, or keep the pair on one cycle')
+
 
 class RequirementUnanswered(Violation):
     node       : Label
