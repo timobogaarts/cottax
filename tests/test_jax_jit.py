@@ -17,7 +17,7 @@ import pytest
 from cottax.core.realisation import Implementation, implementation_of, implemented
 from cottax.core.driven import Start
 from cottax.core.frozen import OrderedMap, violations
-from cottax.core.maths.steps import Loop
+from cottax.core.maths.steps import Enclosed
 from cottax.consumers.execution.interface_types import Posed
 import cottax.assemblies.jax as cx
 from cottax.consumers.execution import run, write_back
@@ -92,12 +92,12 @@ def test_what_a_solver_is_posed_hashes_at_every_depth():
     # A solver compiles keyed on its `Posed`, whose condition map holds the interior.
     graph = NESTED
     Jittable.prove(graph)
-    (outer,)  = [s for s in Schedule.of(graph).steps if isinstance(s, Loop)]
-    (inner,)  = [s for s in Schedule.of(outer.interior).steps if isinstance(s, Loop)]
-    for step, holder in ((outer, graph), (inner, outer.interior)):
+    (outer,)  = [s for s in Schedule.of(graph).steps if isinstance(s, Enclosed)]
+    (inner,)  = [s for s in outer.interior.steps if isinstance(s, Enclosed)]
+    for step, holder in ((outer, graph), (inner, outer.interior.graph)):
         JitKeyNodes.prove(step.interior)
         node = holder[step.encloser]
-        conditions = InteriorConditionMap.posing(node, step.interior)
+        conditions = InteriorConditionMap.posing(node, step.interior.graph)
         hash(Posed(node.condition, node.driver.contract.reports, conditions,
                    conditions.context_places))
 

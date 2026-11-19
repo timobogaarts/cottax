@@ -20,7 +20,7 @@ import jax.numpy as jnp
 import pytest
 from jax.tree_util import DictKey
 
-from cottax.core import FunctionalNode,  Loop
+from cottax.core import FunctionalNode,  Enclosed
 from cottax.core.frozen import OrderedMap
 from cottax.core.driven import driven as with_driver
 from cottax.relational.contracts import RootFinding
@@ -146,8 +146,8 @@ def test_a_nested_solve_differentiates_through_the_inner_one_and_traces_once():
 
 def condition_map(graph, problem):
     '''The map `run` hands the driver of `problem`, outermost in `graph`.'''
-    (step,) = [s for s in Schedule.of(graph).steps if isinstance(s, Loop) and s.encloser == problem]
-    return InteriorConditionMap.posing(graph[problem], step.interior)
+    (step,) = [s for s in Schedule.of(graph).steps if isinstance(s, Enclosed) and s.encloser == problem]
+    return InteriorConditionMap.posing(graph[problem], step.interior.graph)
 
 
 def test_the_condition_map_is_differentiable_in_the_unknowns():

@@ -156,7 +156,7 @@ def test_the_minted_names_follow_their_own_roots(looped):
     fp  = FixedPointCut((cut,), PROBLEM(NodePath(cut.var.segments)))
     assert cut.copy.spelling == '^guess.y1'
     assert fp.at.spelling == '^solve.y1'
-    assert Dependencies.of(fp(looped)).owners[cut.copy] == fp.at
+    assert Dependencies.of(fp(looped)).owner[cut.copy] == fp.at
 
 
 def test_closure_repr(looped):

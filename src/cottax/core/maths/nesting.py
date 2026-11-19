@@ -68,8 +68,11 @@ class Nesting[N: Label, V: Place](View[N, V]):
 
         S_p = {k ∊ N \\ A(p) : k ~ p in N \\ A(p)}   (~ in the induced subgraph, not in G)
         '''
-        self.enclosing(encloser)                # refused as `enclosing` refuses a non-encloser
-        return self._cycles[encloser]
+        try:
+            return self._cycles[encloser]
+        except KeyError:
+            self.enclosing(encloser)            # not an encloser: refused as `enclosing` refuses
+            raise
 
     def interior(self, encloser: N) -> Graph[N, V]:
         '''

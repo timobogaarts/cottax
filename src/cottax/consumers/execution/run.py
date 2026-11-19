@@ -102,21 +102,21 @@ class Env[V]:
     def write(self, places: tuple[V, ...], values: Iterable[Any]) -> None:
         self.values.update(zip(places, values, strict=True))
 
-type AtSolve = Callable[[ConditionalNode, Graph, Env], None]
-'''What a walk does at a `Loop`, handed the encloser, its interior and the values so far:
+type AtEnclosed = Callable[[ConditionalNode, Graph, Env], None]
+'''What a walk does at a `Drive`, handed the encloser, its interior and the values so far:
 it writes the unknowns and the reports, and walks the interior if it wants its values.'''
 
 
-def walk(graph: Graph, env: Env, at_solve: AtSolve) -> None:
-    '''`graph`'s steps in order, a `Run` called and a `Loop` handed to `at_solve`: `run` is
-    this loop with "solve it" at a loop. What a step raises names its node (`blamed`).'''
+def walk(graph: Graph, env: Env, at_enclosed: AtEnclosed) -> None:
+    '''`graph`'s steps in order, a `Run` called and an `Enclosed` handed to `at_enclosed`: `run` is
+    this loop with "solve it" at one. What a step raises names its node (`blamed`).'''
     for step in Schedule.of(graph).steps:
         name = step.node if isinstance(step, Run) else step.encloser
         try:
             if isinstance(step, Run):
                 _call(name, graph[name], env)
             else:
-                at_solve(graph[name], step.interior, env)
+                at_enclosed(graph[name], step.interior.graph, env)
         except Exception as e:
             _blame(e, name)
             raise
@@ -183,7 +183,7 @@ class InteriorConditionMap[N: Label, V: Place](ConditionMap):
     @classmethod
     def posing(cls, node: ConditionalNode[V], interior: Graph[N, V]
                ) -> 'InteriorConditionMap[N, V]':
-        '''The map `run` hands `node`'s driver, `interior` its `Loop`'s. Fixed: what the
+        '''The map `run` hands `node`'s driver, `interior` its `Enclosed`'s. Fixed: what the
         interior reads from outside, and what the condition reads that the interior does not
         produce (a parameter); the map answers at every condition read.'''
         solved   = set(node.owns_inside)

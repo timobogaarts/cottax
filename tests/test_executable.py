@@ -126,27 +126,36 @@ def test_the_entries_are_the_components(sellar):
 def every_interior(graph):
     '''Every interior at every depth, top first.'''
     for step in Schedule.of(graph).steps:
-        if isinstance(step, core.Loop):
-            yield step.interior
-            yield from every_interior(step.interior)
+        if isinstance(step, core.Enclosed):
+            yield step.interior.graph
+            yield from every_interior(step.interior.graph)
 
 
 def test_the_steps_are_a_run_per_node_and_a_solve_per_cycle(sellar):
     found = Schedule.of(sellar).steps
-    assert [type(s) for s in found] == [core.Run, core.Loop, core.Run, core.Run]
+    assert [type(s) for s in found] == [core.Run, core.Enclosed, core.Run, core.Run]
     assert [s.node for s in found if isinstance(s, core.Run)] == [N('z'), N('obj'), N('con')]
     solve = found[1]
     assert solve.encloser == N('mda')
-    assert solve.interior.nodes == (N('d1'), N('d2'))
-    assert [type(s) for s in Schedule.of(solve.interior).steps] == [core.Run, core.Run]
+    assert solve.interior.graph.nodes == (N('d1'), N('d2'))
+    assert [type(s) for s in solve.interior.steps] == [core.Run, core.Run]
+
+
+def test_a_drive_holds_its_interiors_schedule_the_one_view_of_it(sellar):
+    '''The schedule is a tree: an `Enclosed`'s interior is `Schedule.of` the interior graph,
+    the same view, and the step compares and hashes by it (by graph).'''
+    solve = Schedule.of(sellar).steps[1]
+    assert solve.interior is Schedule.of(solve.interior.graph)
+    again = Schedule.of(Graph(sellar.definitions, sellar.within)).steps[1]
+    assert again == solve and hash(again) == hash(solve)
 
 
 def test_a_nested_problem_is_a_solve_inside_the_interior(mdf):
     solve, = Schedule.of((Plan(mdf) + Nest(MDA, N('opt'))).graph).steps
     assert solve.encloser == N('opt')
-    inner = [s for s in Schedule.of(solve.interior).steps if isinstance(s, core.Loop)]
+    inner = [s for s in solve.interior.steps if isinstance(s, core.Enclosed)]
     assert [s.encloser for s in inner] == [MDA]
-    assert [s.node for s in Schedule.of(inner[0].interior).steps] == [N('D1'), N('D2')]
+    assert [s.node for s in inner[0].interior.steps] == [N('D1'), N('D2')]
 
 
 def test_every_interior_at_every_depth_is_proved_executable_and_holds_nothing_else(
@@ -230,14 +239,14 @@ def ran(graph) -> OrderedMap:
 
 
 def test_combining_the_problems_is_the_merged_block(two_problems):
-    '''The blocking follows the rewrite: one problem, so one component, and one `Loop`
+    '''The blocking follows the rewrite: one problem, so one component, and one `Enclosed`
     over both unknowns.'''
     op = Combine(PROBLEM(N('mda')), (N('ha'), N('hb')), RelationalCondition)
     graph = driven(two_problems, op, solving(op.at))
     Runnable.prove(graph)
 
     solve, run_ = Schedule.of(graph).steps
-    assert isinstance(solve, core.Loop) and isinstance(run_, core.Run)
+    assert isinstance(solve, core.Enclosed) and isinstance(run_, core.Run)
     assert names(graph[solve.encloser].owns_inside) == ['.ua', '.ub']
     assert ran(graph)[V('f')] == pytest.approx(3.0)
 
@@ -245,7 +254,7 @@ def test_combining_the_problems_is_the_merged_block(two_problems):
 def test_the_finer_blocking_is_two_solves(two_problems):
     graph = driven(two_problems, solving(N('ha')), solving(N('hb')))
     Runnable.prove(graph)
-    assert [type(s).__name__ for s in Schedule.of(graph).steps] == ['Loop', 'Loop', 'Run']
+    assert [type(s).__name__ for s in Schedule.of(graph).steps] == ['Enclosed', 'Enclosed', 'Run']
     assert Schedule.of(graph).steps is Schedule.of(graph).steps                               # derived once
     assert ran(graph)[V('f')] == pytest.approx(3.0)
 
@@ -538,7 +547,7 @@ def test_a_parameter_is_a_read_held_fixed_off_the_cycle():
             N('c'): call(limit_from, ['x']),
         }))
     Executable.prove(Assign(N('p'), SelfStarting(), (), ())(with_limit([])))
-    with pytest.raises(ValueError, match='produced inside the block it drives'):
+    with pytest.raises(ValueError, match='produced inside the block it encloses'):
         Executable.prove(Assign(N('p'), SelfStarting(), (), ())(with_limit(['u'])))
 
 

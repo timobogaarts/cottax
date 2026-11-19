@@ -173,7 +173,7 @@ def xdsm_struct(
         'reads'   : {step(n): list(dict.fromkeys(var(v) for v in graph[n].reads))
                      for n in names},
         'writes'  : {step(n): [var(v) for v in graph[n].owns] for n in names},
-        'producer': {var(v): step(owner) for v, owner in Dependencies.of(graph).owners.items()},
+        'producer': {var(v): step(owner) for v, owner in Dependencies.of(graph).owner.items()},
         'shown_steps': {step(n): shown(n, formatter) for n in names},
         'shown_vars' : {var(v): shown(v, formatter) for v in graph.variables},
         'problem_types'  : {step(n): s for n in names

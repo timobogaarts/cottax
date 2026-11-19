@@ -536,6 +536,26 @@ higher-layer view lands.
   `Schedule`/`Loop`. Targeted tests pass (79 + 26 slow skipped). `capture.replay` and the
   edited example notebooks are not exercised.
 
+**Recursive schedule (2026-11-19, uncommitted):** the step `Loop` -> `Drive(encloser,
+interior: Schedule)`: a tree, the interior is `Schedule.of(interior graph)` (`.graph` for the
+driver's posing), so the old explicit `Executable.prove(interior)` is the view's own check,
+stated as following from the whole's proof. `walk`'s `AtSolve`/`at_solve` -> `AtDrive`/
+`at_drive`, still handed the interior graph. processax breaks (owner's): `benchmark/
+structure.py` imports `Loop` (:9, now `Enclosed`) and uses `step.interior` as a graph (:24, :40-41).
+
+**Blind re-review: 8.5/10** (old 5). Done after it (uncommitted): `Dependencies.owners` ->
+`.owner` (single, the shape in the name; `Graph.owners` the tuples); rules docstrings say
+`@checked(X.check)` is for one-argument functions; `subgraph` uses `dataclasses.replace`
+(a graph asks nothing, so `_carried`'s ambient switch suppressed nothing); `cycle_of` asks
+`enclosing` only on a miss; "problem" gone from `valid.py`'s messages; `remembered`
+docstring states the lifetime and the kinds-not-inputs convention. Open from it: tests
+pinning the two theorems (subgraph of a Valid graph is Valid; interior of an Executable
+one is Executable); plan items later. DONE: the step is `Enclosed(encloser, interior: Schedule)` (`Drive` named
+the driver, a `ConditionalNode` thing, and clashed with execution's `Drive` op);
+`AtEnclosed`/`at_enclosed` in `walk`; `executable.py`'s messages say encloser, not driver.
+processax breaks: `Dependencies.of(..).owners` at `study.py:112`, `kinds.py:109,118`,
+`test_coupled_reads.py:38,56,68`.
+
 **From the blind review (2026-11-19), deferred by the owner:**
 - `refusals(op, graph)` on an invalid graph: asks no `Valid` first, so a `checks_graph`
   rule can meet a broken graph (`Cut`'s builds a view and raises). And `Redefine.rebinding`

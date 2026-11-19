@@ -259,7 +259,7 @@ def test_4_the_history_couples_its_reader_to_the_ode_from_the_declaration():
     g = declare(decay, area).graph
     print(f'\n[4] area reads from {[str(n) for n in Dependencies.of(g).ancestors((node("area"),))]}')
     assert Dependencies.of(g).ancestors((node('area'),)) == (node('decay'), problem('decay'), node('area'))
-    assert Dependencies.of(g).owners[s.place('xs')] == problem('decay')
+    assert Dependencies.of(g).owner[s.place('xs')] == problem('decay')
     Driven.prove(g)
     assert recalled(g, Executable)
     kinds = [type(v).__name__ for v in Executable.check(declare(remembering).graph)]

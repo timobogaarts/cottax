@@ -15,7 +15,7 @@ class OdeModel(ModelReading):
     '''
 
     def not_implicit(self, graph, problem):
-        owners = Dependencies.of(graph).owners
+        owners = Dependencies.of(graph).owner
         if unwritten := tuple(r for r in graph[problem].reads_inside
                               if r not in owners or not isinstance(graph[owners[r]], FunctionalNode)):
             return (RateUnwritten(str(problem), tuple(map(str, unwritten))),)

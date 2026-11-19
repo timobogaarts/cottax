@@ -64,7 +64,7 @@ class Results(Mapping):
         '''Where the problem owning the unknown written has `role`: at that unknown, or, per
         problem, at its one place.'''
         unknown = self._surface.place(written, role=f'out[{role.__name__}, ...]')
-        owner = Dependencies.of(self._graph).owners.get(unknown)
+        owner = Dependencies.of(self._graph).owner.get(unknown)
         for place, problem, at in role_slots(self._graph, role):
             if problem == owner and at in (unknown, None):
                 return place
@@ -150,7 +150,7 @@ class Running(Part):
                 raise NotAnInput((place,)).raised
             return place
         unknown = self.place(written, role=f'`values[{key.__name__}]`')
-        at = Dependencies.of(graph).owners.get(unknown)
+        at = Dependencies.of(graph).owner.get(unknown)
         node = graph[at] if at is not None else None
         if node is None or unknown not in owns_inside(node):
             why = ('which nothing owns' if node is None else

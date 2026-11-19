@@ -59,7 +59,7 @@ def networkx_graph(graph: Graph, *, boundary: bool = False) -> nx.DiGraph:
     `boundary`, one per boundary variable (`kind` `'free'` or `'sink'`); each edge carries
     the variables along it (`vars`). Refuses a boundary variable spelt as a node is.
     '''
-    owner = Dependencies.of(graph).owners
+    owner = Dependencies.of(graph).owner
     g = nx.DiGraph()
     for name in graph.nodes:
         g.add_node(name, node=graph[name])

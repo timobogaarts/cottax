@@ -47,7 +47,7 @@ def names(graph):
 def contributing(graph, *wanted):
     '''What a run to `wanted` needs -- the ancestors of their producers -- as a graph.
     The hazard below is about what this drops.'''
-    owners = Dependencies.of(graph).owners
+    owners = Dependencies.of(graph).owner
     return graph.subgraph(Dependencies.of(graph).ancestors(owners[v] for v in wanted if v in owners))
 
 

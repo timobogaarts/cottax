@@ -122,14 +122,14 @@ class EndOwnsNothingInside(Violation):
     nodes : tuple[Label, ...]
     error    = ValueError
     template = ('{nodes} determines nothing, so no iteration of it answers anything -- an end '
-                 'of a nesting is a problem: determine it, naming the unknowns it fixes, or '
+                 'of a nesting is an encloser: determine it, naming the unknowns it fixes, or '
                  '`Unnest` it first so the plan says the nesting went')
 
 
 class SelfNested(Violation):
     inner : Label
     error    = ValueError
-    template = '{inner!r} inside itself -- an iteration does not answer the problem it is'
+    template = '{inner!r} inside itself -- an encloser does not enclose itself'
 
 
 class NestingLoop(Violation):

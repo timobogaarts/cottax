@@ -220,10 +220,14 @@ def _cached_hash(self) -> int:
 
 class remembered[T]:
     '''
-    Cached property for functions not on the class combined with an additional Hashable key (to support _proven(graph, SomeRule)).
-    Answer should only depend on those (pure function!).
+    A cached property for a function defined off the class: `fn(value, *key)`, remembered
+    on `value` itself (its `__dict__`, so it lives and dies with the value; a copy or a
+    pickle starts empty). The answer must depend on `value` and `key` alone (a pure
+    function).
 
-    Tested to a few uses in cottax (limit the cache size on the object)
+    The memo stays small only by convention: a key is a *kind* (a rule group, a view
+    class), never an input that varies (a node set, a place). `test_layering.REMEMBERED`
+    lists every use.
     '''
 
     def __init__(self, fn: Callable[..., T]) -> None:

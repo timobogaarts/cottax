@@ -23,7 +23,7 @@ rules                        (Rules, per_node_check: what is proved of a graph, 
 valid                        (Valid: ValidNesting, the nesting's three rules, and
  ||                           ValidDependencies, the bindings' two -- each view asks its own)
  \/
-dependencies                 (`Dependencies.of(graph)`, the view of owners, edges, components,
+dependencies                 (`Dependencies.of(graph)`, the view of the owner, edges, components,
  ||                           order, reachability)
  \/
 nesting                      (`Nesting.of(graph)`, the view of the outermost enclosers, what each
@@ -33,7 +33,7 @@ executable                   (the structural proof, a group implying Valid: cycl
  ||                           enclosers, and every encloser's edges against its cycle; outline)
  \/
 steps                        (`Schedule.of(graph)`, the view of the steps in order: a Run per
-                              node, a Loop per cycle with its interior proved executable)
+                              node, an Enclosed per cycle, holding its interior's schedule)
 
 '''
 
@@ -50,4 +50,4 @@ from .valid import Valid, ValidDependencies, ValidNesting
 from .dependencies import Dependencies
 from .nesting import Nesting
 from .executable import Executable, body, outline
-from .steps import Loop, Run, Schedule, Step
+from .steps import Enclosed, Run, Schedule, Step

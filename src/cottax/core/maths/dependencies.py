@@ -24,8 +24,9 @@ class Dependencies[N: Label, V: Place](View[N, V]):
     checks = (ValidDependencies.check,)
 
     @cached_property
-    def owners(self) -> dict[V, N]:
-        '''Which V is output (owned) by which N: the one, proved.'''
+    def owner(self) -> dict[V, N]:
+        '''Which V is output (owned) by which N: the one, proved (`Graph.owners` holds every
+        owner, as a tuple).'''
         return {v: n for v, (n,) in self.graph.owners.items()}
 
     @cached_property
@@ -100,13 +101,13 @@ class Dependencies[N: Label, V: Place](View[N, V]):
         Which variables are read in the same SCC as their producer.
         '''
         at = {n: i for i, c in enumerate(self.components) for n in c}
-        return tuple(v for v, n in self.owners.items()
+        return tuple(v for v, n in self.owner.items()
                      if any(at[r] == at[n] for r in self.graph.readers.get(v, ())))
 
     def closing_readers(self, var: V) -> tuple[N, ...]:
         '''The readers of `var` that close a cycle back onto its producer -- the
         minimal set that has to stop reading the computed value for the cycle to break.'''
-        owner = self.owners.get(var)
+        owner = self.owner.get(var)
         if owner is None:
             raise KeyError(f'{var!r} has no producer, so nothing closes a cycle on it')
         return tuple(reader for reader in self.graph.readers.get(var, ())

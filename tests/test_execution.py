@@ -21,7 +21,7 @@ from typing import Any
 import pytest
 
 from cottax.core import (
-    FunctionalNode,  Graph, Loop, violations,
+    FunctionalNode,  Graph, Enclosed, violations,
 )
 from cottax.consumers.execution.valued import InputMissing, NotAPlace, OwnedGiven
 from cottax.core.frozen import OrderedMap
@@ -221,8 +221,8 @@ def test_the_data_arrives_one_tuple_per_role_and_the_conditions_as_values():
     assert not is_driven(posed.condition)   # what the values mean, nothing of the graph
     assert data == {Start: (2.0,), Budget: (7,)}
     assert isinstance(conditions, InteriorConditionMap) and isinstance(conditions, ConditionMap)
-    step = next(s for s in Schedule.of(graph).steps if isinstance(s, Loop))
-    assert InteriorConditionMap.posing(graph[CLOSE], step.interior) == conditions
+    step = next(s for s in Schedule.of(graph).steps if isinstance(s, Enclosed))
+    assert InteriorConditionMap.posing(graph[CLOSE], step.interior.graph) == conditions
     assert conditions.unknowns == (U,) and conditions.context_places == (K,) and context == (2.0,)
     assert conditions.conditions == posed.condition.reads_inside
     assert conditions((2.0,), context) == (2.0 * 2.0 - 2.0 * 3.0,)
@@ -309,8 +309,8 @@ def test_a_nested_solve_holds_the_same_proof_at_every_depth():
     '''What holds of each node of the whole holds of each node of every interior: asked of
     an interior, at every depth, the node groups pass.'''
     graph = nested()
-    outer, = [s for s in Schedule.of(graph).steps if isinstance(s, Loop)]
-    inner, = [s for s in Schedule.of(outer.interior).steps if isinstance(s, Loop)]
+    outer, = [s for s in Schedule.of(graph).steps if isinstance(s, Enclosed)]
+    inner, = [s for s in outer.interior.steps if isinstance(s, Enclosed)]
     assert (outer.encloser, inner.encloser) == (TARGET, CLOSE)
     for level in (DrivenNodes, RealisedNodes, RunnableNodes):
         level.prove(outer.interior)

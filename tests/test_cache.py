@@ -54,7 +54,7 @@ def acyclic() -> Graph:
 def ask_everything(g: Graph) -> None:
     '''Answer enough queries that every layer of cache is warm.'''
     Dependencies.of(g).components_order, g.variables, g.boundary_outputs, g.boundary_inputs
-    Dependencies.of(g).components, Dependencies.of(g).owners, g.readers
+    Dependencies.of(g).components, Dependencies.of(g).owner, g.readers
     g[N('d1')]                                  # OrderedMap._index, one level down
 
 
@@ -63,7 +63,7 @@ def ask_everything(g: Graph) -> None:
 def test_a_query_caches_on_the_instance_where_the_flatten_never_looks():
     g = acyclic()
     ask_everything(g)
-    assert 'owners' in Dependencies.of(g).__dict__        # ordinary instance state, on the dependency view...
+    assert 'owner' in Dependencies.of(g).__dict__        # ordinary instance state, on the dependency view...
     leaves, treedef = tree_flatten(g)
     assert treedef == tree_flatten(acyclic())[1]       # ...that the pytree cannot see
     assert leaves  == tree_flatten(acyclic())[0]
@@ -161,14 +161,14 @@ def test_every_primed_answer_is_what_the_query_would_have_computed():
     for g in graphs:
         # not `topological_order`: the ring is cyclic until the last cut lands
         g.nodes, g.variables, g.boundary_outputs, g.boundary_inputs, Dependencies.of(g).is_acyclic
-        Dependencies.of(g).components, Dependencies.of(g).owners, g.readers, g.owned_variables, g.read_variables
+        Dependencies.of(g).components, Dependencies.of(g).owner, g.readers, g.owned_variables, g.read_variables
     assert every_cached_answer_is_the_real_one(*plans, *graphs, *(Dependencies.of(g) for g in graphs)) > len(graphs)
 
 
 def test_the_guard_catches_a_wrong_answer():
     g = acyclic()
-    Dependencies.of(g).__dict__['owners'] = {}
-    with pytest.raises(AssertionError, match='Dependencies.owners'):
+    Dependencies.of(g).__dict__['owner'] = {}
+    with pytest.raises(AssertionError, match='Dependencies.owner'):
         every_cached_answer_is_the_real_one(Dependencies.of(g))
 
 
@@ -178,7 +178,7 @@ def test_a_prefilled_answer_leaves_the_treedef_and_equality_alone():
     g      = acyclic()
     before = tree_structure(g)
     view   = Dependencies.of(g)
-    view.__dict__['owners'] = dict(type(view).owners.func(view))
+    view.__dict__['owner'] = dict(type(view).owner.func(view))
     assert tree_structure(g) == before
     assert g == acyclic() and hash(g) == hash(acyclic())
 

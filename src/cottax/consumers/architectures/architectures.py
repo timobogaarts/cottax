@@ -304,7 +304,7 @@ def check_top_combinable(op: 'Monolithic', graph: Graph) -> Iterator[Violation]:
 def reached_requirements[N: Label, V: Place](graph: Graph[N, V], top: N) -> tuple[N, ...]:
     '''Every requirement whose conditions the design of `top` reaches.'''
     reach  = set(Dependencies.of(graph).reach(graph[top].owns_inside))
-    owners = Dependencies.of(graph).owners
+    owners = Dependencies.of(graph).owner
     return tuple(r for r, d in graph.definitions.items()
                  if isinstance(d, AbstractConditionalNode) and not d.owns_inside
                  and all(owners.get(c) in reach for c in d.reads_inside))

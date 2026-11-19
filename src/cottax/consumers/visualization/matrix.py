@@ -174,7 +174,7 @@ def matrix_struct(graph, *, order: str | Sequence[Label] = 'structure',
                      'minted': minted_from(n) is not None, 'depth': depth[n],
                      'reads': reads, 'nr': nr, 'writes': writes, 'nw': nw})
 
-    owners = Dependencies.of(g).owners
+    owners = Dependencies.of(g).owner
     flows: dict[tuple[int, int], list] = {}
     for n in names:
         for v in dict.fromkeys(g[n].reads):

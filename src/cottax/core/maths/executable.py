@@ -107,7 +107,7 @@ def check_all_conditions_on_cycle(g: Graph) -> Iterator[Violation]:
         d     = g.definitions[p]
         if len(cycle) == 1:
             yield OutsideCycle(p, tuple(d.owns_inside))
-        elif constant := tuple(v for v in d.reads_inside if Dependencies.of(g).owners.get(v) not in cycle):
+        elif constant := tuple(v for v in d.reads_inside if Dependencies.of(g).owner.get(v) not in cycle):
             yield Constant(p, constant)
 
 
@@ -120,7 +120,7 @@ def check_other_reads_off_cycle(g: Graph) -> Iterator[Violation]:
     for p in enclosers(g.definitions):
         d    = g.definitions[p]
         held = set(Nesting.of(g).cycle_of(p))
-        if inside := tuple(v for v in d.reads_outside if Dependencies.of(g).owners.get(v) in held):
+        if inside := tuple(v for v in d.reads_outside if Dependencies.of(g).owner.get(v) in held):
             yield ReadInsideCycle(p, inside)
 
 
@@ -175,7 +175,7 @@ class RequirementUnanswered(Violation):
     node       : Label
     conditions : tuple[Place, ...]
     error    = ValueError
-    template = ('{node!r} holds {conditions} against nothing: it has no unknowns, so no driver '
+    template = ('{node!r} holds {conditions} against nothing: it has no unknowns, so nothing '
                  'can move it -- determine it by a variable on its cycle, or drop it')
 
 class SeveralOutermost(Violation):
@@ -183,25 +183,24 @@ class SeveralOutermost(Violation):
     enclosers : tuple[Label, ...]
     error    = ValueError
     template = ('cycle {cycle} has several outermost enclosers ({enclosers}) with nothing saying '
-                 'which is outer -- one driver drives one cycle, so merge them into a single '
+                 'which is outer -- one encloser takes one cycle, so merge them into a single '
                  'encloser over every unknown, or `Nest` the others inside one of them. Which is a '
                  'modelling decision, not something the blocking can read off the graph')
 
 class NoEncloser(Violation):
     cycle : tuple[Label, ...]
     error    = ValueError
-    template = ('coupled cycle {cycle} has no encloser, so nothing iterates it and there is '
-                 'nothing to hand a driver -- `Cut` a variable in the cycle and drive the '
-                 'iteration from outside, or declare a condition node owning something inside '
-                 'the cycle to drive it')
+    template = ('coupled cycle {cycle} has no encloser, so nothing takes it -- `Cut` a '
+                 'variable in the cycle and close it from outside, or declare a condition node '
+                 'owning something inside the cycle')
 
 class StillCyclic(Violation):
     encloser : Label
     cycle    : tuple[Label, ...]
     error    = ValueError
     template = ('inside {encloser!r}\'s iteration, {cycle} is still cyclic with no encloser on '
-                 'it, so there is no condition map to build for it. Cut a variable and pick a '
-                 'driver (inside / outside), or nest an encloser that iterates it in {encloser!r}')
+                 'it, so nothing takes it. Cut a variable and close it (inside / outside), or nest '
+                 'an encloser that takes it in {encloser!r}')
 
 class OutsideCycle(Violation):
     encloser : Label
@@ -225,7 +224,8 @@ class ReadInsideCycle(Violation):
     places   : tuple[Place, ...]
     error    = ValueError
     template = ('{encloser!r} reads {places} without holding against it, and it is produced '
-                 'inside the block it drives -- a driver reads its data before the block runs, '
+                 'inside the block it encloses -- what an encloser reads besides its conditions is '
+                 'read before the block runs, '
                  'so it must come from outside (an earlier block, or a boundary input)')
 
 class OwnReadInsideCycle(Violation):
@@ -234,5 +234,6 @@ class OwnReadInsideCycle(Violation):
     readers  : tuple[Label, ...]
     error    = ValueError
     template = ('{encloser!r} owns {places} without answering it, and it is read by {readers} '
-                 'inside the block it drives -- a report is bound after convergence, so a '
-                 'reader on the cycle would iterate against a value that does not exist yet')
+                 'inside the block it encloses -- what it owns besides its unknowns is bound once '
+                 'the block is done, so a reader on the cycle would run against a value that does '
+                 'not exist yet')

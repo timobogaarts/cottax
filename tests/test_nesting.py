@@ -231,7 +231,7 @@ def test_restricting_to_what_contributes_keeps_both_ends_or_neither(nested):
     # what a variable needs keeps both or drops both, and the state
     # `check_delete_keeps_nesting_whole` would refuse is unreachable this way. (It is
     # reachable after a `Cut` splits the pair, a graph only `Executable` refuses.)
-    contributing = lambda g, var: g.subgraph(Dependencies.of(g).ancestors((Dependencies.of(g).owners[var],)))
+    contributing = lambda g, var: g.subgraph(Dependencies.of(g).ancestors((Dependencies.of(g).owner[var],)))
     assert dict(contributing(nested, v('f')).within) == {n('mda'): n('opt')}
     beside = (Plan(nested) + Insert(OrderedMap({n('src'): call([], ['w'])}))).graph
     assert dict(contributing(beside, v('w')).within) == {}

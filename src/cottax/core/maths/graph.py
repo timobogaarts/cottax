@@ -8,6 +8,7 @@ For additional facts which need guarantees, use a `View`: facts read off one gra
 
 from collections.abc import Iterable
 from typing import Self
+from dataclasses import replace
 from functools import cached_property
 
 from ..frozen import Frozen, OrderedMap, remembered
@@ -39,7 +40,7 @@ class Graph[N: Label, V: Place](Frozen):
     def owners(self) -> dict[V, tuple[N, ...]]:
         '''
         Which V is owned by which N (multiple, on a graph with two producers). One owner per
-        place is `ValidDependencies`'; `Dependencies.of(graph).owners` the one.
+        place is `ValidDependencies`'; `Dependencies.of(graph).owner` the one.
         '''
         out : dict[V, list[N]] = {}
         for n, d in self.definitions.items():
@@ -109,9 +110,9 @@ class Graph[N: Label, V: Place](Frozen):
         if unknown := [n for n in kept if n not in self._position]:
             raise KeyError(f'not node(s) of this graph: {unknown!r}')
         order = sorted(kept, key=self._position.__getitem__)
-        return self._carried(definitions=OrderedMap((n, self.definitions[n]) for n in order),
-                             within=OrderedMap((i, o) for i, o in self.within.items()
-                                               if i in kept and o in kept))
+        return replace(self, definitions=OrderedMap((n, self.definitions[n]) for n in order),
+                       within=OrderedMap((i, o) for i, o in self.within.items()
+                                         if i in kept and o in kept))
 
 
 # ---------------------------------------------------------------- views
@@ -124,7 +125,7 @@ class View[N: Label, V: Place](Frozen):
         class Dependencies(View):
             checks = (ValidDependencies.check,)
 
-        Dependencies.of(graph).owners
+        Dependencies.of(graph).owner
     
     '''
 

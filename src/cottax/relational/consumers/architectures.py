@@ -20,7 +20,7 @@ class RelationalModel(ModelReading):
     join.'''
 
     def not_implicit(self, graph, problem):
-        node, owners = graph[problem], Dependencies.of(graph).owners
+        node, owners = graph[problem], Dependencies.of(graph).owner
         if not is_equalities(node.condition):
             return (NotEqualities(str(problem)),)
         if off := tuple(c for c in node.reads_inside
@@ -32,7 +32,7 @@ class RelationalModel(ModelReading):
         return ()
 
     def body(self, graph, problem):
-        owners = Dependencies.of(graph).owners
+        owners = Dependencies.of(graph).owner
         return tuple(dict.fromkeys(owners[c] for c in graph[problem].reads_inside if c in owners))
 
     def combines_as(self, condition):

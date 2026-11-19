@@ -172,7 +172,7 @@ def draws_feedback(order: Sequence[Label], subgraph: Graph) -> bool:
     Whether some node in `order` reads a variable a later one owns: an edge drawn above
     the diagonal.
     '''
-    at, owners = {name: i for i, name in enumerate(order)}, Dependencies.of(subgraph).owners
+    at, owners = {name: i for i, name in enumerate(order)}, Dependencies.of(subgraph).owner
     return any(at[owner] > i
                for i, name in enumerate(order)
                for var in subgraph[name].reads
