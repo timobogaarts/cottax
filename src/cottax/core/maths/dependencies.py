@@ -2,16 +2,15 @@
 Dependency view with queries that depend on that validity.
 '''
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable
 from functools import cached_property
 
 import networkx as nx
 
 
-from .definition import NodeDefinition
 from .graph import Graph, View
 from .places import Label, Place
-from .valid import ValidDependencies, owners_of
+from .valid import ValidDependencies
 
 
 # ---------------------------------------------------------------- the view
@@ -26,8 +25,8 @@ class Dependencies[N: Label, V: Place](View[N, V]):
 
     @cached_property
     def owners(self) -> dict[V, N]:
-        '''Which V is output (owned) by which N. '''
-        return owners_of(self.graph.definitions)
+        '''Which V is output (owned) by which N: the one, proved.'''
+        return {v: n for v, (n,) in self.graph.owners.items()}
 
     @cached_property
     def components(self) -> tuple[tuple[N, ...], ...]:
@@ -48,7 +47,7 @@ class Dependencies[N: Label, V: Place](View[N, V]):
     @cached_property
     def _nx_dependencies(self) -> nx.DiGraph:
         '''Dependency graph in networkx format.'''
-        return nx_dependencies(self.graph.definitions)
+        return nx_dependencies(self.graph)
 
     # ------------------------------------------------------------ order
     @cached_property
@@ -116,13 +115,11 @@ class Dependencies[N: Label, V: Place](View[N, V]):
 
 # ---------------------------------------------------------------- the projection
 
-def nx_dependencies[N: Label](definitions: Mapping[N, NodeDefinition]) -> nx.DiGraph:
-    '''Networkx dependency graph'''
-    owners = owners_of(definitions)
+def nx_dependencies[N: Label](graph: Graph[N, Place]) -> nx.DiGraph:
+    '''Networkx dependency graph: an edge from every owner of a place to every reader.'''
     g = nx.DiGraph()
-    g.add_nodes_from(definitions)
-    for m, d in definitions.items():
-        for v in d.reads:
-            if (n := owners.get(v)) is not None:
-                g.add_edge(n, m)
+    g.add_nodes_from(graph.definitions)
+    for v, readers in graph.readers.items():
+        for n in graph.owners.get(v, ()):
+            g.add_edges_from((n, m) for m in readers)
     return g

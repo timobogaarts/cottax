@@ -32,8 +32,8 @@ nesting                      (`Nesting.of(graph)`, the view of the outermost enc
 executable                   (the structural proof, a group implying Valid: cycles,
  ||                           enclosers, and every encloser's edges against its cycle; outline)
  \/
-steps                        (Schedule.of(graph).steps: Run and Loop, every interior proved
-                              executable and holding the graph's node groups)
+steps                        (`Schedule.of(graph)`, the view of the steps in order: a Run per
+                              node, a Loop per cycle with its interior proved executable)
 
 '''
 

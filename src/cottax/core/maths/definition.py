@@ -41,6 +41,8 @@ type Renaming[V: Place] = Mapping[V, V]
 # ---------------------------------------------------------------- the definition: one that passed them
 
 type Attribute = type
+'''An attribute's key: its class. A node carries at most one value of each kind
+(an implementation, say), opaque to the maths.'''
 
 class NodeDefinition[V: Place](Frozen):
     """

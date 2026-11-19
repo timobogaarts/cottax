@@ -36,6 +36,18 @@ class Graph[N: Label, V: Place](Frozen):
         return {v: tuple(ns) for v, ns in out.items()}
 
     @cached_property
+    def owners(self) -> dict[V, tuple[N, ...]]:
+        '''
+        Which V is owned by which N (multiple, on a graph with two producers). One owner per
+        place is `ValidDependencies`'; `Dependencies.of(graph).owners` the one.
+        '''
+        out : dict[V, list[N]] = {}
+        for n, d in self.definitions.items():
+            for v in d.owns:
+                out.setdefault(v, []).append(n)
+        return {v: tuple(ns) for v, ns in out.items()}
+
+    @cached_property
     def nodes(self) -> tuple[N, ...]:
         '''Every node's name, in binding order.'''
         return tuple(self.definitions)
@@ -79,8 +91,6 @@ class Graph[N: Label, V: Place](Frozen):
     def __contains__(self, name: N) -> bool:
         '''Whether a node is in the graph'''
         return name in self.definitions
-
-    # ------------------------------------------------------------ the nesting
 
     # ------------------------------------------------------------ restriction
     # Every other edit is an op (`plan/`).

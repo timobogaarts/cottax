@@ -548,6 +548,6 @@ def test_components_are_computed_from_ports_alone():
     from cottax.core.maths.dependencies import nx_dependencies
     a, b, c = Word('a'), Word('b'), Word('c')
     defs = {a: toy(['y'], ['x']), b: toy(['x'], ['y']), c: toy(['y'], ['z'])}
-    assert set(nx_dependencies(defs).edges) == {(a, b), (b, a), (b, c)}
+    assert set(nx_dependencies(G(defs)).edges) == {(a, b), (b, a), (b, c)}
     assert Dependencies.of(G(defs)).components == ((a, b), (c,))
     assert Dependencies.of(G({b: defs[b], a: defs[a]})).components == ((b, a),)      # members in the order given

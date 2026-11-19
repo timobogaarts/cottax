@@ -1,6 +1,7 @@
 '''
-Graph rules
-(`@checked(Executable.check)`, `checks = (Valid.check,)`) 
+Rules a graph satisfies or violates, in groups: `X.check(graph)` the violations as data,
+`X.prove(graph)` the first raised. A group's bases are the groups it implies. Asked by a
+function as `@checked(X.check)`, by a view or value as `checks = (X.check,)`.
 '''
 from collections.abc import Callable, Iterator
 from functools import update_wrapper
@@ -41,7 +42,7 @@ class Rules:
                         f'(`{cls.__name__}.check`, `{cls.__name__}.prove`), not made')
 
     @classmethod
-    def check(cls, graph: Graph | HasGraph, *_: Any, **__: Any) -> Iterator[Violation]:
+    def check(cls, graph: Graph | HasGraph) -> Iterator[Violation]:
         '''Every violation of this group and the groups it implies, as data, implied groups
         first (`@checked(X.check)` and `checks = (X.check,)`). A group implying one
         that fails is not asked: its rules may read what the groups it implies make true.'''
@@ -51,7 +52,7 @@ class Rules:
                 yield from _own(graph, g)           # fails on its own: everything it finds
 
     @classmethod
-    def prove(cls, graph: Graph | HasGraph, *_: Any, **__: Any) -> None:
+    def prove(cls, graph: Graph | HasGraph) -> None:
         '''The first violation raised, else nothing: the graph is the same value, proved,
         and asking again costs nothing.'''
         graph = graph if isinstance(graph, Graph) else graph.graph

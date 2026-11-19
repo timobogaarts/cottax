@@ -2,10 +2,9 @@
 Valid graph: valid dependency structure between models and valid nesting.
 '''
 
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Iterator
 
 from ..frozen import Violation
-from .definition import NodeDefinition
 from .graph import Graph
 from .kinds import owns_inside
 from .places import Label, Place, comparables_in, is_prefix, overlaps
@@ -40,16 +39,11 @@ def check_reads_are_exact(g: Graph) -> Iterator[Violation]:
 
     o || p  or  o = p   ∀ n_i, n_j ∊ N:  o ∊ O_i, p ∊ I_j        
     '''
-    readers, owners = g.readers, owners_of(g.definitions)
+    readers, owners = g.readers, g.owners
     for place, other in overlaps(readers, owners):
         if other != place:                                   # equal is the (correct) edge
             yield (ReadInsideOwner if is_prefix(other, place) else OwnerInsideRead)(
-                place, other, tuple(readers[place]), owners[other])
-
-
-def owners_of[N: Label, V: Place](definitions: Mapping[N, NodeDefinition[V]]) -> dict[V, N]:
-    '''Who owns each place. One producer per place is `check_one_producer_per_place`'s rule; assumed here.'''
-    return {v: n for n, d in definitions.items() for v in d.owns}
+                place, other, readers[place], owners[other])
 
 
 class ValidDependencies(Rules):    
@@ -176,18 +170,18 @@ class ReadInsideOwner(Violation):
     place   : Place
     witness : Place
     readers : tuple[Label, ...]
-    owner   : Label
+    owners  : tuple[Label, ...]
     error    = ValueError
-    template = ('{readers} read {place!r}, which lies inside {witness!r}, owned by {owner!r} -- '
+    template = ('{readers} read {place!r}, which lies inside {witness!r}, owned by {owners} -- '
                  'reads are matched by equality, so this would silently be a boundary input')
 
 class OwnerInsideRead(Violation):
     place   : Place
     witness : Place
     readers : tuple[Label, ...]
-    owner   : Label
+    owners  : tuple[Label, ...]
     error    = ValueError
-    template = ('output {witness!r} of {owner!r} lies inside {place!r}, read by {readers} -- '
+    template = ('output {witness!r} of {owners} lies inside {place!r}, read by {readers} -- '
                  'that read would silently miss this output')
 
 #--------------------------------------------------------------------- Violation pickers

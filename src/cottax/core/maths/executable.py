@@ -59,9 +59,9 @@ def check_no_requirements(g: Graph) -> Iterator[Violation]:
 
 def check_body_is_dag(g: Graph) -> Iterator[Violation]:
     '''
-    With the enclosers taken out no cycle is left: *functionally acyclic*.
+    With the condition nodes taken out (`body`) no cycle is left: *functionally acyclic*.
 
-    |S_k| = 1  ∀ S_k ∊ SCC[G \\ N_P]
+    |S_k| = 1  ∀ S_k ∊ SCC[G \\ N_C],   N_C the condition nodes
     '''
     for cycle in Dependencies.of(body(g)).cycles:
         held = [p for p in enclosers(g.definitions) if set(cycle) <= set(Nesting.of(g).cycle_of(p))]
@@ -149,12 +149,13 @@ class Executable(Valid):
 
 def outline(g: Graph) -> str:
     '''The top level in one line: each component in dependency order, a component
-    answered by an outermost encloser as `solve(encloser)[members]`, one node bare.'''
+    with an outermost encloser as `encloser[members]`, any other cycle as `[members]`, one
+    node bare.'''
     outer = set(Nesting.of(g).outermost)
     def one(component) -> str:
         members = ', '.join(str(n) for n in component)
         if held := [p for p in component if p in outer]:
-            return f'solve({", ".join(str(p) for p in held)})[{members}]'
+            return f'{", ".join(str(p) for p in held)}[{members}]'
         return f'[{members}]' if len(component) > 1 else members
     return ' -> '.join(one(c) for c in Dependencies.of(g).components) or '-'
 
@@ -182,7 +183,7 @@ class SeveralOutermost(Violation):
     enclosers : tuple[Label, ...]
     error    = ValueError
     template = ('cycle {cycle} has several outermost enclosers ({enclosers}) with nothing saying '
-                 'which is outer -- one driver iterates one cycle, so `Combine` them into a single '
+                 'which is outer -- one driver drives one cycle, so merge them into a single '
                  'encloser over every unknown, or `Nest` the others inside one of them. Which is a '
                  'modelling decision, not something the blocking can read off the graph')
 

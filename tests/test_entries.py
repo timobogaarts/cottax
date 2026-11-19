@@ -165,7 +165,7 @@ def test_an_unresolved_diagonal_is_its_problems_then_its_body(two_problems):
 
 def test_a_proof_spells_where_a_rewrite_stands(two_problems):
     nested = (Plan(two_problems) + Nest(N('h'), N('opt'))).graph
-    assert outline(nested) == 'solve(.opt)[.opt, .h, .d, .obj]'
+    assert outline(nested) == '.opt[.opt, .h, .d, .obj]'
 
 
 def test_the_drawing_takes_a_graph_or_a_blocking(two_problems):

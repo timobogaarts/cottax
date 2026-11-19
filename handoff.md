@@ -536,6 +536,25 @@ higher-layer view lands.
   `Schedule`/`Loop`. Targeted tests pass (79 + 26 slow skipped). `capture.replay` and the
   edited example notebooks are not exercised.
 
+**From the blind review (2026-11-19), deferred by the owner:**
+- `refusals(op, graph)` on an invalid graph: asks no `Valid` first, so a `checks_graph`
+  rule can meet a broken graph (`Cut`'s builds a view and raises). And `Redefine.rebinding`
+  raises `NotBound` through `first` instead of a `checks_graph` entry, so `refusals` never
+  reports it. Later.
+- `Contract.composed` reads the private `graph._position`: make it public, or stop. Later.
+- Done: `Graph.owners` (place -> every owner, a tuple like `readers`, true of any graph);
+  `Dependencies.owners` is the single owner, unpacked (`(n,)`) under its proof; `owners_of`
+  gone. `check_reads_are_exact` names every owner (`ReadInsideOwner` / `OwnerInsideRead`
+  field `owner` -> `owners`); `nx_dependencies(graph)` takes the graph.
+- Left: `Nesting._cycles` re-proves `ValidDependencies` per level subgraph -- a theorem
+  (removing nodes keeps it), cheap, not worth carrying proofs through `subgraph`.
+- Declined: a failing group runs its rules twice (`_satisfies` then `_own`); threading
+  `keeps` through `Plan`.
+- Done: stale text (`outline` prints `encloser[members]`, the `SeveralOutermost` message
+  no longer names `Combine` (an architectures op), `body` formula `G \ N_C`, `rules.py` and
+  `maths/__init__` docstrings, empty section in `graph.py`); `Rules.check`/`prove` take the
+  graph alone (no `*_, **__`: every caller passes one argument); `Attribute` documented.
+
 **Still open from earlier:**
 - `body_of` into the nesting view (`nesting(g).body`), recommended.
 - Optional: `Solve` holding its interior's steps (one tree); `checked` precomputing its
