@@ -194,7 +194,7 @@ def test_two_statements_with_nothing_said_have_no_blocking_but_still_draw(mdf):
     # A blocking is executable by construction, so a graph halfway through a rewrite has
     # none -- and is drawn regardless, the drawing walking `entries(graph)`.
     from cottax.consumers.visualization.xdsm import xdsm_struct
-    with pytest.raises(ValueError, match='several problems'):
+    with pytest.raises(ValueError, match='several outermost enclosers'):
         Executable.prove(mdf)
     assert [(b['ring'], b['depth']) for b in xdsm_struct(mdf, blocks=True)['blocks']] == [('solve', 0)]
 

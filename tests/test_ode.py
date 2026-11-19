@@ -8,7 +8,7 @@ floats over a toy `Word` place.
 '''
 
 from cottax.core import conditions
-from cottax.core import steps
+from cottax.core import Schedule
 
 import math
 import re
@@ -295,7 +295,7 @@ def doubled(x):
 
 def test_an_ode_whose_rate_reads_a_function_of_its_state_and_feeds_another():
     graph = driven(squared, logistic, doubled, implementation=diffrax_run())
-    (solve,) = [step for step in steps(graph) if hasattr(step, 'interior')]
+    (solve,) = [step for step in Schedule.of(graph).steps if hasattr(step, 'interior')]
     assert set(solve.interior.nodes) == {node('squared'), node('logistic')}
     out = run(GraphWithValues(graph, OrderedMap({s.place('k'): 1.0, **ivp((0.0, 3.0), x=0.1)})))
     x = 1.0 / (1.0 + 9.0 * math.exp(-3.0))

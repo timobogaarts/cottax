@@ -9,7 +9,7 @@ from collections.abc import Iterator, Sequence
 from functools import cached_property
 
 from ...core.frozen import AbstractVar, Frozen, OrderedMap
-from ...core import Plan, Label, Graph, body_of, conditions, Dependencies, Nesting
+from ...core import Plan, Label, Graph, body, conditions, Dependencies, Nesting
 
 
 def graph_drawn(handed: Graph | Plan) -> Graph:
@@ -196,11 +196,11 @@ def sequence(graph: Graph) -> tuple[Label, ...]:
             out.extend(sequence(entry.held))
         else:
             sub          = entry.subgraph
-            body         = body_of(sub)
-            outside_body = [n for n in entry.nodes if n not in body.definitions]
-            order        = [n for n in entry.nodes if n in body.definitions]
-            if order and draws_feedback(order, body):
-                order = list(Dependencies.of(body).components_order)
+            body_graph   = body(sub)
+            outside_body = [n for n in entry.nodes if n not in body_graph.definitions]
+            order        = [n for n in entry.nodes if n in body_graph.definitions]
+            if order and draws_feedback(order, body_graph):
+                order = list(Dependencies.of(body_graph).components_order)
             out.extend((*outside_body, *order))
     return tuple(out)
 

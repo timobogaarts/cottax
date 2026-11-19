@@ -51,16 +51,6 @@ class Dependencies[N: Label, V: Place](View[N, V]):
         return nx_dependencies(self.graph.definitions)
 
     # ------------------------------------------------------------ order
-
-    @cached_property
-    def topological_order(self) -> tuple[N, ...]:
-        '''
-        The nodes in dependency order, raising if the graph has a cycle.
-        '''
-        if self.cycles:
-            raise ValueError(f'computational graph has a dependency cycle: {self.cycles!r}')
-        return self.components_order
-
     @cached_property
     def components_order(self) -> tuple[N, ...]:
         '''In run order; components are adjacent nodes'''
@@ -73,8 +63,8 @@ class Dependencies[N: Label, V: Place](View[N, V]):
         '''
         return tuple(c for c in self.components if len(c) > 1)
 
-    @cached_property
-    def is_acyclic(self) -> bool:        
+    @property
+    def is_acyclic(self) -> bool:
         return not self.cycles
 
     # ------------------------------------------------------------ reachability

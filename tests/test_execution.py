@@ -10,7 +10,7 @@ finding the `x` that makes `f - t` vanish: one iteration of it a whole inner sol
 
 from toy_places import Segmented
 from cottax.core import Place
-from cottax.core import steps
+from cottax.core import Schedule
 from proofs import recalled
 
 import math
@@ -21,7 +21,7 @@ from typing import Any
 import pytest
 
 from cottax.core import (
-    FunctionalNode,  Graph, Solve, violations,
+    FunctionalNode,  Graph, Loop, violations,
 )
 from cottax.consumers.execution.valued import InputMissing, NotAPlace, OwnedGiven
 from cottax.core.frozen import OrderedMap
@@ -221,7 +221,7 @@ def test_the_data_arrives_one_tuple_per_role_and_the_conditions_as_values():
     assert not is_driven(posed.condition)   # what the values mean, nothing of the graph
     assert data == {Start: (2.0,), Budget: (7,)}
     assert isinstance(conditions, InteriorConditionMap) and isinstance(conditions, ConditionMap)
-    step = next(s for s in steps(graph) if isinstance(s, Solve))
+    step = next(s for s in Schedule.of(graph).steps if isinstance(s, Loop))
     assert InteriorConditionMap.posing(graph[CLOSE], step.interior) == conditions
     assert conditions.unknowns == (U,) and conditions.context_places == (K,) and context == (2.0,)
     assert conditions.conditions == posed.condition.reads_inside
@@ -281,10 +281,10 @@ def test_a_run_proves_the_graph_callable_itself():
 def test_what_a_run_proves_is_read_off_it():
     """Declared with the function, not inside it: a run proves the graph callable, a trace
     the same, and the steps are of a graph proved executable."""
-    from cottax.core import Executable, steps
+    from cottax.core import Executable, Schedule
     from cottax.consumers.execution.jax_jit import Traced
     assert run.checks == (Runnable.check,) and Runnable.check in Traced.checks
-    assert steps.checks == (Executable.check,)
+    assert Schedule.checks == (Executable.check,)
 
 
 def test_what_comes_back_is_counted():
@@ -309,9 +309,9 @@ def test_a_nested_solve_holds_the_same_proof_at_every_depth():
     '''What holds of each node of the whole holds of each node of every interior: asked of
     an interior, at every depth, the node groups pass.'''
     graph = nested()
-    outer, = [s for s in steps(graph) if isinstance(s, Solve)]
-    inner, = [s for s in steps(outer.interior) if isinstance(s, Solve)]
-    assert (outer.problem, inner.problem) == (TARGET, CLOSE)
+    outer, = [s for s in Schedule.of(graph).steps if isinstance(s, Loop)]
+    inner, = [s for s in Schedule.of(outer.interior).steps if isinstance(s, Loop)]
+    assert (outer.encloser, inner.encloser) == (TARGET, CLOSE)
     for level in (DrivenNodes, RealisedNodes, RunnableNodes):
         level.prove(outer.interior)
         level.prove(inner.interior)

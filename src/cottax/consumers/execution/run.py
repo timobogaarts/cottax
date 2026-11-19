@@ -7,7 +7,7 @@ from typing import Any
 
 from ...core import (
     ConditionalNode, FunctionalNode,  Label, Graph, NodeDefinition,
-    Place, per_node_check, Rules, Run, Violation, is_driven, steps)
+    Place, per_node_check, Rules, Run, Schedule, Violation, is_driven)
 from ...core.frozen import OrderedMap, checked
 from ...core.realisation import Realised, implementation_of, is_implemented
 from .interface import DriverImplementation
@@ -103,15 +103,15 @@ class Env[V]:
         self.values.update(zip(places, values, strict=True))
 
 type AtSolve = Callable[[ConditionalNode, Graph, Env], None]
-'''What a walk does at a `Solve`, handed the problem, its interior and the values so far:
+'''What a walk does at a `Loop`, handed the encloser, its interior and the values so far:
 it writes the unknowns and the reports, and walks the interior if it wants its values.'''
 
 
 def walk(graph: Graph, env: Env, at_solve: AtSolve) -> None:
-    '''`graph`'s steps in order, a `Run` called and a `Solve` handed to `at_solve`: `run` is
-    this loop with "solve it" at a solve. What a step raises names its node (`blamed`).'''
-    for step in steps(graph):
-        name = step.node if isinstance(step, Run) else step.problem
+    '''`graph`'s steps in order, a `Run` called and a `Loop` handed to `at_solve`: `run` is
+    this loop with "solve it" at a loop. What a step raises names its node (`blamed`).'''
+    for step in Schedule.of(graph).steps:
+        name = step.node if isinstance(step, Run) else step.encloser
         try:
             if isinstance(step, Run):
                 _call(name, graph[name], env)
@@ -183,7 +183,7 @@ class InteriorConditionMap[N: Label, V: Place](ConditionMap):
     @classmethod
     def posing(cls, node: ConditionalNode[V], interior: Graph[N, V]
                ) -> 'InteriorConditionMap[N, V]':
-        '''The map `run` hands `node`'s driver, `interior` its `Solve`'s. Fixed: what the
+        '''The map `run` hands `node`'s driver, `interior` its `Loop`'s. Fixed: what the
         interior reads from outside, and what the condition reads that the interior does not
         produce (a parameter); the map answers at every condition read.'''
         solved   = set(node.owns_inside)

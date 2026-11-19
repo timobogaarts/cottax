@@ -32,7 +32,7 @@ nesting                      (`Nesting.of(graph)`, the view of the outermost enc
 executable                   (the structural proof, a group implying Valid: cycles,
  ||                           enclosers, and every encloser's edges against its cycle; outline)
  \/
-steps                        (steps(graph): Run and Solve, every interior proved
+steps                        (Schedule.of(graph).steps: Run and Loop, every interior proved
                               executable and holding the graph's node groups)
 
 '''
@@ -49,5 +49,5 @@ from .rules import Rules, per_node_check
 from .valid import Valid, ValidDependencies, ValidNesting
 from .dependencies import Dependencies
 from .nesting import Nesting
-from .executable import Executable, body_of, outline
-from .steps import Run, Solve, Step, steps
+from .executable import Executable, body, outline
+from .steps import Loop, Run, Schedule, Step

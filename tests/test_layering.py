@@ -149,7 +149,6 @@ def test_core_refusals_holds_every_kind_the_maths_defines():
 REMEMBERED = {
     ('cottax.core.maths.rules', '_satisfies'),
     ('cottax.core.maths.graph', '_view'),
-    ('cottax.core.maths.steps', 'steps'),
 }
 '''Every function `remembered` on a value, by module: what a value keeps besides its fields
 and its own `cached_property`s, written from outside its class. One added is added here.'''

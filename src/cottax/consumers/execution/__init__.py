@@ -13,7 +13,7 @@ run <-----------'                 refusals: every refusal kind)
  ||                              (run: Runnable over realisation.Realised, every
  ||                               implementation callable, a driver's one of it; run,
  ||                               proving the graph a Runnable; walk, its
- ||                               loop over the steps with an Env and a Solve handed to an
+ ||                               loop over the steps with an Env and a Loop handed to an
  ||                               AtSolve; InteriorConditionMap,
  ||                               a problem posed by its interior)
  \/

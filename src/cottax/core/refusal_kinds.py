@@ -7,7 +7,7 @@ from .maths.definition import (
 )
 from .answers import NothingToAsk
 from .maths.executable import (
-    Constant, NoProblem, OutsideCycle, OwnReadInsideCycle, ReadInsideCycle, RequirementUnanswered,
+    Constant, NoEncloser, OutsideCycle, OwnReadInsideCycle, ReadInsideCycle, RequirementUnanswered,
     SeveralOutermost, StillCyclic, Unreachable,
 )
 from .maths.valid import (
@@ -27,7 +27,7 @@ from .plan.primitive import (
 __all__ = [
     'OwnInsideRead', 'OwnsNested', 'OwnsTwice', 'ReadInsideOwn', 'ReadsOwn',
     'NothingToAsk',
-    'Constant', 'NoProblem', 'OutsideCycle', 'OwnReadInsideCycle', 'ReadInsideCycle',
+    'Constant', 'NoEncloser', 'OutsideCycle', 'OwnReadInsideCycle', 'ReadInsideCycle',
     'RequirementUnanswered', 'SeveralOutermost', 'StillCyclic',
     'OwnAroundOwner', 'OwnedTwice', 'OwnerInsideRead', 'OwnInsideOwner', 'ReadInsideOwner',
     'OwnsNothing', 'ReadOnBothSides', 'StatesNothing',

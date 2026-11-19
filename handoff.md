@@ -513,6 +513,29 @@ replacing; only the mutable `nx.DiGraph` in a frozen view is a minor smell). Use
 facts: per-layer facts mixins composed in the assembly (`About`), built when the first
 higher-layer view lands.
 
+**Built (uncommitted, 2026-11-19): items 4 and 5, `Dependencies` trim, the encloser wording.**
+- `body_of` -> `body(graph)`, "the graph without its condition nodes" (`conditions`), next to
+  the executable rules. `sequencing.py`'s local `body` renamed `body_graph` (it shadowed).
+- Steps are a view: `Schedule(View)`, `checks = (Executable.check,)`, `Schedule.of(g).steps`
+  (not `Steps`: taken by the driven role and the surface mint). The step `Solve` -> `Loop`,
+  field `problem` -> `encloser` (three classes were named `Solve`; the drawing entry in
+  `sequencing` and the declaration mint keep theirs). Inventory: `_satisfies`, `_view`.
+  `assemblies/jax.py` imported core `steps` and rebound the name to a mint: dead import and
+  duplicate `__all__` entry removed.
+- Executable violations: fields `problem(s)` -> `encloser(s)`, `NoProblem` -> `NoEncloser`,
+  messages reworded ("several outermost enclosers", "has no encloser", "no encloser on it").
+  `maths/` now says "encloser" throughout except two `valid.py` messages.
+- `Dependencies`: `topological_order` removed by the owner (tests moved to `components_order`
+  / `cycles`); `is_acyclic` a plain `@property` (the owner's plain method was read as an
+  attribute everywhere, so it was always truthy). `feedback_variables` / `closing_readers`
+  kept: `docs/source/theory/theory_6_i.ipynb` uses them (through an outdated API).
+- processax converted to this API (2026-11-19, uncommitted in ~/processax): JitGraph wrappers ->
+  `Jittable.prove(g)` then `g`; `is_encloser` -> `owns_inside`; `g.graph.X` (old NestingGraph)
+  -> `Dependencies.of(g).X` or `g.X`; `GraphWithValues` from `consumers.execution`,
+  `GaussSeidelMinimal` from `consumers.architectures.cut_rules`; `structure.py` on
+  `Schedule`/`Loop`. Targeted tests pass (79 + 26 slow skipped). `capture.replay` and the
+  edited example notebooks are not exercised.
+
 **Still open from earlier:**
 - `body_of` into the nesting view (`nesting(g).body`), recommended.
 - Optional: `Solve` holding its interior's steps (one tree); `checked` precomputing its

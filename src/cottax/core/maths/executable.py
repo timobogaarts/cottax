@@ -10,17 +10,17 @@ from .dependencies import Dependencies
 from .valid import Valid
 from .graph import Graph
 from .nesting import Nesting
-from .kinds import AbstractConditionalNode, enclosers
+from .kinds import AbstractConditionalNode, conditions, enclosers
 from .places import Label, Place
 from ..frozen import Violation
 
 
-def body_of[G: Graph](g: G) -> G:
+def body[G: Graph](g: G) -> G:
     '''
-    The graph without its enclosers: what is run, never answered.
+    The graph without its condition nodes: what is run, never answered.
     '''
-    ps = set(enclosers(g.definitions))
-    return g.subgraph(n for n in g.nodes if n not in ps)
+    drop = set(conditions(g.definitions))
+    return g.subgraph(n for n in g.nodes if n not in drop)
 
 
 # ---------------------------------------------------------------- the rules: what an executable graph obeys
@@ -63,12 +63,12 @@ def check_body_is_dag(g: Graph) -> Iterator[Violation]:
 
     |S_k| = 1  ∀ S_k ∊ SCC[G \\ N_P]
     '''
-    for cycle in Dependencies.of(body_of(g)).cycles:
+    for cycle in Dependencies.of(body(g)).cycles:
         held = [p for p in enclosers(g.definitions) if set(cycle) <= set(Nesting.of(g).cycle_of(p))]
         if held:
             yield StillCyclic(max(held, key=lambda p: len(Nesting.of(g).enclosing(p))), cycle)
         else:
-            yield NoProblem(cycle)
+            yield NoEncloser(cycle)
 
 
 def check_one_encloser_per_level(g: Graph) -> Iterator[Violation]:
@@ -178,59 +178,60 @@ class RequirementUnanswered(Violation):
                  'can move it -- determine it by a variable on its cycle, or drop it')
 
 class SeveralOutermost(Violation):
-    cycle    : tuple[Label, ...]
-    problems : tuple[Label, ...]
+    cycle     : tuple[Label, ...]
+    enclosers : tuple[Label, ...]
     error    = ValueError
-    template = ('cycle {cycle} declares several problems ({problems}) with nothing saying which '
-                 'is outer -- one driver answers one problem, so `Combine` them into a single '
-                 'problem over every unknown, or `Nest` the others inside one of them. Which is a modelling '
-                 'decision, not something the blocking can read off the graph')
+    template = ('cycle {cycle} has several outermost enclosers ({enclosers}) with nothing saying '
+                 'which is outer -- one driver iterates one cycle, so `Combine` them into a single '
+                 'encloser over every unknown, or `Nest` the others inside one of them. Which is a '
+                 'modelling decision, not something the blocking can read off the graph')
 
-class NoProblem(Violation):
+class NoEncloser(Violation):
     cycle : tuple[Label, ...]
     error    = ValueError
-    template = ('coupled cycle {cycle} declares no problem, so it has no conditions and there '
-                 'is nothing to hand a driver -- `Cut` a variable in the cycle and drive the '
-                 'iteration from outside, or declare the problem to drive within the cycle')
+    template = ('coupled cycle {cycle} has no encloser, so nothing iterates it and there is '
+                 'nothing to hand a driver -- `Cut` a variable in the cycle and drive the '
+                 'iteration from outside, or declare a condition node owning something inside '
+                 'the cycle to drive it')
 
 class StillCyclic(Violation):
-    problem : Label
-    cycle   : tuple[Label, ...]
+    encloser : Label
+    cycle    : tuple[Label, ...]
     error    = ValueError
-    template = ('inside {problem!r}\'s iteration, {cycle} is still cyclic with no problem on '
+    template = ('inside {encloser!r}\'s iteration, {cycle} is still cyclic with no encloser on '
                  'it, so there is no condition map to build for it. Cut a variable and pick a '
-                 'driver (inside / outside), or nest a problem that answers it in {problem!r}')
+                 'driver (inside / outside), or nest an encloser that iterates it in {encloser!r}')
 
 class OutsideCycle(Violation):
-    problem  : Label
+    encloser : Label
     unknowns : tuple[Place, ...]
     error    = ValueError
-    template = ('{problem!r} has no body and is in no cycle at its level: nothing it reads '
-                 'depends on {unknowns}, so no iteration can determine them -- a problem is '
-                 'answered by a condition computed from its unknowns (e.g. r_u(u) = 0), not '
-                 'by a value')
+    template = ('{encloser!r} has no body and is in no cycle at its level: nothing it reads '
+                 'depends on {unknowns}, so no iteration can determine them -- an encloser\'s '
+                 'conditions are computed from its unknowns (e.g. r_u(u) = 0), not given as '
+                 'a value')
 
 class Constant(Violation):
-    problem : Label
-    places  : tuple[Place, ...]
+    encloser : Label
+    places   : tuple[Place, ...]
     error    = ValueError
-    template = ('{problem!r} reads {places} as a condition, but nothing in its cycle produces '
-                 'it, so no unknown of the problem can move it -- a constant is not a condition; '
+    template = ('{encloser!r} reads {places} as a condition, but nothing in its cycle produces '
+                 'it, so no unknown of the encloser can move it -- a constant is not a condition; '
                  'compute it from the unknowns, or drop it')
 
 class ReadInsideCycle(Violation):
-    problem : Label
-    places  : tuple[Place, ...]
+    encloser : Label
+    places   : tuple[Place, ...]
     error    = ValueError
-    template = ('{problem!r} reads {places} without holding against it, and it is produced '
+    template = ('{encloser!r} reads {places} without holding against it, and it is produced '
                  'inside the block it drives -- a driver reads its data before the block runs, '
                  'so it must come from outside (an earlier block, or a boundary input)')
 
 class OwnReadInsideCycle(Violation):
-    problem : Label
-    places  : tuple[Place, ...]
-    readers : tuple[Label, ...]
+    encloser : Label
+    places   : tuple[Place, ...]
+    readers  : tuple[Label, ...]
     error    = ValueError
-    template = ('{problem!r} owns {places} without answering it, and it is read by {readers} '
+    template = ('{encloser!r} owns {places} without answering it, and it is read by {readers} '
                  'inside the block it drives -- a report is bound after convergence, so a '
                  'reader on the cycle would iterate against a value that does not exist yet')

@@ -78,8 +78,8 @@ def test_a_proof_is_of_a_graph_and_adds_nothing_to_it(two_problems):
 
 
 def test_a_graph_has_entries_where_a_blocking_refuses(two_problems, cycle_nobody_solves):
-    for g, message, kind in ((two_problems, 'several problems', Unresolved),
-                             (cycle_nobody_solves, 'no problem', Cycle)):
+    for g, message, kind in ((two_problems, 'several outermost enclosers', Unresolved),
+                             (cycle_nobody_solves, 'has no encloser', Cycle)):
         with pytest.raises(ValueError, match=message):
             Executable.prove(g)
         assert [e.nodes for e in entries(g)] == list(Dependencies.of(g).components)

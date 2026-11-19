@@ -53,7 +53,7 @@ def acyclic() -> Graph:
 
 def ask_everything(g: Graph) -> None:
     '''Answer enough queries that every layer of cache is warm.'''
-    Dependencies.of(g).topological_order, g.variables, g.boundary_outputs, g.boundary_inputs
+    Dependencies.of(g).components_order, g.variables, g.boundary_outputs, g.boundary_inputs
     Dependencies.of(g).components, Dependencies.of(g).owners, g.readers
     g[N('d1')]                                  # OrderedMap._index, one level down
 

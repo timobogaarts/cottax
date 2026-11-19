@@ -39,7 +39,7 @@ def test_a_graph_is_the_same_graph():
     g = graph_of(OrderedMap({N('b'): call(['x'], ['y']), N('a'): call([], ['x'])}))
     assert isinstance(g.definitions, OrderedMap)
     assert g.nodes == (N('b'), N('a'))                    # binding order, not sorted
-    assert Dependencies.of(g).topological_order == (N('a'), N('b'))
+    assert Dependencies.of(g).components_order == (N("a"), N("b"))
     assert hash(g) == hash(graph_of(OrderedMap(dict(g.definitions))))
 
 

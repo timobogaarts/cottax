@@ -10,7 +10,7 @@ tolerance needs. What is pinned: the graph, its nodes and a condition map are st
 by value), the inputs and the context are traced, so one trace serves every value.
 '''
 
-from cottax.core import steps
+from cottax.core import Schedule
 
 import math
 
@@ -20,7 +20,7 @@ import jax.numpy as jnp
 import pytest
 from jax.tree_util import DictKey
 
-from cottax.core import FunctionalNode,  Solve
+from cottax.core import FunctionalNode,  Loop
 from cottax.core.frozen import OrderedMap
 from cottax.core.driven import driven as with_driver
 from cottax.relational.contracts import RootFinding
@@ -146,7 +146,7 @@ def test_a_nested_solve_differentiates_through_the_inner_one_and_traces_once():
 
 def condition_map(graph, problem):
     '''The map `run` hands the driver of `problem`, outermost in `graph`.'''
-    (step,) = [s for s in steps(graph) if isinstance(s, Solve) and s.problem == problem]
+    (step,) = [s for s in Schedule.of(graph).steps if isinstance(s, Loop) and s.encloser == problem]
     return InteriorConditionMap.posing(graph[problem], step.interior)
 
 

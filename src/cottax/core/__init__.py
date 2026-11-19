@@ -25,8 +25,8 @@ from .maths import (
     AbstractConditionalNode, FunctionalNode, conditions, enclosers, owns_inside,
     Graph, View,
     Rules, per_node_check,
-    Dependencies, Valid, ValidDependencies, ValidNesting, Nesting, Executable, body_of, outline,
-    Run, Solve, Step, steps,
+    Dependencies, Valid, ValidDependencies, ValidNesting, Nesting, Executable, body, outline,
+    Loop, Run, Schedule, Step,
 )
 from .mints import Closure, Copy, Mint, Minting, mint_of, minted, unminted
 from .answers import answer_for_labels, answer_for_places

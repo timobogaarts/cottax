@@ -12,7 +12,7 @@ from jax.tree_util import GetAttrKey
 
 from cottax.core.frozen import OrderedMap, violations
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core import FunctionalNode, body_of, conditions, Dependencies, Nesting, Valid, Contract
+from cottax.core import FunctionalNode, body, conditions, Dependencies, Nesting, Valid, Contract
 from cottax.core.plan.ops import BlockTooSmall, NodeInTwoBlocks
 from cottax.core.realisation import implemented
 from cottax.relational import Eq, Relation, RelationalCondition
@@ -149,13 +149,13 @@ def test_a_graph_is_hashable(sellar):
 
 # ---------------------------------------------------------------- ordering
 
-def test_topological_order_is_dependency_order(chain):
-    assert names(Dependencies.of(chain).topological_order) == ['.a', '.b', '.c']
+def test_components_order_is_dependency_order(chain):
+    assert names(Dependencies.of(chain).components_order) == ['.a', '.b', '.c']
 
 
-def test_topological_order_raises_on_a_cycle_by_name(sellar):
-    with pytest.raises(ValueError, match=r"\(NodePath\(\.d1\), NodePath\(\.d2\)\)"):
-        Dependencies.of(sellar).topological_order
+def test_a_cycle_is_named_by_its_members(sellar):
+    assert [names(c) for c in Dependencies.of(sellar).cycles] == [['.d1', '.d2']]
+    assert not Dependencies.of(sellar).is_acyclic
 
 
 def test_condensation_groups_the_cycle(sellar):
@@ -268,8 +268,8 @@ def test_the_body_drops_the_problem_and_leaves_what_it_owned_unowned():
     problem = RelationalCondition((Relation(V('r_u'), None, Eq),), (), (V('u'),), ())
     g = graph_of(OrderedMap({N('a'): call(['u'], ['r_u']), N('close'): problem}))
     assert names(conditions(g.definitions)) == ['.close']
-    assert names(body_of(g).nodes) == ['.a']
-    assert body_of(g).boundary_inputs == (V('u'),)
+    assert names(body(g).nodes) == ['.a']
+    assert body(g).boundary_inputs == (V('u'),)
 
 
 def test_closing_readers_is_the_set_that_closes_the_loop(sellar):

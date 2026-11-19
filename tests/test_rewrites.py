@@ -14,7 +14,7 @@ from jax.tree_util import GetAttrKey
 from cottax.core.frozen import OrderedMap
 from cottax.relational import Min, Objective
 from cottax.core.plan import Cut, Insert, Plan, refusals
-from cottax.core import Condition, ConditionalNode, FunctionalNode, body_of, conditions, Dependencies
+from cottax.core import Condition, ConditionalNode, FunctionalNode, body, conditions, Dependencies
 from cottax.core.driven import Assign, driven as with_driver
 from cottax.core import is_driven
 from cottax.core.driven import DriverContract
@@ -138,7 +138,7 @@ def test_a_fixed_point_cut_is_one_node_and_stays_cyclic(looped):
     assert is_fixed_point(g[o.at].condition)
     assert g[o.at].condition.relations == (Relation(o.copies[0], Y1, Eq),)   # `^copy.y1 = y1`
     assert g[o.at].owns == o.copies and g[o.at].reads == o.vars
-    assert Dependencies.of(body_of(g)).is_acyclic
+    assert Dependencies.of(body(g)).is_acyclic
 
 
 def test_the_closure_is_exactly_its_parts(looped):
