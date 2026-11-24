@@ -207,8 +207,8 @@ def test_a_parameter_is_held_fixed_related_and_never_alone():
     u, g, lo, hi = v('u'), v('g'), v('lo'), v('hi')
     found = lambda relations, objectives, parameters: [type(x) for x in violations(
         RelationalCondition, relations, objectives, (u,), parameters)]
-    assert found((Relation(lo, u, Le),), (), (u,)) == [ReadsOwn, FixedAndMoved]
-    assert found((Relation(g, u, Le),), (Objective(g, Min),), (g,)) == [ReadOnBothSides, FixedAndMoved]
+    assert found((Relation(lo, u, Le),), (), (u,)) == [ReadsOwn]
+    assert found((Relation(g, u, Le),), (Objective(g, Min),), (g,)) == [ReadOnBothSides]
     assert found((Relation(g, None, Le),), (), (lo,)) == [ParameterUnrelated]
     assert found((Relation(lo, hi, Le), Relation(lo, None, Le)), (), (lo, hi)) == [FixedRelation]
     assert found((Relation(lo, u, Le), Relation(u, hi, Le)), (), (lo, hi)) == []

@@ -93,7 +93,10 @@ def _shaped(leaf: Any) -> Any:
 
 
 def check_traces(traced: 'Traced') -> Iterator[Violation]:
-    '''The run traces: the first refusal it raised, or the node whose body failed.'''
+    '''The run traces: the first refusal it raised, or the node whose body failed. Asked of a
+    runnable graph only: its sibling `Runnable.check` refuses the rest.'''
+    if next(iter(Runnable.check(traced)), None) is not None:
+        return
     try:
         traced._traced
     except Exception as e:                                      # noqa: BLE001  any trace failure

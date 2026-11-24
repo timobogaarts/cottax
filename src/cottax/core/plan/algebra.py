@@ -21,7 +21,7 @@ def refusals[N: Label, V: Place](op: 'GraphOp[N, V]',
     '''Why `op` does not apply to `graph`, as data. Most derived level first: an inherited
     check may read what the derived op computes (`Rewire`'s reads `Cut`'s renaming).'''
     for check in type(op).per_level('checks_graph', derived_first=True):
-        yield from check(op, graph) or ()
+        yield from check(op, graph)
 
 
 class GraphOp[N: Label, V: Place](Frozen):

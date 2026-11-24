@@ -23,7 +23,7 @@ from cottax.core.plan import Cut
 from cottax.relational.rewrites import Determine, Undetermine
 from cottax.consumers.architectures import Combine
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core.frozen import OrderedMap, unchecked
+from cottax.core.frozen import OrderedMap
 import purposes
 from graphs import graph_of
 from cottax.core.maths.graph import Graph

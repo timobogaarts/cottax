@@ -8,13 +8,13 @@ registered with `answers` and found by `answer`, or a `Choice`, its finals marke
 (`answer.py`).
 '''
 
-from .base import AbstractClassVar, AbstractVar, Frozen, PerLevel, remembered, unchecked
+from .base import AbstractClassVar, AbstractVar, Frozen, PerLevel, remembered
 from .ordered_map import OrderedMap
 from .answer import Answer, Choice, answer, answer_for_class, answered, answers, choice
 from .violation import Violation, checked, dotted, first, name_of, violations
 
 __all__ = [
-    'AbstractClassVar', 'AbstractVar', 'Frozen', 'PerLevel', 'remembered', 'unchecked', 'OrderedMap',
+    'AbstractClassVar', 'AbstractVar', 'Frozen', 'PerLevel', 'remembered', 'OrderedMap',
     'Answer', 'Choice', 'answer', 'answer_for_class', 'answered', 'answers', 'choice',
     'Violation', 'checked', 'first', 'violations', 'name_of', 'dotted',
 ]

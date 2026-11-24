@@ -95,9 +95,9 @@ def _refuse(why):
 
 class Root(Frozen):
     n : int = 0
-    checks = (lambda v: None if v.n >= 0 else _refuse('negative'),)
+    checks = (lambda v: () if v.n >= 0 else _refuse('negative'),)
 class Mid(Root):
-    checks = (lambda v: None if v.n < 10 else _refuse('too big'),)
+    checks = (lambda v: () if v.n < 10 else _refuse('too big'),)
 class Leaf(Mid):
     pass
 
@@ -162,7 +162,6 @@ def test_a_checked_function_raises_its_first_refusal_before_the_body_runs():
 def test_violations_of_a_checked_function_are_every_refusal_and_the_body_never_runs():
     halved, ran, Low, Odd = checked_halving()
     assert list(violations(halved, -1)) == [Low(-1), Odd(-1)]
-    assert list(violations(halved, -1, skip=halved.checks[:1])) == [Odd(-1)]
     assert ran == []
 
 
@@ -192,36 +191,47 @@ def test_a_driver_without_accepts_cannot_be_built():
         Vague()
 
 
-def test_unchecked_skips_the_checks_it_names_and_no_others():
-    '''The bare form skips every check (what `violations` builds under); the named form
-    skips exactly those (what a drawing builds its blocking under), and everything
-    else built inside the scope is still refused.'''
-    from cottax.core.frozen import Frozen, unchecked
-
-    def positive(v):
-        if v.n <= 0:
-            yield _Bad('not positive')
-    def small(v):
-        if v.n > 10:
-            yield _Bad('not small')
-
-    class _Bad(Violation):
+def test_violations_are_the_first_refusing_level_s_all_and_the_levels_below_unasked():
+    '''A level is asked once every level above it holds, as a rule group is: what it
+    refuses is raised as its first violation, carrying all of the level's.'''
+    class Bad(Violation):
         why : str
         error    = ValueError
         template = '{why}'
+    asked = []
 
-    class Value(Frozen):
+    class Base(Frozen):
         n : int
-        checks = (positive, small)
+        checks = (lambda v: [Bad('negative')] if v.n < 0 else [],
+                  lambda v: [Bad('odd')] if v.n % 2 else [])
+    class Below(Base):
+        checks = (lambda v: asked.append(v.n) or ([Bad('big')] if abs(v.n) > 10 else []),)
 
-    with unchecked():
-        assert Value(-1).n == -1 and Value(11).n == 11
-    with unchecked(small):
-        assert Value(11).n == 11
-        with pytest.raises(ValueError, match='not positive'):
-            Value(-1)
-    with pytest.raises(ValueError, match='not small'):
-        Value(11)
+    assert list(violations(Below, -11)) == [Bad('negative'), Bad('odd')] and asked == []
+    try:                       # not `pytest.raises`: its record would keep `Bad` alive for test_core's corpus
+        Below(-11)
+    except ValueError as refused:
+        assert str(refused) == 'negative' and refused.violation == Bad('negative')
+        assert refused.violations == (Bad('negative'), Bad('odd'))
+    else:
+        pytest.fail('Below(-11) was built')
+    assert list(violations(Below, 12)) == [Bad('big')] and asked == [12]
+
+
+def test_a_refusal_of_another_value_built_inside_a_check_is_not_taken_for_its_own():
+    class Bad(Violation):
+        why : str
+        error    = ValueError
+        template = '{why}'
+    class Inner(Frozen):
+        n : int
+        checks = (lambda v: [Bad('inner')] if v.n else [],)
+    class Outer(Frozen):
+        n : int
+        checks = (lambda v: Inner(v.n) and [],)
+    assert list(violations(Outer, 0)) == []
+    with pytest.raises(ValueError, match='inner'):
+        list(violations(Outer, 1))
 
 
 # ---------------------------------------------------------------- OrderedMap

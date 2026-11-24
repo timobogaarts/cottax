@@ -3,11 +3,11 @@ Violations of the checks: supporting diagnostics as well as raising.
 """
 
 import inspect
-from collections.abc import Callable, Collection, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import fields
 from functools import wraps
 
-from .base import AbstractClassVar, Frozen, unchecked
+from .base import AbstractClassVar, Frozen
 
 
 class Violation(Frozen):
@@ -53,7 +53,7 @@ def checked[F: Callable](*checks: Callable[..., Iterable[Violation]]) -> Callabl
         def run(*args, **kwargs):
             bound = _bound(run, args, kwargs)
             for check in checks:
-                first(check(*bound.args, **bound.kwargs) or ())
+                first(check(*bound.args, **bound.kwargs))
             return fn(*bound.args, **bound.kwargs)
         run.checks = checks                                             # type: ignore[attr-defined]
         return run                                                      # type: ignore[return-value]
@@ -66,24 +66,22 @@ def _bound(fn: Callable, args: tuple, kwargs: dict) -> inspect.BoundArguments:
     return bound
 
 
-def violations(cls: type[Frozen] | Callable, *args, skip: Collection[Callable] = (), **kwargs) -> Iterator[Violation]:
+def violations(cls: type[Frozen] | Callable, *args, **kwargs) -> Iterator[Violation]:
     '''
-    Every case `cls(*args, **kwargs)` breaks, as data: built with the checks skipped,
-    then each rule down the hierarchy asked and everything it yields collected (wherever possible;
-    some checks cannot be run on totally invalid data (e.g. a nesting check for a nesting not in the graph)).
-    A `checked` function's checks are asked of its arguments, and its body never runs.
+    Violatations from a class initialisation. Uses the DAG from the rules (lowest asked first, if 
+    that raise it just only outputs those from the level)    
     '''
     if isinstance(cls, type):
-        with unchecked():
-            value = cls(*args, **kwargs)
-        checks, args, kwargs = cls.per_level('checks'), (value,), {}
-    else:
-        bound = _bound(cls, args, kwargs)
-        checks, args, kwargs = cls.checks, bound.args, bound.kwargs     # type: ignore[attr-defined]
-    for check in checks:
-        if check in skip:
-            continue
-        yield from check(*args, **kwargs) or ()
+        try:
+            cls(*args, **kwargs)
+        except Exception as e:
+            if type(getattr(e, 'refused', None)) is not cls:
+                raise
+            yield from e.violations                                     # type: ignore[attr-defined]
+        return
+    bound = _bound(cls, args, kwargs)
+    for check in cls.checks:                                            # type: ignore[attr-defined]
+        yield from check(*bound.args, **bound.kwargs)
 
 
 def name_of(implementation: object) -> str:

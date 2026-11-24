@@ -6,13 +6,11 @@ for every method; `checks` accumulated per level rather than overridden.
 
 import inspect
 from abc import ABC
-from contextlib import contextmanager
-from contextvars import ContextVar
-from dataclasses import dataclass, fields, replace
+from dataclasses import dataclass, fields
 from collections.abc import Callable, Hashable, Iterator
 import functools
 from functools import cached_property
-from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Self, get_origin
+from typing import TYPE_CHECKING, Annotated, Any, ClassVar, get_origin
 
 if TYPE_CHECKING:
     type AbstractVar[T] = Annotated[T, 'AbstractVar']
@@ -70,24 +68,6 @@ def _abstract_kind(annotation) -> 'type | None':
     return origin if origin in (AbstractVar, AbstractClassVar) else None
 
 
-_skipped : ContextVar['frozenset | None'] = ContextVar('skipped', default=frozenset())
-'''The checks not asked at construction: none, some by identity, or `None` for all.'''
-
-
-@contextmanager
-def unchecked(*skipped: Callable[[Any], object]):
-    '''
-    Disable Frozen `checks` for the scope of `with`: the callables in `skipped`, matched by
-    identity, or all if `skipped` is empty.
-    '''
-    token = _skipped.set(None if not skipped else _skipped.get() | frozenset(skipped)
-                         if _skipped.get() is not None else None)
-    try:
-        yield
-    finally:
-        _skipped.reset(token)
-
-
 class Frozen(ABC):
     '''
     Every subclass is a frozen dataclass whose `checks`, each level's added to its
@@ -96,7 +76,9 @@ class Frozen(ABC):
 
     checks : PerLevel[tuple[Callable[[Any], object], ...]] = ()
     '''
-    Callable [self] -> iterable of violations, which are raised at construction unless skipped (see `unchecked`).
+    Callable [self] -> iterable of violations, raised at construction. A level's checks are
+    asked only once every level above it holds, as a rule group's are; siblings in one level
+    do not assume each other.
     '''
 
     __per_level__ = frozenset({'checks'})
@@ -116,16 +98,16 @@ class Frozen(ABC):
 
     def __post_init__(self) -> None:
         '''
-        Run the checks, unless skipped by `unchecked`.
+        Ask each level's checks, root first. At the first level refusing anything, raise its
+        first violation, carrying all of that level's as `violations` and this value as
+        `refused`; the levels below are not asked.
         '''
-        skipped = _skipped.get()
-        if skipped is None:
-            return
-        for check in type(self).per_level('checks'):
-            if check in skipped:
-                continue
-            for violation in check(self) or ():
-                raise violation.raised
+        for level in reversed(type(self).__mro__):
+            found = [v for check in level.__dict__.get('checks', ()) for v in check(self)]
+            if found:
+                exception = found[0].raised
+                exception.violations, exception.refused = tuple(found), self
+                raise exception
 
     def __getstate__(self) -> dict:
         '''The fields alone: a cached answer in `__dict__` is a memo, not the value, so a
@@ -136,16 +118,6 @@ class Frozen(ABC):
     def __setstate__(self, state: dict) -> None:
         for name, value in state.items():
             object.__setattr__(self, name, value)
-
-    def _carried(self, **changes) -> 'Self':
-        '''
-        The same value with `changes` in place of those fields, and no rule asked.
-        For delta checking.
-
-        i.e. ._carried(x=1) is like `replace(self, x=1)` but without running checks.
-        '''
-        with unchecked():
-            return replace(self, **changes)
 
     def __init_subclass__(cls, **kwargs) -> None:
         super().__init_subclass__(**kwargs)
@@ -217,17 +189,12 @@ def _cached_hash(self) -> int:
         memo['_frozen_hash'] = value = self.__field_hash__()
         return value
 
-
 class remembered[T]:
     '''
     A cached property for a function defined off the class: `fn(value, *key)`, remembered
     on `value` itself (its `__dict__`, so it lives and dies with the value; a copy or a
     pickle starts empty). The answer must depend on `value` and `key` alone (a pure
     function).
-
-    The memo stays small only by convention: a key is a *kind* (a rule group, a view
-    class), never an input that varies (a node set, a place). `test_layering.REMEMBERED`
-    lists every use.
     '''
 
     def __init__(self, fn: Callable[..., T]) -> None:

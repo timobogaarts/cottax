@@ -10,6 +10,7 @@ floats over a toy `Word` place.
 from cottax.core import conditions
 from cottax.core import Schedule
 
+import dataclasses
 import math
 import re
 
@@ -610,7 +611,7 @@ def test_a_join_steps_on_the_kinks_of_both_sides():
     b = OdeCondition((Dt(*map(s.place, ('y', 'ry', 'y0'))),), s.place('span'),
                      (s.place('k1'), s.place('k2')))
     assert a.join(b).kinks == (s.place('k1'), s.place('k2'))
-    assert 'kinks at' in repr(a.join(b)) and 'kinks' not in repr(a._carried(kinks=()))
+    assert 'kinks at' in repr(a.join(b)) and 'kinks' not in repr(dataclasses.replace(a, kinks=()))
 
 
 def test_without_its_kinks_the_gradient_across_a_stride_is_wrong_and_with_them_exact():
@@ -683,7 +684,7 @@ def test_a_join_runs_on_the_one_clock_either_names_and_refuses_two():
     b = OdeCondition((Dt(*map(s.place, ('y', 'ry', 'y0'))),), s.place('span'))
     assert a.join(b).time == b.join(a).time == s.place('t')
     with pytest.raises(ValueError, match='one clock gives one time') as refused:
-        a.join(b._carried(time=s.place('s')))
+        a.join(dataclasses.replace(b, time=s.place('s')))
     assert refused.value.violation == TimesDiffer(s.place('t'), s.place('s'))
 
 
