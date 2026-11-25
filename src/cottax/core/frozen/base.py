@@ -57,10 +57,13 @@ def _is_class_var(annotation) -> bool:
 
 
 def _abstract_kind(annotation) -> 'type | None':
-    '''`AbstractVar`, `AbstractClassVar`, or `None` for an ordinary annotation.'''
+    '''`AbstractVar`, `AbstractClassVar`, or `None` for an ordinary annotation. A marker
+    written as a string (`from __future__ import annotations`) is refused, not taken for a
+    field; any other string (a forward reference) is an ordinary annotation.'''
     if isinstance(annotation, str):
-        if annotation.startswith(('AbstractVar', 'AbstractClassVar')):
-            raise NotImplementedError('a stringified abstract annotation is not supported')
+        if annotation.startswith(('AbstractVar', 'AbstractClassVar', 'PerLevel')):
+            raise NotImplementedError(f'a stringified `{annotation.split("[")[0]}` annotation '
+                                      f'is not supported')
         return None
     if annotation in (AbstractVar, AbstractClassVar):
         raise TypeError(f'`{annotation.__name__}` must be subscripted with the type a final binds')
@@ -109,24 +112,23 @@ class Frozen(ABC):
                 exception.violations, exception.refused = tuple(found), self
                 raise exception
 
-    def __getstate__(self) -> dict:
-        '''The fields alone: a cached answer in `__dict__` is a memo, not the value, so a
-        pickle or a copy comes back cold -- the same rule the cache follows for
-        equality and the jit key.'''
-        return {f.name: getattr(self, f.name) for f in fields(self)}
-
-    def __setstate__(self, state: dict) -> None:
-        for name, value in state.items():
-            object.__setattr__(self, name, value)
+    def __reduce__(self) -> tuple:
+        '''Rebuilt through the constructor from the fields alone, so a pickle or a copy is
+        checked like any other value and comes back cold: a cached answer in `__dict__` is
+        a memo, not the value -- the same rule the cache follows for equality and the jit
+        key.'''
+        return _rebuilt, (type(self), {f.name: getattr(self, f.name) for f in fields(self) if f.init})
 
     def __init_subclass__(cls, **kwargs) -> None:
         super().__init_subclass__(**kwargs)
 
-        if '__post_init__' in cls.__dict__:
-            raise TypeError(
-                f'{cls.__name__} defines `__post_init__`, which would bypass `Frozen`\'s '
-                f'runner: declare `checks = (...)` instead'
-            )
+        for name in ('__post_init__', '__init__'):
+            if name in cls.__dict__:
+                raise TypeError(
+                    f'{cls.__name__} defines `{name}`, which would bypass `Frozen`\'s '
+                    f'runner: declare `checks = (...)` instead, and build any other way '
+                    f'through a classmethod ending in `cls(...)`'
+                )
 
         # As equinox's `better_dataclass` does it: read through `inspect.get_annotations`
         # and *assign* the filtered dict back, since Python 3.14 (PEP 649) evaluates class
@@ -146,13 +148,25 @@ class Frozen(ABC):
         # `dataclass` writes a `__hash__` on every class without one in its own body, so
         # a hash a level wrote would be shadowed on each final. Carry it down instead: required
         # for properly writing custom jax-allowable hashes.
+        # An `__eq__` a level wrote is carried down too, and comes with a `__hash__` written
+        # beside it: equal values hash equal, which a generated hash over the fields would not
+        # promise against a written equality.
+        if '__eq__' in cls.__dict__:
+            if cls.__dict__.get('__hash__') is None:
+                raise TypeError(f'{cls.__name__} writes `__eq__` without a `__hash__` beside it: '
+                                f'equal values must hash equal, so write both on one level')
+            cls.__written_eq__ = True
         if '__hash__' in cls.__dict__:
             cls.__written_hash__ = cls.__dict__['__hash__']
         elif (written := getattr(cls, '__written_hash__', None)) is not None:
             cls.__hash__ = written
-        # A `__repr__` a level wrote is carried down the same way: `dataclass` leaves it alone.
-        written_repr = any('__repr__' in k.__dict__ for k in cls.__mro__[:-1] if k is not Frozen)
-        dataclass(frozen=True, repr=not written_repr)(cls)
+        # A `__repr__` a level wrote is carried down the same way, marked as the hash is: the
+        # one `dataclass` generated on a level above is in its `__dict__` too, and over that
+        # level's fields only, so it is never carried.
+        if '__repr__' in cls.__dict__:
+            cls.__written_repr__ = True
+        dataclass(frozen=True, eq=not getattr(cls, '__written_eq__', False),
+                  repr=not getattr(cls, '__written_repr__', False))(cls)
         # The hash `dataclass` generated, over the eq fields, computed once per instance:
         # a value is frozen, so the memo can never be stale, and it lives in `__dict__`
         # like every cached query. A hash a level wrote is left as it is.
@@ -178,6 +192,11 @@ class Frozen(ABC):
                 f'{cls.__name__} rebinds {", ".join(sorted(rebound))}, which a level above it '
                 f'already bound: an `AbstractClassVar` is bound once, by a final'
             )
+
+
+def _rebuilt(cls: type, state: dict) -> Any:
+    '''What a pickle or a copy of a `Frozen` calls: `cls(**state)`, checks and all.'''
+    return cls(**state)
 
 
 def _cached_hash(self) -> int:

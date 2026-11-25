@@ -21,7 +21,7 @@ from cottax.relational import (
     is_feasibility, is_fixed_point, is_optimise, is_root_find, is_unconstrained_optimise,
 )
 from cottax.relational.relational_condition import (
-    FixedAndMoved, FixedRelation, NotARel, ParameterUnrelated, RelatesNothing,
+    FixedRelation, NotARel, ParameterUnrelated, RelatesNothing,
 )
 from cottax.pytree.path import NodePath, VarPath
 from cottax.core import ConditionalNode, FunctionalNode, owns_inside, violations

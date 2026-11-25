@@ -82,17 +82,21 @@ One stored value, facts as views, rules as groups, edits as ops (`plan/`).
    interior of an `Executable` graph is `Executable`. Both are relied on (`Nesting._cycles`
    re-proves per level; `Schedule` proves each interior as its view's check) and would fail
    late, out of a cached property, if a future rule broke them.
-2. **`frozen/` review**, file by file as maths was: `base.py` partly seen (`remembered`,
-   pickling); `violation.py` (`checked`, `first`), `answer.py`. Optional: `checked`
-   precomputing its signature (~8 µs/call).
-   Done 2026-11-24 (uncommitted): `unchecked`, `_skipped`, `_carried` and `skip=` removed.
-   A `Frozen`'s levels are now asked as rule groups are: at the first refusing level the
-   construction raises its first violation carrying the level's `violations` and the value as
-   `refused`; lower levels unasked. `violations(cls, ...)` = construct and catch (only a
-   refusal of `cls` itself). `check_traces` guards on its sibling `Runnable.check`. Open:
-   `FixedAndMoved` (relational) looks unreachable now -- a moved parameter always breaks a
-   base level first (`ReadsOwn` / `ReadOnBothSides`); delete or keep is the owner's call.
-   Theorem tests (step 1): owner thinks not needed until memo seeding.
+2. **`frozen/` review: done 2026-11-25** (base, violation, answer, ordered_map all reviewed).
+   - `unchecked`, `_carried`, `skip=` gone; a `Frozen`'s levels are asked as rule groups (the
+     first refusing level raises its first violation, carrying `violations` and `refused`);
+     `violations(cls, ...)` constructs and catches. `check_traces` guards on `Runnable.check`.
+   - A check returns an iterable everywhere (no `or ()`). `checked` reads its signature once.
+   - Pickle and copy rebuild through the constructor (`__reduce__` -> `_rebuilt`), so checked.
+   - Subclass machinery: the generated-repr shadowing fixed (199 classes printed their parent's
+     fields); a written `__eq__` is carried down and needs a `__hash__` beside it; `__init__`
+     refused like `__post_init__`; a stringified `PerLevel` refused.
+   - `answer.py`: registration refusals are plain `TypeError`s (`Unanswered` stays a
+     `Violation`); a protocol `about` is checked by shape; `choices(interface)` registry;
+     `checks_answer` hook kept.
+   - Open: `FixedAndMoved` (relational) looks unreachable -- a moved parameter breaks a base
+     level first (`ReadsOwn` / `ReadOnBothSides`); owner's call. Theorem tests (step 1):
+     deferred until memo seeding.
 3. **`plan/` round** (deferred by the owner, all from the review):
    - `refusals(op, graph)` can raise on an invalid graph: it proves nothing first, and
      `Cut`'s check builds a view. Option: yield `Valid`'s violations first and stop.

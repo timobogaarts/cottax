@@ -102,6 +102,31 @@ class Leaf(Mid):
     pass
 
 
+_LIMIT = [10]
+
+
+class Bounded(Frozen):
+    n : int
+    checks = (lambda v: () if v.n <= _LIMIT[0] else _refuse('over the limit'),)
+
+
+def test_a_pickle_or_a_copy_is_rebuilt_through_the_checks():
+    '''A value loaded is checked like any other: a pickle written before its rule tightened
+    is refused on load, not handed back invalid.'''
+    value = Bounded(5)
+    written = pickle.dumps(value)
+    for out in (pickle.loads(written), copy.copy(value), copy.deepcopy(value)):
+        assert type(out) is Bounded and out == value and out is not value
+    _LIMIT[0] = 1
+    try:
+        with pytest.raises(ValueError, match='over the limit'):
+            pickle.loads(written)
+        with pytest.raises(ValueError, match='over the limit'):
+            copy.deepcopy(value)
+    finally:
+        _LIMIT[0] = 10
+
+
 def test_checks_accumulate_root_down_and_none_can_be_dropped():
     assert Leaf(3).n == 3
     with pytest.raises(ValueError, match='negative'):
@@ -175,6 +200,56 @@ def test_defaults_and_keywords_reach_the_checks():
 def test_a_checked_function_with_no_refusal_returns_its_result():
     halved, ran, _, _ = checked_halving()
     assert halved(4) == 2 and ran == [4] and halved.__name__ == 'halved'
+
+
+def test_a_repr_shows_every_field_and_a_written_one_is_carried_down():
+    '''The repr `dataclass` writes is over each final's own fields; one a level wrote holds
+    for every level below it.'''
+    class Top(Frozen):
+        a : int
+
+    class Below(Top):
+        b : int = 2
+
+    class Written(Frozen):
+        a : int
+        def __repr__(self): return f'<{self.a}>'
+
+    class Carried(Written):
+        b : int = 2
+    assert repr(Below(1)) == f'{Below.__qualname__}(a=1, b=2)'
+    assert repr(Carried(1)) == '<1>'
+
+
+def test_a_written_equality_is_carried_down_and_comes_with_its_hash():
+    class Loose(Frozen):
+        a : int
+        def __eq__(self, other): return isinstance(other, Loose)
+        def __hash__(self): return 0
+
+    class Below(Loose):
+        b : int = 2
+    assert Below(1) == Below(2, 3) == Loose(4) and hash(Below(1)) == 0
+    with pytest.raises(TypeError, match='without a `__hash__` beside it'):
+        class Unhashed(Frozen):
+            a : int
+            def __eq__(self, other): return True
+
+
+def test_a_subclass_may_not_define_init():
+    with pytest.raises(TypeError, match='defines `__init__`'):
+        class Bad(Root):
+            def __init__(self, n): object.__setattr__(self, 'n', n)
+
+
+def test_a_marker_written_as_a_string_is_refused_and_a_forward_reference_is_not():
+    with pytest.raises(NotImplementedError, match='`PerLevel`'):
+        class Stringly(Frozen):
+            extra : 'PerLevel[tuple]' = ()
+
+    class Forward(Frozen):
+        other : 'Forward | None' = None
+    assert Forward(Forward()).other == Forward()
 
 
 def test_a_subclass_may_not_define_post_init():

@@ -114,11 +114,10 @@ def check_relates_something(node: 'RelationalCondition') -> Iterator[Violation]:
         yield RelatesNothing(type(node).__name__)
 
 def check_parameters(node: 'RelationalCondition') -> Iterator[Violation]:
-    '''A parameter is held fixed: not moved (an unknown), not minimised (an objective), a
-    term of some relation, and never the only kind of term in one.'''
-    driven = {o.place for o in node.objectives}
-    if moved := tuple(p for p in node.parameters if p in node.unknowns or p in driven):
-        yield FixedAndMoved(moved)
+    '''A parameter is held fixed: a term of some relation, and never the only kind of term
+    in one. That it is never moved needs no rule here: a parameter is read outside, so one
+    that is an unknown is refused as `ReadsOwn`, and one an objective is as
+    `ReadOnBothSides`, a level above.'''
     terms = {t for r in node.relations for t in r.terms}
     if unrelated := tuple(p for p in node.parameters if p not in terms):
         yield ParameterUnrelated(unrelated)
@@ -208,13 +207,6 @@ class RelatesNothing(Violation):
     node : str
     error    = ValueError
     template = '{node}: relates nothing -- a condition met by every value is not a condition'
-
-
-class FixedAndMoved(Violation):
-    places : tuple
-    error    = ValueError
-    template = ('{places!r} held fixed, but also an unknown or an objective: a parameter is '
-                'read and never moved')
 
 
 class ParameterUnrelated(Violation):

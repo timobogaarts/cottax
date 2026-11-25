@@ -46,7 +46,17 @@ class Answer(Frozen):
 
 class Choice(ABC):
     '''
-    Several fit, so none is registered.
+    Several fit. Marked choice and registered as options.
+    
+    class Formatter(Choice):
+        @abstractmethod 
+        def spell(self, path : Path) -> str 
+            ...
+
+    @choice(Formatter)
+    class NoFormatter(Formatter)        
+        def spell(self, path : Path) -> str
+            return path.spelling
     '''
 
     def __init_subclass__(cls, **kwargs) -> None:
@@ -65,7 +75,11 @@ def interface_of(cls: type[Answer]) -> type[Answer]:
                         f'one, a level directly under `Answer`')
     return found[0]
 
+# ---------------------------------------------------------------------- registries
 
+
+
+# ----------------- answer registering
 _ANSWERS : dict[tuple[type, type], Answer] = {}
 '''The answer registered per interface and class, in registration order.'''
 _FOUND   : dict[tuple[type, type], Answer | None] = {}
@@ -129,7 +143,7 @@ def _spelled(about: Any) -> str:
         return ' or '.join(map(_spelled, about))
     return getattr(about, '__qualname__', None) or getattr(about, '__name__', repr(about))
 
-
+# ----------------- choice registering
 _CHOICES : dict[type, dict[str, type]] = {}
 '''The finals marked per `Choice` interface, by dotted name, in marking order.'''
 
@@ -154,8 +168,7 @@ def choice[C: type](interface: type) -> Callable[[C], C]:
         _CHOICES.setdefault(interface, {})[dotted(cls)] = cls
         return cls
     return marked
-
-
+# ----------------- queries
 def choices(interface: type) -> tuple[type, ...]:
     '''The finals marked `@choice(interface)` so far, in marking order: those of the
     modules imported.'''
@@ -163,7 +176,6 @@ def choices(interface: type) -> tuple[type, ...]:
 
 
 _REFUSE = object()
-
 
 def answer_for_class[A: Answer](interface: type[A], cls: type, default: Any = _REFUSE) -> A:
     '''The `interface` answer registered for `cls`, looked up along its ancestry, most
@@ -191,7 +203,7 @@ def answered() -> dict[type[Answer], dict[type, Answer]]:
         table.setdefault(interface, {})[c] = found
     return table
 
-
+# ----------------- violation finals
 class Unanswered(Violation):
     interface : str
     about     : str
