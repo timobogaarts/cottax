@@ -3,7 +3,7 @@ How a feature's class gets into a consumer:
 1. An `Answer`: one per class per interface, registered with `@answers` and found along the
    class's ancestry.
 2. A `Choice`: several fit, so a study names one; each final is marked `@choice(interface)`,
-   which registers nothing.
+   which lists it among the interface's `choices`.
 '''
 
 import inspect
@@ -13,46 +13,56 @@ from dataclasses import fields
 from typing import Any
 
 from .base import AbstractClassVar, Frozen, PerLevel, _Unbound
-from .violation import Violation, dotted
+from .violation import Violation, dotted, first
 
 
 class Answer(Frozen):
     '''
-    The one right answer per node or place class. A level directly under `Answer` is a
-    consumer's interface, saying what it is answered per (`about`); the owner of a class it is
-    about writes a final and registers it with `@answers(*classes)`: a feature for its own, a
-    consumer for its own and for core's. A final holds no field: the registry builds it,
-    `cls()`.
+    Answer: one class.
+
+    E.g. for a Place->str function:
+
+    `class PlaceToStr(Answer):
+        about = Place        
+        checks_answer = ()
+
+        @abstractmethod 
+        def write_place(self, place : V) -> str:
+            ....
+    
+    @answers(SomePath)
+    class SomePathToStr(PlaceToStr[SomePath]):    
+        def write_place(self, place: SomePath) -> str:
+            return place.get_str()    
     '''
 
     about : AbstractClassVar[Any]
-    '''What the interface is answered per, bound by the interface: a class, a type alias of
-    one, a protocol, or a tuple of those. `@answers` refuses a class that is none; a protocol
-    is met by shape, which a class cannot be asked.'''
+    '''What it needs answering for (above, a Place). A Protocol is checked by shape.'''
 
     checks_answer : PerLevel[tuple[Callable[[Any, tuple[Any, ...]], Iterable[Violation]], ...]] = ()
     '''`check(answer, registered)`: why `answer` is refused beside the answers already
-    registered for its interface (a word two would share).'''
+    registered for its interface. Example: a JSON codec needs words to be unique to be invertible, so we have to check that they are.'''
 
 
 class Choice(ABC):
     '''
-    Several fit, so none is registered: a study names one in a slot, which the interface
-    class's docstring states in a `Handed in as:` block, an example of the call. Never an
-    `Answer` as well.
+    Several fit, so none is registered.
     '''
 
     def __init_subclass__(cls, **kwargs) -> None:
         super().__init_subclass__(**kwargs)
         if issubclass(cls, Answer):
-            raise AnswerAndChoice(dotted(cls)).raised
+            raise TypeError(f'{dotted(cls)} is both an `Answer` and a `Choice`: one right answer is '
+                            f'registered, several are named by a study, and nothing is both')
 
 
 def interface_of(cls: type[Answer]) -> type[Answer]:
     '''The interface `cls` answers: its level directly under `Answer`.'''
     found = [k for k in cls.__mro__ if Answer in k.__bases__]
     if len(found) != 1:
-        raise NotOneInterface(dotted(cls), tuple(k.__qualname__ for k in found)).raised
+        raise TypeError(f'{dotted(cls)} is under the interfaces '
+                        f'{tuple(k.__qualname__ for k in found)}: an answer is registered under '
+                        f'one, a level directly under `Answer`')
     return found[0]
 
 
@@ -74,23 +84,27 @@ def answers[A: type[Answer]](*classes: type) -> Callable[[A], A]:
             raise TypeError(f'{getattr(cls, "__qualname__", cls)!r} is not an `Answer`: a '
                             f'`Choice` is named by a study in its slot, never registered')
         interface = interface_of(cls)
-        if isinstance(vars(interface).get('about'), _Unbound) or 'about' not in vars(interface):
-            raise AboutNothing(interface.__qualname__).raised
+        if 'about' not in vars(interface) or isinstance(vars(interface)['about'], _Unbound):
+            raise TypeError(f'{interface.__qualname__} does not say what it is answered per: '
+                            f'bind `about` on it, a class, a type alias, a protocol or a tuple of those')
         if strays := tuple(dotted(c) for c in classes if not is_about(c, interface.about)):
-            raise NotAbout(interface.__qualname__, strays, _spelled(interface.about)).raised
+            raise TypeError(f'{interface.__qualname__} is answered per {_spelled(interface.about)}, '
+                            f'and {strays!r} is not: an answer is registered for what its '
+                            f'interface is about')
         if held := tuple(f.name for f in fields(cls)):
-            raise AnswerHolds(dotted(cls), held).raised
+            raise TypeError(f'{dotted(cls)} holds the fields {held}: an answer is built by the '
+                            f'registry, `cls()`, so whatever it needs is a class attribute or a method')
         found = cls()                      # a method left abstract is refused here
         for c in classes:
-            first = _ANSWERS.get((interface, c))
-            if first is not None and dotted(type(first)) != dotted(cls):
-                raise AnsweredTwice(interface.__qualname__, dotted(c), dotted(type(first)),
-                                    dotted(cls)).raised
+            earlier = _ANSWERS.get((interface, c))
+            if earlier is not None and dotted(type(earlier)) != dotted(cls):
+                raise TypeError(f'{dotted(c)} has the {interface.__qualname__} answer '
+                                f'{dotted(type(earlier))} already, so {dotted(cls)} is refused: '
+                                f'which one answers would be chosen by import order')
         registered = tuple(dict.fromkeys(a for (i, _), a in _ANSWERS.items()
                                          if i is interface and dotted(type(a)) != dotted(cls)))
         for check in cls.per_level('checks_answer'):
-            for violation in check(found, registered):
-                raise violation.raised
+            first(check(found, registered))
         _ANSWERS.update(((interface, c), found) for c in classes)
         _FOUND.clear()
         return cls
@@ -99,11 +113,15 @@ def answers[A: type[Answer]](*classes: type) -> Callable[[A], A]:
 
 def is_about(cls: type, about: Any) -> bool:
     '''Whether `cls` is one of what `about` says: a subclass of a class (or of what a type
-    alias names), any class for a protocol, met by shape.'''
+    alias names), or for a protocol, met by shape: each of its members an attribute of `cls`
+    or annotated on a level of it (a field without a default).'''
     if isinstance(about, tuple):
         return any(is_about(cls, a) for a in about)
     about = getattr(about, '__value__', about)
-    return getattr(about, '_is_protocol', False) or issubclass(cls, about)
+    if getattr(about, '_is_protocol', False):
+        annotated = {n for k in cls.__mro__ for n in inspect.get_annotations(k)}
+        return all(hasattr(cls, m) or m in annotated for m in about.__protocol_attrs__)
+    return issubclass(cls, about)
 
 
 def _spelled(about: Any) -> str:
@@ -112,22 +130,36 @@ def _spelled(about: Any) -> str:
     return getattr(about, '__qualname__', None) or getattr(about, '__name__', repr(about))
 
 
+_CHOICES : dict[type, dict[str, type]] = {}
+'''The finals marked per `Choice` interface, by dotted name, in marking order.'''
+
+
 def choice[C: type](interface: type) -> Callable[[C], C]:
-    '''Mark a final as one a study may name for the `Choice` `interface`. Nothing is
-    registered and the class is returned as it is: only that it is a final of
-    `interface` is checked, so every choice on offer is found by searching for the mark.'''
+    '''Mark a final as one a study may name for the `Choice` `interface`: it is checked to
+    be a final of `interface`, listed among its `choices`, and returned as it is. Marked again
+    under its own module and qualified name (a module reloaded), it replaces the first.'''
     if not (isinstance(interface, type) and Choice in interface.__bases__):
-        raise NotAChoice(getattr(interface, '__qualname__', repr(interface))).raised
+        raise TypeError(f'{getattr(interface, "__qualname__", repr(interface))} is not a '
+                        f'`Choice` interface: `@choice` names a level directly under `Choice`')
 
     def marked(cls: C) -> C:
         if not (isinstance(cls, type) and issubclass(cls, interface)):
-            raise ChoiceElsewhere(getattr(cls, '__qualname__', repr(cls)),
-                                  interface.__qualname__).raised
+            raise TypeError(f'{getattr(cls, "__qualname__", repr(cls))} is marked a '
+                            f'{interface.__qualname__} choice but does not extend '
+                            f'{interface.__qualname__}')
         if inspect.isabstract(cls):
-            raise ChoiceAbstract(dotted(cls), interface.__qualname__,
-                                 tuple(sorted(cls.__abstractmethods__))).raised
+            raise TypeError(f'{dotted(cls)} leaves {tuple(sorted(cls.__abstractmethods__))} '
+                            f'abstract, so it is not a {interface.__qualname__} a study can '
+                            f'name: `@choice` marks a final')
+        _CHOICES.setdefault(interface, {})[dotted(cls)] = cls
         return cls
     return marked
+
+
+def choices(interface: type) -> tuple[type, ...]:
+    '''The finals marked `@choice(interface)` so far, in marking order: those of the
+    modules imported.'''
+    return tuple(_CHOICES.get(interface, {}).values())
 
 
 _REFUSE = object()
@@ -160,78 +192,6 @@ def answered() -> dict[type[Answer], dict[type, Answer]]:
     return table
 
 
-class AboutNothing(Violation):
-    interface : str
-    error    = TypeError
-    template = ('{interface} does not say what it is answered per: bind `about` on it, a class, '
-                'a type alias, a protocol or a tuple of those')
-
-
-class NotAbout(Violation):
-    interface : str
-    classes   : tuple
-    about     : str
-    error    = TypeError
-    template = ('{interface} is answered per {about}, and {classes!r} is not: an answer is '
-                'registered for what its interface is about')
-
-
-class AnsweredTwice(Violation):
-    interface : str
-    about     : str
-    first     : str
-    second    : str
-    error    = TypeError
-    template = ('{about} has the {interface} answer {first} already, so {second} is refused: '
-                'which one answers would be chosen by import order')
-
-
-class AnswerAndChoice(Violation):
-    about : str
-    error    = TypeError
-    template = ('{about} is both an `Answer` and a `Choice`: one right answer is registered, '
-                'several are named by a study, and nothing is both')
-
-
-class AnswerHolds(Violation):
-    answer : str
-    held   : tuple[str, ...]
-    error    = TypeError
-    template = ('{answer} holds the fields {held}: an answer is built by the registry, '
-                '`cls()`, so whatever it needs is a class attribute or a method')
-
-
-class ChoiceAbstract(Violation):
-    choice    : str
-    interface : str
-    abstract  : tuple[str, ...]
-    error    = TypeError
-    template = ('{choice} leaves {abstract} abstract, so it is not a {interface} a study can '
-                'name: `@choice` marks a final')
-
-
-class ChoiceElsewhere(Violation):
-    choice    : str
-    interface : str
-    error    = TypeError
-    template = '{choice} is marked a {interface} choice but does not extend {interface}'
-
-
-class NotAChoice(Violation):
-    interface : str
-    error    = TypeError
-    template = ('{interface} is not a `Choice` interface: `@choice` names a level directly '
-                'under `Choice`')
-
-
-class NotOneInterface(Violation):
-    answer     : str
-    interfaces : tuple[str, ...]
-    error    = TypeError
-    template = ('{answer} is under the interfaces {interfaces}: an answer is registered under '
-                'one, a level directly under `Answer`')
-
-
 class Unanswered(Violation):
     interface : str
     about     : str
@@ -240,6 +200,5 @@ class Unanswered(Violation):
                 '(`@answers`)')
 
 
-__all__ = ['Answer', 'Choice', 'answers', 'answer', 'answer_for_class', 'answered', 'choice', 'is_about',
-           'AnsweredTwice', 'AnswerAndChoice', 'AnswerHolds', 'ChoiceAbstract', 'ChoiceElsewhere',
-           'NotAChoice', 'AboutNothing', 'NotAbout', 'NotOneInterface', 'Unanswered']
+__all__ = ['Answer', 'Choice', 'answers', 'answer', 'answer_for_class', 'answered', 'choice', 'choices',
+           'is_about', 'Unanswered']

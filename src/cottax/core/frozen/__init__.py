@@ -4,17 +4,17 @@ abstract variables, its checks and `remembered`, a `cached_property` written out
 stores (`ordered_map.py`), `Violation`, what a check yields and
 how a refusal is raised or collected, `checked`, a function declaring its checks as a class
 does, `name_of` and `dotted`, a callable or a class named in a message (`violation.py`), and how a feature's class gets into a consumer: an `Answer`
-registered with `answers` and found by `answer`, or a `Choice`, its finals marked `choice`
+registered with `answers` and found by `answer`, or a `Choice`, its finals marked `choice` and listed by `choices`
 (`answer.py`).
 '''
 
 from .base import AbstractClassVar, AbstractVar, Frozen, PerLevel, remembered
 from .ordered_map import OrderedMap
-from .answer import Answer, Choice, answer, answer_for_class, answered, answers, choice
+from .answer import Answer, Choice, answer, answer_for_class, answered, answers, choice, choices
 from .violation import Violation, checked, dotted, first, name_of, violations
 
 __all__ = [
     'AbstractClassVar', 'AbstractVar', 'Frozen', 'PerLevel', 'remembered', 'OrderedMap',
-    'Answer', 'Choice', 'answer', 'answer_for_class', 'answered', 'answers', 'choice',
+    'Answer', 'Choice', 'answer', 'answer_for_class', 'answered', 'answers', 'choice', 'choices',
     'Violation', 'checked', 'first', 'violations', 'name_of', 'dotted',
 ]

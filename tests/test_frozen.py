@@ -353,7 +353,6 @@ def test_only_a_name_declared_per_level_is_accumulated():
 # ---------------------------------------------------------------- Answer and Choice
 
 from cottax.core.frozen import Answer, Choice, answers
-from cottax.core.frozen.answer import AnswerAndChoice, AnswerHolds, NotOneInterface
 
 
 class Asked(Answer):
@@ -373,7 +372,9 @@ def test_a_class_both_an_answer_and_a_choice_is_refused_at_creation():
         class Both(Asked, Choice):
             pass
     where = test_a_class_both_an_answer_and_a_choice_is_refused_at_creation.__qualname__
-    assert str(found.value) == AnswerAndChoice(f'{__name__}.{where}.<locals>.Both').message
+    assert str(found.value) == (f'{__name__}.{where}.<locals>.Both is both an `Answer` and a '
+                                f'`Choice`: one right answer is registered, several are named by '
+                                f'a study, and nothing is both')
 
 
 def test_an_answer_holding_a_field_is_refused_at_registration():
@@ -381,7 +382,9 @@ def test_an_answer_holding_a_field_is_refused_at_registration():
         n : int = 0
     with pytest.raises(TypeError) as found:
         answers(About)(Holding)
-    assert str(found.value) == AnswerHolds(f'{__name__}.{Holding.__qualname__}', ('n',)).message
+    assert str(found.value) == (f"{__name__}.{Holding.__qualname__} holds the fields ('n',): an "
+                                f'answer is built by the registry, `cls()`, so whatever it needs is '
+                                f'a class attribute or a method')
 
 
 def test_an_answer_under_two_interfaces_is_refused_by_kind():
@@ -389,14 +392,15 @@ def test_an_answer_under_two_interfaces_is_refused_by_kind():
         pass
     with pytest.raises(TypeError) as found:
         answers(About)(Twice)
-    assert str(found.value) == NotOneInterface(f'{__name__}.{Twice.__qualname__}',
-                                             ('Asked', 'Also')).message
+    assert str(found.value) == (f"{__name__}.{Twice.__qualname__} is under the interfaces "
+                                f"('Asked', 'Also'): an answer is registered under one, a level "
+                                f'directly under `Answer`')
 
 
 def test_an_answer_is_registered_for_what_its_interface_is_about():
     '''An interface binds `about`; a class outside it is refused, a protocol met by shape, and
     an interface saying nothing is refused at the first registration.'''
-    from cottax.core.frozen.answer import AboutNothing, NotAbout, is_about
+    from cottax.core.frozen.answer import is_about
     from cottax.core import Label, Place
 
     class Numbers(Answer):
@@ -406,7 +410,9 @@ def test_an_answer_is_registered_for_what_its_interface_is_about():
         pass
     with pytest.raises(TypeError) as found:
         answers(bool, str)(Counted)
-    assert found.value.violation == NotAbout(Numbers.__qualname__, ('builtins.str',), 'int')
+    assert str(found.value) == (f"{Numbers.__qualname__} is answered per int, and "
+                                f"('builtins.str',) is not: an answer is registered for what its "
+                                f'interface is about')
 
     class Unsaid(Answer):
         pass
@@ -415,8 +421,25 @@ def test_an_answer_is_registered_for_what_its_interface_is_about():
         pass
     with pytest.raises(TypeError) as found:
         answers(About)(Said)
-    assert found.value.violation == AboutNothing(Unsaid.__qualname__)
+    assert str(found.value).startswith(f'{Unsaid.__qualname__} does not say what it is answered per')
     assert is_about(About, (Place, Label)) and is_about(bool, int) and not is_about(str, int)
+
+    class Spelled:                              # a field without a default, and a property
+        segments : tuple
+        @property
+        def prefixes(self): return ()
+
+    class Half:
+        segments : tuple
+    assert is_about(Spelled, Place) and not is_about(Half, Place) and not is_about(int, Place)
+
+    class Places(Answer):
+        about = Place
+
+    class Spelling(Places):
+        pass
+    with pytest.raises(TypeError, match=r'answered per Place, and .*Half.* is not'):
+        answers(Half)(Spelling)
 
 
 class Reloaded:
@@ -427,7 +450,7 @@ def test_an_answer_registered_again_under_its_own_name_replaces_the_first():
     '''A module reloaded in a notebook registers its answer again: same module and
     qualified name, a new class. Anything else is refused.'''
     from cottax.core.frozen import answer
-    from cottax.core.frozen.answer import AnsweredTwice, dotted
+    from cottax.core.frozen.answer import dotted
 
     def written() -> type[Asked]:
         class Mine(Asked):
@@ -441,12 +464,12 @@ def test_an_answer_registered_again_under_its_own_name_replaces_the_first():
         pass
     with pytest.raises(TypeError) as found:
         answers(Reloaded)(Other)
-    assert str(found.value) == AnsweredTwice('Asked', f'{__name__}.Reloaded', dotted(again),
-                                             dotted(Other)).message
+    assert str(found.value) == (f'{__name__}.Reloaded has the Asked answer {dotted(again)} already, '
+                                f'so {dotted(Other)} is refused: which one answers would be chosen '
+                                f'by import order')
 
 
-from cottax.core.frozen import AbstractVar, Frozen, choice
-from cottax.core.frozen.answer import ChoiceAbstract, ChoiceElsewhere, NotAChoice
+from cottax.core.frozen import AbstractVar, Frozen, choice, choices
 
 
 class Way(Frozen, Choice):
@@ -457,29 +480,46 @@ class Sideways(Way):
     pass
 
 
-def test_a_choice_final_is_marked_and_returned_unchanged():
-    class Mine(Way):
-        step : int = 1
-    assert choice(Way)(Mine) is Mine
+def test_a_choice_final_is_marked_returned_unchanged_and_listed():
+    '''Listed in marking order; marked again under its own name (a module reloaded), it
+    replaces the first.'''
+    class Listed(Frozen, Choice):
+        step : AbstractVar[int]
+
+    def written() -> type[Listed]:
+        class Mine(Listed):
+            step : int = 1
+        return Mine
+
+    class Yours(Listed):
+        step : int = 2
+    mine = written()
+    assert choice(Listed)(mine) is mine and choice(Listed)(Yours) is Yours
+    assert choices(Listed) == (mine, Yours)
+    again = choice(Listed)(written())
+    assert choices(Listed) == (again, Yours) and again is not mine
+    assert choices(Way) == () or all(issubclass(c, Way) for c in choices(Way))
 
 
 def test_a_choice_mark_names_a_choice_interface():
     for interface in (About, Sideways, Choice):
         with pytest.raises(TypeError) as found:
             choice(interface)
-        assert str(found.value) == NotAChoice(interface.__qualname__).message
+        assert str(found.value) == (f'{interface.__qualname__} is not a `Choice` interface: '
+                                    f'`@choice` names a level directly under `Choice`')
 
 
 def test_a_choice_mark_refuses_a_class_not_under_its_interface():
     with pytest.raises(TypeError) as found:
         choice(Way)(About)
-    assert str(found.value) == ChoiceElsewhere('About', 'Way').message
+    assert str(found.value) == 'About is marked a Way choice but does not extend Way'
 
 
 def test_a_choice_mark_refuses_an_abstract_level():
     with pytest.raises(TypeError) as found:
         choice(Way)(Sideways)
-    assert str(found.value) == ChoiceAbstract(f'{__name__}.Sideways', 'Way', ('step',)).message
+    assert str(found.value) == (f"{__name__}.Sideways leaves ('step',) abstract, so it is not a Way "
+                                f'a study can name: `@choice` marks a final')
 
 
 def test_a_remembered_answer_is_of_the_value_and_outside_it():

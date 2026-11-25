@@ -47,21 +47,24 @@ def first(violations: Iterable[Violation]) -> None:
 
 def checked[F: Callable](*checks: Callable[..., Iterable[Violation]]) -> Callable[[F], F]:
     '''A function declaring its checks as a class does: each is called with the function's
-    arguments as it receives them, and the first violation is raised before the body runs.'''
+    arguments as it receives them, and the first violation is raised before the body runs.
+    The signature is read once, at decoration (`fn.signature`).'''
     def decorate(fn: F) -> F:
+        signature = inspect.signature(fn)
+
         @wraps(fn)
         def run(*args, **kwargs):
-            bound = _bound(run, args, kwargs)
+            bound = _bound(signature, args, kwargs)
             for check in checks:
                 first(check(*bound.args, **bound.kwargs))
             return fn(*bound.args, **bound.kwargs)
-        run.checks = checks                                             # type: ignore[attr-defined]
+        run.checks, run.signature = checks, signature                   # type: ignore[attr-defined]
         return run                                                      # type: ignore[return-value]
     return decorate
 
 
-def _bound(fn: Callable, args: tuple, kwargs: dict) -> inspect.BoundArguments:
-    bound = inspect.signature(fn).bind(*args, **kwargs)
+def _bound(signature: inspect.Signature, args: tuple, kwargs: dict) -> inspect.BoundArguments:
+    bound = signature.bind(*args, **kwargs)
     bound.apply_defaults()
     return bound
 
@@ -79,7 +82,7 @@ def violations(cls: type[Frozen] | Callable, *args, **kwargs) -> Iterator[Violat
                 raise
             yield from e.violations                                     # type: ignore[attr-defined]
         return
-    bound = _bound(cls, args, kwargs)
+    bound = _bound(cls.signature, args, kwargs)                         # type: ignore[attr-defined]
     for check in cls.checks:                                            # type: ignore[attr-defined]
         yield from check(*bound.args, **bound.kwargs)
 
