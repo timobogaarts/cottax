@@ -283,7 +283,7 @@ def test_a_second_vocabulary_joins_and_its_problems_are_driven_by_its_own_contra
 
     places = core_role_places | RolePlaces(OrderedMap(((Low, Lo()), (High, Hi()))))
     drive = Drive((Picard(), Bisection()), (Bisect(), *CONTRACTS), places)
-    assigned = [op for op in drive.composed(d.graph) if isinstance(op, Assign)]
+    assigned = [op for op in drive._ops(d.graph) if isinstance(op, Assign)]
     assert [(op.problem, op.contract) for op in assigned] == [
         (T('^bracket.root'), Bisect()), (T('^solve.iterate'), FixedPointIteration())]
     assert assigned[0].data == OrderedMap({Low: (T('^lo.x'),), High: (T('^hi.x'),)})

@@ -486,8 +486,6 @@ def test_a_combining_the_graph_cannot_answer_is_refused_by_the_proof(implicit):
         Executable.prove(g)
 
 
-@pytest.mark.xfail(strict=True, reason='phase 2: the design-members-are-problems check moves onto '
-                   "Architecture's level, beside check_implicit_models, and says TopNotAProblem first")
 def test_top_names_a_bound_problem(sellar):
     with pytest.raises(KeyError, match='is no node of the model'):
         Plan(sellar) + MDF(GaussSeidel(), CLOSING, N('nope'))

@@ -2,7 +2,7 @@
 
 from collections.abc import Iterable, Sequence
 
-from ...core import ComposedOp, GraphOp, Label, Graph, Place, first
+from ...core import Composite, GraphOp, Label, Graph, Place, first
 from .cut_rules import CutRule, Opened, cuts_per_cycle
 from .interface import Closing
 from .refusals import ClosuresCollide
@@ -19,7 +19,7 @@ def closed[N: Label, V: Place](opened: Iterable[Opened[N, V]], closing: Closing[
     return tuple(closing(cycle, group) for cycle, group in groups)
 
 
-class CloseFunctionalCycles[N: Label, V: Place](ComposedOp[N, V]):
+class CloseFunctionalCycles[N: Label, V: Place](Composite[N, V]):
     '''
     Every cycle of the function nodes closed by the rule, over the graph this op is
     applied to. Records the rule, where a closure records a decision.
@@ -28,7 +28,7 @@ class CloseFunctionalCycles[N: Label, V: Place](ComposedOp[N, V]):
     rule    : CutRule[N, V]
     closing : Closing[N, V]
 
-    def composed(self, graph: Graph[N, V]) -> Sequence[GraphOp[N, V]]:
+    def _ops(self, graph: Graph[N, V]) -> Sequence[GraphOp[N, V]]:
         return closed(cuts_per_cycle(graph, self.rule), self.closing)
 
     def __repr__(self) -> str:

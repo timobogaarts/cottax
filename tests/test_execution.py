@@ -27,7 +27,7 @@ from cottax.consumers.execution.valued import InputMissing, NotAPlace, OwnedGive
 from cottax.core.frozen import OrderedMap
 from cottax.core.conditional import driven as with_driver, Driven, DrivenNodes
 from cottax.core import is_driven
-from cottax.core.conditional import DriverContract, PerProblem, PerUnknown, Role
+from cottax.core.conditional import DriverContract, PerCondition, PerUnknown, Role
 from cottax.consumers.execution import Runnable, run
 from cottax.consumers.execution.run import RunnableNodes
 from cottax.consumers.execution.interface_types import ConditionMap, Context, Posed
@@ -67,13 +67,13 @@ CLOSE, TARGET = W('DiscA.close'), W('target')
 class Start(PerUnknown):
     '''Where each unknown starts.'''
 
-class Budget(PerProblem):
+class Budget(PerCondition):
     '''How many steps the solve may take.'''
 
-class Steps(PerProblem):
+class Steps(PerCondition):
     '''How many it took.'''
 
-class History(PerProblem):
+class History(PerCondition):
     '''Every gap met, in order.'''
 
 
@@ -335,7 +335,7 @@ def test_a_description_is_refused_a_call():
     assert kinds(Graph(changed, OrderedMap())) == [NotCallable]
 
 
-class Tolerance(PerProblem):
+class Tolerance(PerCondition):
     '''A role `Newton` does not take.'''
 
 
@@ -410,12 +410,43 @@ def test_optional_data_placed_is_read_or_refused_and_never_dropped():
     assert reads.seen == [(1e-9,)]
 
 
+class Gathered(DriverContract):
+    '''May take a `Tolerance` on its own, and needs one with a `History` asked.'''
+    accepts      = staticmethod(is_root_find)
+    takes        = (Start, Budget)
+    may_take     = (Tolerance,)
+    may_report   = (History,)
+    report_needs = {History: (Tolerance,)}
+
+
+class Gathers(DriverImplementation[Gathered]):
+    '''Makes the history and never reads a tolerance.'''
+    needs    = frozenset({Start, Budget})
+    provides = frozenset({History})
+
+    def __call__(self, posed, context, data):
+        return newton(posed, context, data)
+
+
+def test_data_a_report_asked_needs_is_never_unused():
+    '''A role both optional and needed by a report: with the report asked it is required, so
+    an implementation not reading it is fine; given alone it was asked for, and is refused.'''
+    condition = (definitions()[CLOSE]).condition
+    data, _ = places(CLOSE, U)
+    tolerant = OrderedMap({**data, Tolerance: (W('^tolerance.DiscA.close'),)})
+    history  = OrderedMap({History: (W('^history.DiscA.close'),)})
+    on = lambda reports: definitions() | {
+        CLOSE: implemented(with_driver(condition, Gathered(), tolerant, reports), Gathers())}
+    assert kinds(Graph(on(history), OrderedMap())) == []
+    assert kinds(Graph(on(OrderedMap()), OrderedMap())) == [DataUnused]
+
+
 # ---------------------------------------------------------------- choosing and changing drivers
 
 def test_implementations_are_chosen_by_contract_and_chosen_again_on_what_the_graph_holds():
     bare = Unimplement((CLOSE,)).apply(flat())
     op   = ImplementDrivers(OrderedMap({Bisection: Returns(print), Newton: newton}))
-    (implement,) = op.composed(bare)
+    (implement,) = op._ops(bare)
     assert implement.values == OrderedMap({CLOSE: newton})
     assert math.isclose(ran(op.apply(bare))[U], exact_u(1.0), rel_tol=1e-12)
     with pytest.raises(ValueError, match='no attribute to set'):
@@ -425,7 +456,7 @@ def test_implementations_are_chosen_by_contract_and_chosen_again_on_what_the_gra
 def test_the_most_specific_contract_is_chosen_whatever_order_the_map_is_written_in():
     bare = Unimplement((CLOSE,)).apply(flat())
     for written in ({DriverContract: Returns(print), Newton: newton}, {Newton: newton, DriverContract: Returns(print)}):
-        (implement,) = ImplementDrivers(OrderedMap(written)).composed(bare)
+        (implement,) = ImplementDrivers(OrderedMap(written))._ops(bare)
         assert implement.values == OrderedMap({CLOSE: newton})
 
 

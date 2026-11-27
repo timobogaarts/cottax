@@ -779,8 +779,6 @@ def test_a_declaration_stands_where_a_node_name_is_due():
         cx.flat.mdf(flat.satisfy(design={'f': (0, 1)}))
 
 
-@pytest.mark.xfail(strict=True, reason='phase 2: the top checks move onto Architecture\'s level, '
-                   'before check_implicit_models, which today says NotEqualities first')
 def test_a_problem_in_a_slot_is_not_found_by_the_name_it_takes_loose():
     '''A slot's name wins: the problem itself then names a node the graph does not have.'''
     from graphs import refusals

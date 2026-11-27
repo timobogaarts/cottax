@@ -83,7 +83,7 @@ def nested(mdf) -> Graph:
 # ---------------------------------------------------------------- the field
 
 def test_a_redefine_elsewhere_does_not_void_the_nesting(nested):
-    # `Redefine.apply` rescans when an output moved, and a rescan must not be what drops
+    # An op redefining a node rescans when an output moved, and a rescan must not be what drops
     # the graph's second component: an unrelated `Determine` once erased `within` whole.
     unrelated = (Plan(nested)
                  + Insert(OrderedMap({n('src'): call([], ['w']),
@@ -219,11 +219,20 @@ def test_severing_a_nested_pair_is_carried_and_refused_as_executable(nested):
 
 # ---------------------------------------------------------------- rewrites over a pair
 
+def test_a_nest_names_two_nodes(nested):
+    from cottax.core.maths.graph import NotBound
+    from graphs import refusals
+    assert refusals(Nest(n('d'), n('nope')), nested) == (NotBound(n('nope')),)
+
+
 def test_deleting_one_end_is_refused(nested):
-    # The result's: a pair naming a removed node is `Valid`'s to refuse (`Unbound`), where
-    # it is kept; the op itself leaves the pair, as a graph may be.
-    from cottax.core.maths.valid import Unbound
-    assert [type(v) for v in Valid.check(Delete((n('opt'),)).apply(nested))] == [Unbound]
+    # The op's: a pair losing one end is a recorded decision voided, so `Delete` refuses it
+    # (`Stranded`) and says to `Unnest` first.
+    from cottax.core.plan.primitive_ops import Stranded
+    from graphs import refusals
+    assert [type(v) for v in refusals(Delete((n('opt'),)), nested)] == [Stranded]
+    with pytest.raises(ValueError, match='`Unnest` it first'):
+        Plan(nested) + Delete((n('opt'),))
     # Both ends together is fine: nothing is left dangling.
     assert (Plan(nested) + Delete((n('opt'), n('mda'),))).graph.within == OrderedMap()
 

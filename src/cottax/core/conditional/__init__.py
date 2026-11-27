@@ -26,7 +26,7 @@ vocabulary is imported from here.
 '''
 
 from .condition import Condition
-from .driver import Driver, DriverContract, PerProblem, PerUnknown, Role, entry_for
+from .driver import Driver, DriverContract, PerCondition, PerUnknown, Role, entry_for
 from .node import ConditionalNode, check_driver_fits, is_driven, kind_of
 from .ops import SetOwnsInside
 from .assign import Assign, AssignByRule, Undrive, driven, driving_violations
@@ -35,7 +35,7 @@ from .proof import Driven, DrivenNodes
 
 __all__ = [
     'Condition', 'ConditionalNode', 'is_driven', 'kind_of', 'SetOwnsInside',
-    'Driver', 'DriverContract', 'PerProblem', 'PerUnknown', 'Role', 'entry_for',
+    'Driver', 'DriverContract', 'PerCondition', 'PerUnknown', 'Role', 'entry_for',
     'Assign', 'AssignByRule', 'Undrive', 'driven', 'driving_violations',
     'Start', 'Steps', 'role_slots',
     'Driven', 'DrivenNodes', 'check_driver_fits',

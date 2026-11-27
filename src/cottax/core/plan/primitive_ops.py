@@ -1,5 +1,5 @@
 '''
-Primitive Ops: bindings, nesting, replacing, renaming, cutting, and (node) attributes.
+Primitive Ops: bindings, nesting, replacing, renaming, cutting, (node) attributes, and Contraction.
 '''
 
 import dataclasses
@@ -8,7 +8,7 @@ from collections.abc import Collection, Iterator
 from ..maths.definition import Attribute, NodeDefinition
 from ..frozen import AbstractClassVar, OrderedMap, Violation, name_of
 from ..maths.dependencies import Dependencies
-from ..maths.graph import Graph
+from ..maths.graph import Box, Graph, NotBound
 from ..maths.places import Label, Place, PlaceToPlace
 from ..maths.valid import Valid
 from .op import PrimitiveOp
@@ -18,6 +18,13 @@ from .edit import Edit
 def nested_among[N: Label](graph: Graph[N, Place], names: Collection[N]) -> frozenset[N]:
     '''The inners of the pairs with both ends in `names`: what removing them all unnests.'''
     return frozenset(i for i, o in graph.within.items() if i in names and o in names)
+
+
+def stranded[N: Label](graph: Graph[N, Place], removed: Collection[N]) -> Iterator[Violation]:
+    '''A nesting pair losing exactly one end to `removed`. A nesting is a decision the plan
+    recorded, so it is not dropped silently: `Unnest` first. Losing both ends is fine.'''
+    if broken := [(i, o) for i, o in graph.within.items() if (i in removed) != (o in removed)]:
+        yield Stranded(tuple(i for i, _ in broken), tuple(o for _, o in broken))
 # ---------------------------------------------------------------- the bindings
 
 class Insert[N: Label, V: Place](PrimitiveOp[N, V]):
@@ -28,9 +35,16 @@ class Insert[N: Label, V: Place](PrimitiveOp[N, V]):
     def __repr__(self) -> str:  
         return f'insert({", ".join(str(n) for n in self.nodes)})'
     
+def check_strands_no_pair(op: 'Delete', graph: Graph) -> Iterator[Violation]:
+    '''No nesting pair loses one end and keeps the other.'''
+    yield from stranded(graph, set(op.nodes))
+
+
 class Delete[N: Label](PrimitiveOp[N, Place]):
-    '''Remove nodes. A nesting pair losing one end is left, a pair with both nodes deleted removes the nesting.'''
+    '''Remove nodes. A pair with both nodes deleted removes the nesting; one losing one end
+    is refused (`Stranded`): `Unnest` it first.'''
     nodes : tuple[N, ...]
+    checks_graph = (check_strands_no_pair,)
     def _edit(self, graph: Graph[N, Place]) -> Edit[N, Place]:
         '''A pair losing both ends goes with them.'''
         gone = frozenset(self.nodes)
@@ -39,10 +53,19 @@ class Delete[N: Label](PrimitiveOp[N, Place]):
         return f'delete({", ".join(str(n) for n in self.nodes)})'
 # ---------------------------------------------------------------- the nesting
 
+def check_ends_bound(op: 'Nest', graph: Graph) -> Iterator[Violation]:
+    '''Both ends of the pair are nodes of the graph.'''
+    for n in dict.fromkeys((op.inner, op.outer)):
+        if n not in graph:
+            yield NotBound(n)
+
+
 class Nest[N: Label](PrimitiveOp[N, Place]):
-    '''Record that one problem is answered inside another's iteration.'''
+    '''Record that one problem is answered inside another's iteration. A loop the pair
+    would close is `Valid`'s to refuse, where it is kept.'''
     inner : N
     outer : N
+    checks_graph = (check_ends_bound,)
     def _edit(self, graph: Graph[N, Place]) -> Edit[N, Place]:
         return Edit(nest=OrderedMap({self.inner: self.outer}))
     def __repr__(self) -> str:
@@ -55,6 +78,28 @@ class Unnest[N: Label](PrimitiveOp[N, Place]):
         return Edit(unnest=frozenset({self.inner}))
     def __repr__(self) -> str:
         return f'unnest({self.inner})'
+
+# ---------------------------------------------------------------- contraction
+
+class Contract[N: Label, V: Place](PrimitiveOp[N, V]):
+    '''
+    Blocks contracted into boxes, as a step of a plan: `Graph.contracted` as an edit.
+    '''
+    blocks : OrderedMap[N, tuple[N, ...]]
+    box    : Box[N, V]
+
+    def _edit(self, graph: Graph[N, V]) -> Edit[N, V]:
+        boxes   = graph.boxed(self.blocks, self.box)
+        members = {m for order, _ in boxes.values() for m in order}
+        return Edit(unnest=frozenset(i for i, o in graph.within.items() if i in members or o in members),
+                    remove=frozenset(members - set(boxes)),
+                    redefine=OrderedMap((n, b) for n, (_, b) in boxes.items() if n in graph),
+                    insert=OrderedMap((n, b) for n, (_, b) in boxes.items() if n not in graph))
+
+    def __repr__(self) -> str:
+        return 'contract(' + '; '.join(f'{n} <- {", ".join(map(str, ms))}'
+                                       for n, ms in self.blocks.items()) + ')'
+
 
 # ---------------------------------------------------------------- a definition replaced
 class Replace[N: Label, V: Place](PrimitiveOp[N, V]):
@@ -69,6 +114,9 @@ class Replace[N: Label, V: Place](PrimitiveOp[N, V]):
 
 def check_renames_places_the_node_has(op: 'Rename', graph: Graph) -> Iterator[Violation]:
     '''A node only renames places it reads or owns.'''
+    if op.node not in graph:
+        yield NotBound(op.node)
+        return
     node = graph[op.node]
     has  = set(node.reads) | set(node.owns)
     if missing := tuple(old for old, _ in op.onto if old not in has):
@@ -104,7 +152,10 @@ def check_cuts_a_produced_place(op: 'Cut', graph: Graph) -> Iterator[Violation]:
 
 def check_readers_read_var(op: 'Cut', graph: Graph) -> Iterator[Violation]:
     '''Every reader reads `var`. Renaming on the producer would move the output instead.'''
-    if off := tuple(r for r in op.readers if op.var not in graph[r].reads):
+    for r in op.readers:
+        if r not in graph:
+            yield NotBound(r)
+    if off := tuple(r for r in op.readers if r in graph and op.var not in graph[r].reads):
         yield DoesNotRead(op.var, off)
 
 class Cut[N: Label, V: Place](PrimitiveOp[N, V]):
@@ -139,7 +190,9 @@ def check_sets_something(op: 'SetAttribute') -> Iterator[Violation]:
 def check_settable(op: 'SetAttribute', graph: Graph) -> Iterator[Violation]:
     """No node carries one under that key already."""
     for node_name in op.values:
-        if op.kind in graph[node_name].attributes:
+        if node_name not in graph:
+            yield NotBound(node_name)
+        elif op.kind in graph[node_name].attributes:
             yield AttributeAlreadySet(node_name, op.kind.__name__)
 
 
@@ -169,7 +222,9 @@ def check_removes_something(op: 'RemoveAttribute') -> Iterator[Violation]:
 def check_removable(op: 'RemoveAttribute', graph: Graph) -> Iterator[Violation]:
     """Each node carries one to take off."""
     for name in op.nodes:
-        if op.kind not in graph[name].attributes:
+        if name not in graph:
+            yield NotBound(name)
+        elif op.kind not in graph[name].attributes:
             yield AttributeNotSet(name, op.kind.__name__)
 
 class RemoveAttribute[N: Label, V: Place](PrimitiveOp[N, V]):
@@ -240,3 +295,11 @@ class AlreadyCut(Violation):
     template = ('{var!r} is already cut: its copy {copy} exists. A variable is cut at '
                 'most once -- two cuts would assume two values for one place. Cut with '
                 'more readers at once to share a copy')
+
+
+class Stranded(Violation):
+    inner : tuple[Label, ...]
+    outer : tuple[Label, ...]
+    error    = ValueError
+    template = ('{inner} in {outer} would lose one end and keep the other -- `Unnest` it first, '
+                 'so a plan never quietly voids what an earlier op recorded')

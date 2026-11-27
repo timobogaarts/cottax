@@ -9,6 +9,7 @@ from ...core import (
     ConditionalNode, FunctionalNode,  Label, Graph, NodeDefinition,
     Place, per_node_check, Rules, Run, Schedule, Violation, is_driven)
 from ...core.frozen import OrderedMap, checked
+from ...core.conditional import DriverContract, Role
 from ...core.realisation import Realised, implementation_of, is_implemented
 from .interface import DriverImplementation
 from .interface_types import ConditionMap, ConditionValues, Context, Posed, Unknowns
@@ -56,14 +57,25 @@ def check_implements_its_driver[N: Label, V: Place](name: N, node: NodeDefinitio
             yield ImplementsAnother(name, type(contract).__name__,
                                     implementation.implements.__name__)
         else:
-            if missing := tuple(r for r in implementation.needs if r not in driver.data):
-                yield DataMissing(name, type(implementation).__name__, _names(missing))
-            required = contract.required(tuple(driver.reports))
-            if unused := tuple(r for r in driver.data if r not in required
-                               and r not in implementation.needs | implementation.uses):
-                yield DataUnused(name, type(implementation).__name__, _names(unused))
-            if absent := tuple(r for r in driver.reports if r not in implementation.provides):
-                yield ReportUnavailable(name, type(implementation).__name__, _names(absent))
+            yield from serves(name, implementation, contract, tuple(driver.data), tuple(driver.reports))
+
+
+def serves[N: Label](name: N, implementation: DriverImplementation, contract: DriverContract,
+                     data: tuple[type[Role], ...], reports: tuple[type[Role], ...]
+                     ) -> Iterator[Violation]:
+    '''Whether `implementation` can run a driver of `contract` holding `data` and asked for
+    `reports`: it is given what it needs, uses each datum beyond what the contract requires
+    for those reports, and can make each report. Asked of a driven node, and by `Drive` of the
+    driver it is about to place.'''
+    kind = type(implementation).__name__
+    if missing := tuple(r for r in implementation.needs if r not in data):
+        yield DataMissing(name, kind, _names(missing))
+    required, _ = contract.roles_for(reports)
+    if unused := tuple(r for r in data if r not in required
+                       and r not in implementation.needs | implementation.uses):
+        yield DataUnused(name, kind, _names(unused))
+    if absent := tuple(r for r in reports if r not in implementation.provides):
+        yield ReportUnavailable(name, kind, _names(absent))
 
 
 def _names(roles: tuple[type, ...]) -> tuple[str, ...]:

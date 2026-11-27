@@ -110,7 +110,7 @@ class Running(Part):
         `model` (a graph, or a `Model`: a `Declared`), proved a `proof` (a rule group), with a
         value at each boundary input, from exactly one source: the declaration's own values;
         `values`, by name, `{Inputs: {'x': 1.}, Start: {'z_1': 5., s.copy('y_2'): 1.}}`, a
-        driver's data by role and unknown, a per-problem role at any one unknown of its
+        driver's data by role and unknown, a per-condition role at any one unknown of its
         problem; or `read_from`, a structure per key, `{Inputs: state, Start: state}`.
         Refused: a value nothing reads, a place given twice, a key that is no problem's
         unknown, a role its driver does not take, and any input left without a value.
@@ -146,7 +146,7 @@ class Running(Part):
 
     def _slot[N: Label, V: Place](self, graph: Graph[N, V], table: tuple[Slot[V, N], ...], key: type, written: Any) -> V:
         '''The open slot of `table` a name written under `key` gives: an input itself, or the
-        datum of the problem owning the unknown written, at that unknown or, per problem, at
+        datum of the problem owning the unknown written, at that unknown or, per condition, at
         any. Refused with why it gives none.'''
         if key is Inputs:
             place = self.place(written, role='an input')

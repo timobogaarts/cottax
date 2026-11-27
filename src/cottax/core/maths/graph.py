@@ -153,6 +153,19 @@ class Graph[N: Label, V: Place](Frozen):
                                          if i in kept and o in kept))
 
     @checked(check_blocks_partition, check_blocks_bound, check_box_names_free)
+    def boxed(self, blocks: Mapping[N, Sequence[N]], box: Box[N, V]
+              ) -> OrderedMap[N, tuple[tuple[N, ...], NodeDefinition[V]]]:
+        '''Per box name: its members in binding order, and the node `box` builds for them.
+        What `contracted` and `Contract` share.'''
+        out = {}
+        for name, block in blocks.items():
+            order = tuple(sorted(dict.fromkeys(block), key=self._position.__getitem__))
+            owns  = tuple(dict.fromkeys(v for m in order for v in self[m].owns))
+            owned = set(owns)
+            reads = tuple(dict.fromkeys(v for m in order for v in self[m].reads if v not in owned))
+            out[name] = (order, box(order, reads, owns))
+        return OrderedMap(out)
+
     def contracted(self, blocks: Mapping[N, Sequence[N]], box: Box[N, V]) -> Self:
         '''
         Coarsening of the graph: contracting blocks into a box.
@@ -163,25 +176,20 @@ class Graph[N: Label, V: Place](Frozen):
             box: `(members, reads, owns) -> node`, the node standing for a block.
 
         Returns:
-            The graph with each box at its first member's place in binding order, reading what
-            its block reads from outside and owning what it owns. Nesting pairs touching a
-            block are dropped. 
+            The graph with each box reading what its block reads from outside and owning
+            what it owns: at its name's place where it is named after a member, appended
+            where its name is new (as `Contract` places it). Nesting pairs touching a block
+            are dropped.
 
         Refuses:
-            BlockTooSmall, NodeInTwoBlocks, NotBound, NameTaken (@checked)        
+            BlockTooSmall, NodeInTwoBlocks, NotBound, NameTaken (`boxed`'s, @checked)        
         '''
-        at, members = {}, set()                 # first member -> (name, box); every member
-        for name, block in blocks.items():
-            order = tuple(sorted(dict.fromkeys(block), key=self._position.__getitem__))
-            owns  = tuple(dict.fromkeys(v for m in order for v in self[m].owns))
-            owned = set(owns)
-            reads = tuple(dict.fromkeys(v for m in order for v in self[m].reads if v not in owned))
-            at[order[0]] = (name, box(order, reads, owns))
-            members |= set(order)
+        boxes   = self.boxed(blocks, box)
+        members = {m for order, _ in boxes.values() for m in order}
+        kept    = [(n, boxes[n][1] if n in boxes else d) for n, d in self.definitions.items()
+                   if n in boxes or n not in members]
         return replace(self,
-                       definitions=OrderedMap(at[n] if n in at else (n, d)
-                                              for n, d in self.definitions.items()
-                                              if n in at or n not in members),
+                       definitions=OrderedMap(kept + [(n, b) for n, (_, b) in boxes.items() if n not in self]),
                        within=OrderedMap((i, o) for i, o in self.within.items()
                                          if i not in members and o not in members))
 

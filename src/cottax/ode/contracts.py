@@ -5,11 +5,11 @@ problem integrated; asked for each state's `Trajectory`, it takes the `Times` sa
 '''
 
 from ..core import Place
-from ..core.conditional import DriverContract, PerProblem, PerUnknown
+from ..core.conditional import DriverContract, PerCondition, PerUnknown
 from .ode_condition import is_ode
 
 
-class Times(PerProblem):
+class Times(PerCondition):
     '''The times a trajectory is saved at: one array, within the span and monotone in the
     direction of integration; its length is the trajectory's.'''
 

@@ -216,10 +216,9 @@ class RolePlaces(Frozen):
                 return self.entries[level]
         raise NoPlaceFor(role.__qualname__).raised
 
-    def __call__[N, V](self, at: N, condition: Condition[V], contract: DriverContract,
-                       role: type[Role]) -> tuple[V, ...]:
-        '''`role`'s places, for the problem at `at` stating `condition` under `contract`: the
-        rule an `AssignByRule` records.'''
+    def __call__[N, V](self, at: N, condition: Condition[V], role: type[Role]) -> tuple[V, ...]:
+        '''`role`'s places, for the problem at `at` stating `condition`: the rule an
+        `AssignByRule` records.'''
         from .interface import DerivedNames                 # the interface is built on this
         rule = self.rule(role)
         def place(subject: V | None) -> V:
@@ -229,7 +228,7 @@ class RolePlaces(Frozen):
                 return rule(subject)
             raise TypeError(f'{role.__name__} has a place standing for {subject!r}, neither an '
                             f'unknown nor the problem: pass its places to `Assign`')
-        return tuple(map(place, role.index(condition, contract)))
+        return tuple(map(place, role.index(condition)))
 
     def __or__(self, other: 'RolePlaces') -> 'RolePlaces':
         return RolePlaces(self.entries | other.entries)

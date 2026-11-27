@@ -23,7 +23,7 @@ from cottax.consumers.execution import Runnable, run
 from cottax.consumers.execution.interface_types import Posed
 from cottax.core import FunctionalNode
 from cottax.core.conditional import driven, Start, Steps, role_slots
-from cottax.core.conditional import PerProblem, Role
+from cottax.core.conditional import PerCondition, Role
 from cottax.core.frozen import OrderedMap
 from cottax.core.realisation import implemented
 from cottax.pytree.path import NodePath, VarPath
@@ -158,7 +158,7 @@ def test_under_a_jit_it_goes_through_the_callback_and_comes_back_the_same():
 
 # ---------------------------------------------------------------- what comes back
 
-class Verdict(PerProblem):
+class Verdict(PerCondition):
     '''A report of the test's own.'''
 
 

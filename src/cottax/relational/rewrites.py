@@ -4,7 +4,7 @@ its unknowns, and `FixedPointCut`, cuts closed by a problem on their copies.'''
 from collections.abc import Iterator, Sequence
 
 from ..core import (
-    ComposedOp, ConditionalNode, Cut, GraphOp, Insert, Label, Graph, Place, SetOwnsInside,
+    Composite, ConditionalNode, Cut, GraphOp, Insert, Label, Graph, Place, SetOwnsInside,
     Violation, is_driven,
 )
 from ..core.frozen import OrderedMap
@@ -68,7 +68,7 @@ def check_cuts(op: 'FixedPointCut') -> Iterator[Violation]:
         yield CutTwice(dupes)
 
 
-class FixedPointCut[N: Label, V: Place](ComposedOp[N, V]):
+class FixedPointCut[N: Label, V: Place](Composite[N, V]):
     '''
     Several cuts and the problem that determines every copy they mint: `^copy.x = x` per
     cut, so the condition *is* the next iterate and the loop is re-closed through it.
@@ -99,7 +99,7 @@ class FixedPointCut[N: Label, V: Place](ComposedOp[N, V]):
             owns_inside = self.copies, reads_outside=(),
         ))
 
-    def composed(self, graph: Graph[N, V]) -> Sequence[GraphOp[N, V]]:
+    def _ops(self, graph: Graph[N, V]) -> Sequence[GraphOp[N, V]]:
         return (*self.cuts, Insert(OrderedMap({self.at: self.definition})))
 
     def __repr__(self) -> str:

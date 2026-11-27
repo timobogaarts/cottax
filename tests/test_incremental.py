@@ -17,7 +17,7 @@ from jax.tree_util import GetAttrKey, SequenceKey
 
 from cottax.core import Graph, Plan, Rename, Valid, ValidNesting, Dependencies
 from proofs import recalled
-from cottax.core.plan import Composite, GraphOp, PrimitiveOp, Nest, StagedOp, Unnest
+from cottax.core.plan import Composite, GraphOp, PrimitiveOp, Nest, Unnest
 from cottax.consumers.architectures import Combine
 from cottax.core.plan import Delete, Insert
 from cottax.relational import Eq, Relation, RelationalCondition
@@ -567,13 +567,12 @@ def test_a_rule_a_final_adds_is_asked_of_every_result(edit):
 
 def test_every_op_is_a_leaf_or_a_composite():
     """An op is one edit (`PrimitiveOp`) or ops in turn (`Composite`); nothing else subclasses
-    `GraphOp` but an op writing its stages as plain code over `in_turn` (until phase 2 ports
-    the architectures, the legacy `StagedOp`)."""
+    `GraphOp`, so no op writes `_changed` itself: one decided in stages nests `Composite`s."""
     import importlib, pkgutil, cottax
     for info in pkgutil.walk_packages(cottax.__path__, 'cottax.'):
         importlib.import_module(info.name)
     ours = lambda cls: {c for c in cls.__subclasses__() if c.__module__.startswith('cottax.')}
-    assert ours(GraphOp) == {PrimitiveOp, Composite, StagedOp}
+    assert ours(GraphOp) == {PrimitiveOp, Composite}
 
 
 def test_a_plan_keeps_the_graph_well_formed_and_says_so_where_it_breaks_it():

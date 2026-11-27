@@ -90,6 +90,14 @@ class NoneImplements(Violation):
     template = '{node!r}: no implementation given implements its contract, a {contract}'
 
 
+class NotOfferedAnywhere(Violation):
+    op    : str
+    roles : tuple
+    error    = ValueError
+    template = ('{op} asks for {roles!r}, which no problem it drives offers: it would be '
+                'placed nowhere')
+
+
 class NoDefaultContract(Violation):
     implementation : object
     implements     : str
@@ -198,7 +206,7 @@ class Unvalued(Violation):
 class NoSlotFor(Violation):
     role : str
     error    = TypeError
-    template = ('{role} by structure: a {role} is one per problem, at no unknown\'s place in a '
+    template = ('{role} by structure: a {role} is one per condition, at no unknown\'s place in a '
                 'structure -- give or read it by name')
 
 
@@ -241,7 +249,7 @@ __all__ = [
     'InputMissing', 'NotAPlace', 'OwnedGiven',
     'ForeignPlace', 'NotCallable', 'NotADriverImplementation',
     'ImplementsAnother', 'DataMissing', 'DataUnused', 'ReportUnavailable', 'NoneAccepts', 'NoneImplements',
-    'NoDefaultContract',
+    'NoDefaultContract', 'NotOfferedAnywhere',
     'ReturnedUnlike', 'TraceFailed', 'Unhashable',
     'BodyByIdentity', 'PartialBody',
     'NotDriverData', 'NotAnUnknown', 'TakesNoValue', 'NotAnInput', 'ValuedTwice', 'Unvalued', 'NoSlotFor', 'NoRoleAt',

@@ -42,7 +42,7 @@ class DerivedNames[N: Label, V: Place](Answer):
 
     @abstractmethod
     def place_at(self, node: N) -> V:
-        '''The place a node name gives: where a driver's per-problem data sits.'''
+        '''The place a node name gives: where a driver's per-condition data sits.'''
 
     @abstractmethod
     def node_in_tree(self, steps: tuple[Step, ...]) -> N:

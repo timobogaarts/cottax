@@ -27,7 +27,7 @@ from cottax.core.conditional import Driver, DriverContract
 from cottax.core.frozen import OrderedMap, answers
 from cottax.core.maths.definition import ReadsOwn
 from cottax.core.plan.edit import NameTaken
-from cottax.consumers.architectures.refusals import Stranded
+from cottax.core.plan.primitive_ops import Stranded
 
 
 # ---------------------------------------------------------------- a toy place and kind

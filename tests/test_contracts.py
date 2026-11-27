@@ -14,7 +14,7 @@ from cottax.core import ConditionalNode, violations
 from cottax.core.frozen import OrderedMap
 from cottax.relational import Min, Objective
 from cottax.core.conditional import driven, driving_violations
-from cottax.core.conditional import DriverContract, PerProblem, PerUnknown
+from cottax.core.conditional import DriverContract, PerCondition, PerUnknown
 from cottax.core.conditional.driver import NotAccepted
 from cottax.core.conditional import Start, Steps
 from cottax.relational.contracts import (
@@ -66,9 +66,9 @@ EVERY = [RootFinding(), FixedPointIteration(), Minimisation(), ConstrainedMinimi
 def test_the_shipped_roles_take_as_many_places_as_their_kind():
     '''A role's places stand for what its `index` says: a start for each unknown, the steps
     for the problem as a whole.'''
-    assert [r.index(FIXED_POINT, RootFinding()) for r in (Start, Steps)] == [(U, V), (None,)]
-    assert [r.arity(FIXED_POINT, RootFinding()) for r in (Start, Steps)] == [2, 1]
-    assert issubclass(Start, PerUnknown) and issubclass(Steps, PerProblem)
+    assert [r.index(FIXED_POINT) for r in (Start, Steps)] == [(U, V), (None,)]
+    assert [r.arity(FIXED_POINT) for r in (Start, Steps)] == [2, 1]
+    assert issubclass(Start, PerUnknown) and issubclass(Steps, PerCondition)
 
 
 # ---------------------------------------------------------------- the levels
@@ -112,7 +112,7 @@ def test_the_finals_declare_what_they_take_and_may_report():
         ((Start,), (), (Steps,)), ((Start,), (), (Steps,)), ((Start,), (), (Steps,)),
         ((Start,), (Scales,), (Steps,)),
     ]
-    assert [d.required((Steps,)) for d in EVERY] == [(Start,)] * 4
+    assert [d.roles_for((Steps,)) for d in EVERY] == [((Start,), (Steps,))] * 4
 
 
 def test_equal_contracts_hash_alike_and_different_ones_differ():
@@ -132,9 +132,8 @@ def slots(contract: DriverContract, node: RelationalCondition, asks: tuple = ())
     problem as a whole.'''
     def at(role):
         return tuple(W(f'^{role.__name__.lower()}.{"p" if s is None else s}')
-                     for s in role.index(node, contract))
-    reports = tuple(r for r in asks if r in contract.may_report)
-    data = (*contract.required(reports), *(r for r in asks if r not in reports))
+                     for s in role.index(node))
+    data, reports = contract.roles_for(asks)
     return OrderedMap((r, at(r)) for r in data), OrderedMap((r, at(r)) for r in reports)
 
 

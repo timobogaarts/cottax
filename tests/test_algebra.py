@@ -17,7 +17,8 @@ from cottax.core.maths.graph import BlockTooSmall, Graph, NameTaken, NodeInTwoBl
 from cottax.core.realisation import implemented
 from cottax.relational import Eq, Relation, RelationalCondition
 from cottax.consumers.visualization.sequencing import entries
-from graphs import functional, graph_of
+from graphs import functional, graph_of, refusals
+from cottax.core import Contract, Plan
 
 
 def V(*keys) -> VarPath:
@@ -311,15 +312,29 @@ def test_contract_is_the_quotient_by_the_blocks(sellar):
 
 
 def test_a_box_is_bound_at_the_name_it_is_given_new_or_a_members_never_another_nodes(sellar):
-    '''The box takes its first member's place whatever its name; a name another node holds
-    is refused, as an insert's is.'''
+    '''A box named after a member takes its place; one at a new name is appended, as an
+    edit inserts it. A name another node holds is refused, as an insert's is.'''
     g = sellar.contracted({N('disciplines'): (N('d2'), N('d1'))}, functional)
-    assert g.nodes == (N('z'), N('disciplines'), N('obj'), N('con'))
+    assert g.nodes == (N('z'), N('obj'), N('con'), N('disciplines'))
     assert g[N('disciplines')] == FunctionalNode((V('z'),), (V('y1'), V('y2')))
-    assert list(violations(Graph.contracted, sellar, {N('obj'): (N('d1'), N('d2'))}, functional)) \
+    assert list(violations(Graph.boxed, sellar, {N('obj'): (N('d1'), N('d2'))}, functional)) \
         == [NameTaken(N('obj'))]
     with pytest.raises(ValueError, match='obj.*is already bound'):
         sellar.contracted({N('obj'): (N('d1'), N('d2'))}, functional)
+
+
+def test_contract_is_the_contraction_as_a_step_of_a_plan(sellar):
+    '''The op leaves the graph the query does, at a member's name and at a new one, and is
+    one step of the plan; what the query refuses the op refuses, noted with it.'''
+    for blocks in ({N('d1'): (N('d2'), N('d1'))}, {N('disciplines'): (N('d2'), N('d1'))}):
+        op = Contract(OrderedMap(blocks), functional)
+        assert op.apply(sellar) == sellar.contracted(blocks, functional)
+        assert (Plan(sellar) + op).ops == (op,)
+    bad = Contract(OrderedMap({N('obj'): (N('d1'), N('d2'))}), functional)
+    assert refusals(bad, sellar) == (NameTaken(N('obj')),)
+    with pytest.raises(ValueError) as refused:
+        bad.apply(sellar)
+    assert refused.value.__notes__[-1].startswith('refused by contract(')
 
 
 def test_contract_coarsens_and_never_refines(sellar):
@@ -335,11 +350,11 @@ def test_contract_refuses_a_short_block_a_node_in_two_blocks_and_an_unknown_one(
     '''A block of one is the identity or a change of kind, neither a view's to make;
     `Combine` refuses the same.'''
     for short in ((N('d1'),), (N('d1'), N('d1')), ()):
-        assert list(violations(Graph.contracted, sellar, {N('box'): short}, functional)) == [BlockTooSmall(short)]
+        assert list(violations(Graph.boxed, sellar, {N('box'): short}, functional)) == [BlockTooSmall(short)]
         with pytest.raises(ValueError, match='is not two nodes'):
             sellar.contracted({N('box'): short}, functional)
     twice = {N('d1'): (N('d1'), N('d2')), N('obj'): (N('d2'), N('obj'))}
-    assert list(violations(Graph.contracted, sellar, twice, functional)) == [NodeInTwoBlocks((N('d2'),))]
+    assert list(violations(Graph.boxed, sellar, twice, functional)) == [NodeInTwoBlocks((N('d2'),))]
     with pytest.raises(ValueError, match='each in two blocks'):
         sellar.contracted(twice, functional)
     with pytest.raises(KeyError, match='nope'):

@@ -4,7 +4,7 @@ A graph driven through `conditional/`, realised through `realisation/` and run b
 
 The model is one implicit discipline, exact to
 `u = (k + sqrt(k^2 + 4k)) / 2` with `k = 1 + x` -- and the Newton is a contract taking a
-start per unknown and a step budget per problem and reporting the steps it took,
+start per unknown and a step budget per condition and reporting the steps it took,
 implemented here in plain Python. Its data arrives keyed by role, and its places are the
 ones `Assign` recorded, so a rename moves a start and the Newton never notices.
 '''
@@ -28,7 +28,7 @@ from graphs import graph_from_pytree
 import purposes
 from cottax.core.frozen import OrderedMap
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core.conditional import DriverContract, PerProblem, PerUnknown
+from cottax.core.conditional import DriverContract, PerCondition, PerUnknown
 from cottax.core.realisation import implemented
 from cottax.relational import Eq, Relation, RelationalCondition, is_root_find
 from cottax.consumers.execution import GraphWithValues
@@ -67,10 +67,10 @@ def exact_u(x: float) -> float:
 class Start(PerUnknown):
     '''Where each unknown starts.'''
 
-class Budget(PerProblem):
+class Budget(PerCondition):
     '''How many steps the solve may take.'''
 
-class Steps(PerProblem):
+class Steps(PerCondition):
     '''How many it took.'''
 
 
@@ -135,7 +135,7 @@ def driven(implementation=newton, *after) -> Plan:
 
 def test_role_places_are_minted_off_each_unknown_and_off_the_problem():
     condition = RelationalCondition((Relation(R_U, None, Eq),), (), (U,), ())
-    assert tuple(ROLE_PLACES(CLOSE, condition, Newton(), role) for role in (Start, Budget, Steps)
+    assert tuple(ROLE_PLACES(CLOSE, condition, role) for role in (Start, Budget, Steps)
                  ) == ((START,), (BUDGET,), (STEPS,))
 
 
@@ -143,7 +143,7 @@ def test_a_role_with_no_rule_is_refused_by_name():
     from cottax.consumers.surface.refusals import NoPlaceFor
     with pytest.raises(KeyError, match='Budget has no place'):
         condition = RelationalCondition((Relation(R_U, None, Eq),), (), (U,), ())
-        RolePlaces(OrderedMap(((Start, purposes.Start()),)))(CLOSE, condition, Newton(), Budget)
+        RolePlaces(OrderedMap(((Start, purposes.Start()),)))(CLOSE, condition, Budget)
 
 
 def test_a_role_takes_its_nearest_ancestors_rule():

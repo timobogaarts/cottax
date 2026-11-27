@@ -9,7 +9,7 @@ import dataclasses
 from collections.abc import Iterator, Sequence
 
 from ...core import (
-    Attribute, ComposedOp, FunctionalNode, GraphOp, Label, Graph, NodeDefinition, Place,
+    Attribute, Composite, FunctionalNode, GraphOp, Label, Graph, NodeDefinition, Place,
     RemoveAttribute, SetAttribute, Violation, per_node_check,
 )
 from ...core.frozen import OrderedMap, name_of
@@ -76,7 +76,7 @@ _NONE = object()
 '''No entry: an implementation may be any object, `None` too.'''
 
 
-class ImplementDrivers[N: Label, V: Place](ComposedOp[N, V]):
+class ImplementDrivers[N: Label, V: Place](Composite[N, V]):
     '''What runs every driven node not yet implemented, chosen by its driver's type: the
     entry of the most specific contract along its ancestry, whatever order the map is
     written in. A rule, so on a changed model it chooses again; a node no entry covers is
@@ -85,7 +85,7 @@ class ImplementDrivers[N: Label, V: Place](ComposedOp[N, V]):
 
     implementations : OrderedMap[type[DriverContract], object]
 
-    def composed(self, graph: Graph[N, V]) -> Sequence[GraphOp[N, V]]:
+    def _ops(self, graph: Graph[N, V]) -> Sequence[GraphOp[N, V]]:
         chosen = ((name, entry_for(self.implementations, node.driver.contract, _NONE))
                   for name in graph.nodes
                   if is_driven(node := graph[name]) and not is_implemented(node))

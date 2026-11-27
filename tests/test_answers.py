@@ -20,7 +20,7 @@ import sys
 import pytest
 
 from cottax.core import (
-    ComposedOp, Condition, ConditionalNode, Cut, Executable, FunctionalNode,  Insert, Mint, Minting, Graph, minted,
+    Composite, Condition, ConditionalNode, Cut, Executable, FunctionalNode,  Insert, Mint, Minting, Graph, minted,
 )
 from cottax.consumers.architectures.cut_rules import GaussSeidel
 from cottax.core.frozen import OrderedMap, answer, answers, choice, violations
@@ -357,13 +357,13 @@ class ZeroModel(ModelReading):
         return tuple(dict.fromkeys(owners[c] for c in graph[problem].reads_inside))
 
 
-class Gap(ComposedOp):
+class Gap(Composite):
     '''The toy's closure: the cuts, a function writing each copy's gap (`^gap.copy`), and at
     `at` the `Zero` holding every gap.'''
     cuts : tuple
     at   : Tok
 
-    def composed(self, graph):
+    def _ops(self, graph):
         copies = tuple(c.copy for c in self.cuts)
         gaps   = tuple(map(GapOf(), copies))
         return (*self.cuts, Insert(OrderedMap({

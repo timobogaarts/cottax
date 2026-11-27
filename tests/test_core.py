@@ -40,7 +40,7 @@ from cottax.core.frozen import Answer, OrderedMap, answers
 from cottax.core.maths.valid import EndOwnsNothingInside, Unbound
 from cottax.pytree.path import VarPath
 from cottax.core import Mint, Minting
-from cottax.core.conditional import Driver, DriverContract, PerProblem
+from cottax.core.conditional import Driver, DriverContract, PerCondition
 from cottax.consumers.execution import GraphWithValues
 import purposes
 
@@ -122,7 +122,7 @@ class Driven(Condition):
     def relabel(self, renaming): return self
 
 
-class Taken(PerProblem):
+class Taken(PerCondition):
     '''A datum a driver may be given: one place, read outside the node's cycle.'''
 
 
@@ -385,6 +385,7 @@ def test_every_case_a_rule_can_name_has_wording():
     seen(proof(G({a: toy([], ['x'])}), Insert, {a: toy([], ['y'])}))       # name taken
     seen(refusals(Delete((b,)), G({a: toy([], ['x'])})))                  # not bound
     seen(refusals(Unnest(a), G({a: states([], ['x'])})))                            # not nested
+    seen(refusals(Delete((a,)), G({a: states([], ['x']), b: states([], ['y'])}, {a: b})))  # one end stranded
     seen(proof(G({}), Insert, {a: toy([], ['s']), b: toy([], ['s'])}))
     seen(proof(G({}), Insert, {a: toy([], ['s']), b: toy([], ['s.u'])}))
     seen(proof(G({a: toy([], ['s'])}), Insert,   {b: toy([], ['s.u'])}))
@@ -433,7 +434,7 @@ def test_every_case_a_rule_can_name_has_wording():
     seen(Valid.check(Graph(G(cyc).definitions, OrderedMap({a: a}))))            # inside itself
     seen(Valid.check(Nest(a, b).apply(G(cyc, {b: a}))))                         # loop, on the result
     seen(Executable.check(G({a: states([], ['x']), b: states([], ['y'])}, {a: b})))   # unreachable
-    seen(violations(Graph.contracted, G({a: states([], ['x']), b: states([], ['y'])}), {Word('p'): (a,), Word('q'): (a, b)}, functional))  # a short block, a node twice
+    seen(violations(Graph.boxed, G({a: states([], ['x']), b: states([], ['y'])}), {Word('p'): (a,), Word('q'): (a, b)}, functional))  # a short block, a node twice
     S = G
     seen(Executable.check(S({a: body(['u'], ['x']), b: body(['x'], ['u'])})))     # coupled, no problem
     seen(Executable.check(S({a: body(['u'], ['x']), b: body(['x'], ['u']),

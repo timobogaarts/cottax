@@ -85,7 +85,7 @@ class Inconsistent(Violation):
     node : object
     side : str
     error    = ValueError
-    template = '{node!r}: the file\'s {side} names a role its driver\'s contract does not offer there'
+    template = '{node!r}: the file\'s {side} names a role its driver\'s contract does not name'
 
 
 class NotLoaded(Violation):

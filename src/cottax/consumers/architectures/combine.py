@@ -8,21 +8,15 @@ from collections.abc import Collection, Iterator
 from functools import reduce
 
 from ...core import (
-    ConditionalNode, Label, Graph, Place, Rebind, Rebinding, Violation, is_driven, kind_of,
+    ConditionalNode, Edit, Label, Graph, Place, PrimitiveOp, Violation, is_driven, kind_of,
 )
 from ...core.frozen import OrderedMap, answer_for_class
 from ...core.maths.graph import NameTaken
+from ...core.plan.primitive_ops import nested_among, stranded
 from .interface import ModelReading
 from .refusals import (
-    CarriesAttributes, FoldsDriven, NodeTwice, NotAddable, NotOfKind, NothingToCombine, Stranded,
+    CarriesAttributes, FoldsDriven, NodeTwice, NotAddable, NotOfKind, NothingToCombine,
 )
-
-
-def stranded[N: Label](g: Graph[N, Place], removed: Collection[N]) -> Iterator[Violation]:
-    '''A nesting pair losing exactly one end to `removed`. A nesting is a decision the plan
-    recorded, so it is not dropped silently: `Unnest` first. Losing both ends is fine.'''
-    if broken := [(i, o) for i, o in g.within.items() if (i in removed) != (o in removed)]:
-        yield Stranded(tuple(i for i, _ in broken), tuple(o for _, o in broken))
 
 
 def join_of(kind: type):
@@ -78,7 +72,7 @@ def check_fold_keeps_nesting_whole[N: Label](op: 'Combine', g: Graph[N, Place]
     yield from stranded(g, set(op.nodes) - {op.at})
 
 
-class Combine[N: Label, V: Place](Rebind[N, V]):
+class Combine[N: Label, V: Place](PrimitiveOp[N, V]):
     '''
     Fold several condition nodes into one by their kind's join: the others are removed and
     the fold is defined at `at`, in one rebinding. Whether the fold fits the graph depends on
@@ -104,8 +98,13 @@ class Combine[N: Label, V: Place](Rebind[N, V]):
         join = join_of(self.kind)
         return ConditionalNode(reduce(join, (graph[n].condition for n in self.nodes)))
 
-    def rebinding(self, graph: Graph[N, V]) -> Rebinding[N, V]:
-        return Rebinding(frozenset(self.nodes) - {self.at}, OrderedMap({self.at: self.definition(graph)}))
+    def _edit(self, graph: Graph[N, V]) -> Edit[N, V]:
+        '''The folded nodes but `at` removed, their pairs with both ends among them gone too;
+        the fold redefined at `at`, or inserted where `at` is new.'''
+        removed = frozenset(self.nodes) - {self.at}
+        fold    = OrderedMap({self.at: self.definition(graph)})
+        return Edit(unnest=nested_among(graph, removed), remove=removed,
+                    **{'redefine' if self.at in graph else 'insert': fold})
 
     def __repr__(self) -> str:
         return f'combine({self.at} <- {", ".join(str(n) for n in self.nodes)})'

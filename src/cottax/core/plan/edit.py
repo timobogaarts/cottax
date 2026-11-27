@@ -2,7 +2,10 @@
 An Edit to a graph: what it changes to an existing graph.
 
 Refused where it does not fit the graph it is applied to, so it is safe on any graph: on the
-one its op built it for, or replayed onto another.
+one its op built it for, or replayed onto another. Replaying an Edit reproduces its effect
+exactly (a `redefine` sets the definition its op computed against the graph it met);
+re-applying the op reproduces its intent against the graph it now meets. A `Plan` records
+and re-applies ops.
 
 These are built by GraphOps (which may make a Edit depend on the graph given) and aren't built by users.
 They should use the existing GraphOps, which check what they mean before building one.
@@ -43,7 +46,7 @@ class Edit[N: Label, V: Place](Frozen):
 
 def _misfits(edit: Edit, graph: Graph) -> Iterator[Violation]:
     '''
-    Where the Edit has no meaning on the graph (e.g. no silent no-ops or inserting already present nodes).
+    Where the Edit has no meaning on the graph (e.g. no silent no-ops (for non-empty edits) or inserting already present nodes).
     Does not necessarily leave a Valid graph (see `Plan.keeps` for a way to enforce that)
     '''
     seen, twice = set(), {}

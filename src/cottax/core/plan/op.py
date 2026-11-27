@@ -63,7 +63,14 @@ class PrimitiveOp[N: Label, V: Place](GraphOp[N, V]):
         return edit.applied(graph), (edit,)
 
 class Composite[N: Label, V: Place](GraphOp[N, V]):
-    '''An op made of other ops, applied in turn.'''
+    '''An op made of other ops, applied in turn.
+
+    An op decided in stages nests `Composite`s: each is decided when it is applied, off the
+    graph the last left, and reads earlier results off that graph or is handed them::
+
+        def _ops(self, graph):                      # the first stage, off `graph`
+            return (*first_ops(graph), Second(before=graph))
+    '''
 
     @abstractmethod
     def _ops(self, graph: Graph[N, V]) -> Sequence[GraphOp[N, V]]:

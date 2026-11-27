@@ -6,8 +6,8 @@ import dataclasses
 from collections.abc import Callable, Collection, Iterator, Mapping
 
 from ..frozen import OrderedMap, Violation, violations
-from ..maths import Label, Graph, NodeDefinition, Place
-from ..plan import ComposedOp, Redefine
+from ..maths import Label, Graph, Place
+from ..plan import Composite, Edit, PrimitiveOp
 from .condition import Condition
 from .driver import Driver, DriverContract, NotOffered, Role
 from .node import ConditionalNode, is_driven
@@ -19,12 +19,22 @@ type ByRole[V] = Mapping[type[Role], tuple[V, ...]]
 def driven(node: ConditionalNode | Condition, contract: DriverContract,
            data: ByRole = OrderedMap(), reports: ByRole = OrderedMap()) -> ConditionalNode:
     '''`node` answered by `contract`, its roles at `data` and `reports`: how a node is built
-    driven, outside a plan. A condition is taken as the node holding it. Refused as `Assign`
-    refuses it: a second driver, a driver its contract does not allow, one not fitting.'''
+    driven, outside a plan. A condition is taken as the node holding it. Each side is held in
+    the contract's order (`roles`), whatever order it is written in, so two equal choices
+    make equal nodes. Refused as `Assign` refuses it: a second driver, a driver its contract
+    does not allow, one not fitting.'''
     node = node if isinstance(node, ConditionalNode) else ConditionalNode(node)
     if is_driven(node):
         raise DrivenTwice(node, type(contract).__name__).raised
-    return dataclasses.replace(node, driver=Driver(contract, OrderedMap(data), OrderedMap(reports)))
+    return dataclasses.replace(node, driver=Driver(contract, in_order(contract, data),
+                                                   in_order(contract, reports)))
+
+
+def in_order[V](contract: DriverContract, by: ByRole[V]) -> OrderedMap[type[Role], tuple[V, ...]]:
+    '''`by` in the order `contract` names its roles; a role it does not name last, as written,
+    for the driver's own rule to refuse.'''
+    order = {r: i for i, r in enumerate(contract.roles)}
+    return OrderedMap(sorted(OrderedMap(by).items(), key=lambda kv: order.get(kv[0], len(order))))
 
 
 def driving_violations(node: ConditionalNode, contract: DriverContract,
@@ -36,7 +46,7 @@ def driving_violations(node: ConditionalNode, contract: DriverContract,
     if is_driven(node):
         yield DrivenTwice(node, type(contract).__name__)
         return
-    data, reports = OrderedMap(data), OrderedMap(reports)
+    data, reports = in_order(contract, data), in_order(contract, reports)
     if found := list(violations(Driver, contract, data, reports)):
         yield from found
         return
@@ -58,7 +68,7 @@ def check_drivable(op: 'Assign', graph: Graph) -> Iterator[Violation]:
         yield from driving_violations(node, op.contract, op.data, op.reports)
 
 
-class Assign[N: Label, V: Place](Redefine[N, V]):
+class Assign[N: Label, V: Place](PrimitiveOp[N, V]):
     '''Attach a driver to a condition node, and say where each of its roles sits: the
     algorithm choice and its places, recorded in the plan and carried by the node. Where a
     place sits is a decision, so the op records it: a surface supplies the obvious ones.'''
@@ -70,22 +80,34 @@ class Assign[N: Label, V: Place](Redefine[N, V]):
 
     checks_graph = (check_a_condition_node, check_drivable)
 
-    def redefined(self, graph: Graph[N, V]) -> Mapping[N, NodeDefinition[V]]:
-        return {self.problem: driven(graph[self.problem], self.contract, self.data, self.reports)}
+    def _edit(self, graph: Graph[N, V]) -> Edit[N, V]:
+        return Edit(redefine=OrderedMap(
+            {self.problem: driven(graph[self.problem], self.contract, self.data, self.reports)}))
 
     def __repr__(self) -> str:
         return f'assign({self.problem} <- {type(self.contract).__name__})'
 
 
 def check_asks_offered(op: 'AssignByRule') -> Iterator[Violation]:
-    '''Each role asked is one the contract may report or may be given.'''
-    offered = (*op.contract.may_report, *op.contract.may_be_given)
-    if extra := tuple(r.__name__ for r in op.asks if r not in offered):
+    '''Each role asked is one of the contract's options: a report, or optional data. A
+    report's own data comes with the report, never asked alone.'''
+    if extra := tuple(r.__name__ for r in op.asks if r not in op.contract.options):
         yield NotOffered(repr(op), 'asked', extra)
 
 
-class AssignByRule[N: Label, V: Place](ComposedOp[N, V]):
-    '''`Assign` at the places `places(problem, condition, contract, role)` gives each role:
+def assigned_by_rule[N: Label, V: Place](graph: Graph[N, V], problem: N, contract: DriverContract[V],
+                                         places: Callable[..., tuple[V, ...]],
+                                         asks: Collection[type[Role]] = ()) -> 'Assign[N, V]':
+    '''The `Assign` an `AssignByRule` makes on `graph`: each role at the place the rule
+    gives it, read off the condition as it now is.'''
+    condition = graph[problem].condition
+    data, reports = contract.roles_for(asks)
+    at = lambda roles: OrderedMap((r, places(problem, condition, r)) for r in roles)
+    return Assign(problem, contract, at(data), at(reports))
+
+
+class AssignByRule[N: Label, V: Place](Composite[N, V]):
+    '''`Assign` at the places `places(problem, condition, role)` gives each role:
     the reports `asks` names, the optional data it names, and the data the contract requires
     for those reports. The condition is read when it is applied: the rule is recorded, so a
     changed model has its places derived again.'''
@@ -99,13 +121,8 @@ class AssignByRule[N: Label, V: Place](ComposedOp[N, V]):
     checks = (check_asks_offered,)
     checks_graph = (check_a_condition_node,)
 
-    def composed(self, graph: Graph[N, V]) -> tuple[Assign[N, V]]:
-        contract, condition = self.contract, graph[self.problem].condition
-        reports = tuple(r for r in self.asks if r in contract.may_report)
-        data = dict.fromkeys((*contract.required(reports), *(r for r in self.asks if r not in reports)))
-        at = lambda roles: OrderedMap((r, self.places(self.problem, condition, contract, r))
-                                      for r in roles)
-        return (Assign(self.problem, contract, at(data), at(reports)),)
+    def _ops(self, graph: Graph[N, V]) -> tuple[Assign[N, V]]:
+        return (assigned_by_rule(graph, self.problem, self.contract, self.places, self.asks),)
 
     def __repr__(self) -> str:
         return f'assign({self.problem} <- {type(self.contract).__name__}, at its default places)'
@@ -119,7 +136,7 @@ def check_undrives_a_driven_node(op: 'Undrive', graph: Graph) -> Iterator[Violat
         yield NotDriven(op.problem, type(node).__name__)
 
 
-class Undrive[N: Label, V: Place](Redefine[N, V]):
+class Undrive[N: Label, V: Place](PrimitiveOp[N, V]):
     '''The inverse of `Assign`: the condition node alone again, and the driver's places
     gone with it. What the node carries stays on it: what runs the driver no longer fits, so
     `Unimplement` it first, or a realised graph refuses it (`ImplementationWithoutDriver`).'''
@@ -128,8 +145,8 @@ class Undrive[N: Label, V: Place](Redefine[N, V]):
 
     checks_graph = (check_undrives_a_driven_node,)
 
-    def redefined(self, graph: Graph[N, V]) -> Mapping[N, NodeDefinition[V]]:
-        return {self.problem: dataclasses.replace(graph[self.problem], driver=None)}
+    def _edit(self, graph: Graph[N, V]) -> Edit[N, V]:
+        return Edit(redefine=OrderedMap({self.problem: dataclasses.replace(graph[self.problem], driver=None)}))
 
     def __repr__(self) -> str:
         return f'undrive({self.problem})'

@@ -32,9 +32,10 @@ from cottax.relational.rewrites import Undetermine
 from cottax.core.frozen import OrderedMap
 from cottax.core.conditional import Assign, AssignByRule, driven as with_driver, driving_violations, Driven, Undrive
 from cottax.core import is_driven
-from cottax.core.conditional import DriverContract, PerProblem, PerUnknown, Role
+from cottax.core.conditional import DriverContract, PerCondition, PerUnknown, Role
 from cottax.core.conditional.driver import (
-    IndexRepeats, NotAccepted, NotOffered, RoleMisplaced, RoleMissing, RoleOnBothSides, RoleUnsized,
+    IndexRepeats, NeedsUnreported, NotAccepted, NotOffered, RequiredAndOptional, RoleListedTwice,
+    RoleMisplaced, RoleMissing, RoleOnBothSides, RoleUnsized,
 )
 from cottax.core.conditional.assign import DrivenTwice, NotAConditionalNode, NotDriven
 from cottax.core.conditional.proof import Undriven
@@ -88,10 +89,10 @@ def Holds(*fields, driver=None, **named) -> ConditionalNode:
 class Start(PerUnknown):
     '''Where each unknown starts.'''
 
-class Budget(PerProblem):
+class Budget(PerCondition):
     '''How many steps the solve may take.'''
 
-class Steps(PerProblem):
+class Steps(PerCondition):
     '''How many it took.'''
 
 
@@ -113,20 +114,7 @@ class Bare(DriverContract):
     takes   = ()
 
 
-class Echo(DriverContract):
-    '''A role it may both take and report: a guess and an answer would share one key.'''
-    accepts    = staticmethod(lambda statement: True)
-    takes      = (Start,)
-    may_report = (Start,)
-
-
-class Unsized(DriverContract):
-    '''A role that says nothing of what its places stand for.'''
-    accepts = staticmethod(lambda statement: True)
-    takes   = (Role,)
-
-
-class Times(PerProblem):
+class Times(PerCondition):
     '''Where a history is saved: data a report needs of its own.'''
 
 class History(PerUnknown):
@@ -184,6 +172,15 @@ def test_a_driver_is_a_contract_and_nothing_runs():
     assert not callable(Solo())
     with pytest.raises(TypeError, match='abstract'):
         DriverContract()
+
+
+def test_what_a_contract_takes_is_its_class_and_never_a_field():
+    '''What a driver is asked for is said by the roles placed on it: a contract whose roles
+    were a field would bring back a per-instance switch.'''
+    with pytest.raises(TypeError, match='binds takes as a field'):
+        class Switched(DriverContract):
+            accepts = staticmethod(single)
+            takes : tuple = (Start,)
 
 
 def test_a_role_is_a_symbol_and_not_a_value():
@@ -246,7 +243,48 @@ def test_a_report_may_need_data_of_its_own():
     assert kinds(driving_violations(Holds((r,), (u,)), Recording(), by_role(), by_role())) == []
     assert kinds(driving_violations(Holds((r,), (u,)), Recording(), by_role(), history)) == [RoleMissing]
     assert kinds(driving_violations(Holds((r,), (u,)), Recording(), times, history)) == []
-    assert Recording().required((History,)) == (Times,) and Recording().may_be_given == (Times,)
+    assert Recording().roles_for(()) == ((), ())
+    assert Recording().roles_for((History,)) == ((Times,), (History,))
+    assert Recording().options == (History,) and Recording().roles == (Times, History)
+
+
+def test_a_driver_holds_the_roles_of_one_choice():
+    '''A report's own data comes with the report, never alone: the `Times` placed with no
+    `History` asked is data of no choice, refused as the driver is built, and never asked for
+    on its own.'''
+    times = by_role((Times, (W('^times'),)))
+    assert kinds(driving_violations(Holds((r,), (u,)), Recording(), times, by_role())) == [NotOffered]
+    rule = lambda problem, condition, role: tuple(W(f'^{role.__name__.lower()}') for _ in role.index(condition))
+    assert kinds(violations(AssignByRule, W('solve'), Recording(), rule, (Times,))) == [NotOffered]
+
+
+def test_a_contract_holds_together_or_is_never_made():
+    '''What a contract declares is checked as it is made, whatever it would drive.'''
+    yes = staticmethod(lambda statement: True)
+    class Unsized(DriverContract):
+        accepts, takes = yes, (Role,)
+    class Echo(DriverContract):
+        accepts, takes, may_report = yes, (Start,), (Start,)
+    class Stray(DriverContract):
+        accepts, takes, report_needs = yes, (), {History: (Times,)}
+    class Torn(DriverContract):
+        accepts, takes, may_take = yes, (Start,), (Start,)
+    class Twice(DriverContract):
+        accepts, takes = yes, (Start, Start)
+    for contract, found in ((Unsized, RoleUnsized), (Echo, RoleOnBothSides), (Stray, NeedsUnreported),
+                            (Torn, RequiredAndOptional), (Twice, RoleListedTwice)):
+        assert kinds(violations(contract)) == [found]
+    class Optional(DriverContract):
+        '''Times given on their own, and needed with a `History`: both hold.'''
+        accepts, takes, may_take, may_report = yes, (), (Times,), (History,)
+        report_needs = {History: (Times,)}
+    assert Optional().roles_for((History,)) == ((Times,), (History,)) == Optional().roles_for((History, Times))
+
+
+def test_equal_choices_written_in_any_order_make_equal_nodes():
+    data, reports = placed()
+    backwards = OrderedMap(reversed(tuple(data.items())))
+    assert with_driver(Holds((r,), (u,)), Solo(), backwards, reports) == with_driver(Holds((r,), (u,)), Solo(), data, reports)
 
 
 def test_a_driver_that_does_not_fit_is_never_built():
@@ -263,9 +301,9 @@ def test_a_driver_that_does_not_fit_is_never_built():
 
 
 def test_an_index_names_each_place_once():
-    class Doubled(PerProblem):
+    class Doubled(PerCondition):
         @classmethod
-        def index(cls, condition, contract):
+        def index(cls, condition):
             return (None, None)
     class Doubling(DriverContract):
         accepts = staticmethod(lambda statement: True)
@@ -300,17 +338,12 @@ def test_what_a_driver_accepts_is_asked_of_the_condition_without_it():
     assert ' by ' not in str(refused.value)
 
 
-def test_a_role_says_what_its_places_stand_for():
-    assert kinds(driving_violations(Holds((r,), (u,)), Unsized(), by_role((Role, (g,))), by_role())
-                 ) == [RoleUnsized]
-
-
 def test_index_is_asked_of_the_role_class():
     '''A role is a class, so `index` is a class method, bound by its level; `arity` is how
     many entries it has.'''
     node = Holding((r,), (u, v))
-    assert (Start.index(node, Solo()), Budget.index(node, Solo())) == ((u, v), (None,))
-    assert (PerUnknown.arity(node, Solo()), Start.arity(node, Solo()), Budget.arity(node, Solo())) == (2, 2, 1)
+    assert (Start.index(node), Budget.index(node)) == ((u, v), (None,))
+    assert (PerUnknown.arity(node), Start.arity(node), Budget.arity(node)) == (2, 2, 1)
     assert inspect.isabstract(Role)
 
 
@@ -517,16 +550,11 @@ def test_driven_then_realised():
     assert recalled(done, Driven)
 
 
-def test_a_role_is_on_one_side():
-    found = driving_violations(Holds((r,), (u,)), Echo(), by_role((Start, (g,))), by_role((Start, (k,))))
-    assert kinds(found) == [RoleOnBothSides]
-
-
 def test_assign_by_rule_places_what_is_asked_and_what_it_needs():
     '''The rule is given each role and the condition; `asks` wires a report, and a report
     the contract does not offer is refused before anything is placed.'''
-    rule = lambda problem, condition, contract, role: tuple(
-        W(f'^{role.__name__.lower()}.{problem if s is None else s}') for s in role.index(condition, contract))
+    rule = lambda problem, condition, role: tuple(
+        W(f'^{role.__name__.lower()}.{problem if s is None else s}') for s in role.index(condition))
     driven = AssignByRule(W('solve'), Solo(), rule, (Steps,)).apply(graph())[W('solve')]
     assert (driven.driver.data, driven.driver.reports) == placed()
     plain = AssignByRule(W('solve'), Solo(), rule).apply(graph())[W('solve')]

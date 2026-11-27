@@ -274,8 +274,8 @@ def test_closures_records_a_rule(sellar):
     op = CloseFunctionalCycles(GaussSeidel(), CLOSING)
     other = graph_of(OrderedMap({**dict(sellar.definitions), D2: call(['z', 'y1', 'w'], ['y2']),
                               N('W'): call(['y2'], ['w'])}))
-    assert [len(c.cuts) for c in op.composed(sellar)] == [1]
-    assert [len(c.cuts) for c in op.composed(other)]  == [2]
+    assert [len(c.cuts) for c in op._ops(sellar)] == [1]
+    assert [len(c.cuts) for c in op._ops(other)]  == [2]
     g = (Plan(sellar) + op).graph
     assert names(g.nodes) == names(sellar.nodes) + ['^closure.D1']
     assert g[Y2_MDA].condition.unknowns == (HAT(V('y2')),)
@@ -285,7 +285,7 @@ def test_closures_records_a_rule(sellar):
 def test_a_closure_is_named_after_its_cycle_not_its_rule(sellar):
     '''Whichever reader a rule cuts first, the closure binds at the cycle's first member.'''
     for rule in (GaussSeidel(), Jacobi(), GaussSeidelOrdered((D2, D1))):
-        (op,) = CloseFunctionalCycles(rule, CLOSING).composed(sellar)
+        (op,) = CloseFunctionalCycles(rule, CLOSING)._ops(sellar)
         assert op.at == Y2_MDA
 
 

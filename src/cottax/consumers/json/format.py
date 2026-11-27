@@ -227,16 +227,17 @@ class NodeReader[N: Label, V: Place](Frozen):
         return ConditionalNode(read) if isinstance(read, Condition) else read
 
     def driven(self, data: dict) -> NodeDefinition[V]:
-        '''Each side's roles found by name among those the contract offers on it; a name it
-        does not offer is the file disagreeing with its contract.'''
+        '''Each side's roles found by name among those the contract names; a name it does
+        not is the file disagreeing with its contract. Which side a role may sit on, and
+        with what, is the driver's own rule, asked as it is built.'''
         contract = self.value(data['contract'])
-        def side(which: str, offered: tuple[type, ...]) -> OrderedMap:
-            by_name = {r.__qualname__: r for r in offered}
+        by_name = {r.__qualname__: r for r in contract.roles}
+        def side(which: str) -> OrderedMap:
             if any(s['role'] not in by_name for s in data[which]):
                 raise Inconsistent(self.name, which).raised
             return OrderedMap((by_name[s['role']], self.places(s['places'])) for s in data[which])
         return dataclasses.replace(self.node(data['condition']), driver=Driver(
-            contract, side('data', contract.may_be_given), side('reports', tuple(contract.may_report))))
+            contract, side('data'), side('reports')))
 
     def implementation(self, data: dict) -> object:
         return self.resolve(data['ref']) if 'ref' in data else self.value(data)

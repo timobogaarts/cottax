@@ -207,8 +207,8 @@ OF_M = flat.scaling(unknowns={COPY: M}, constraints={COPY: M})
 def test_the_contract_takes_scales_only_when_asked():
     '''`Scales` is data the contract may take: placed when asked for, and not required.'''
     contract = ConstrainedMinimisation()
-    assert contract.takes == (Start,) == contract.required(())
-    assert Scales in contract.may_be_given and contract in CONTRACTS
+    assert contract.roles_for(()) == ((Start,), ()) and contract.roles_for((Scales,)) == ((Start, Scales), ())
+    assert Scales in contract.options and contract in CONTRACTS
     assert Scales in study(asks=(cx.Scales,)).graph[cx.absolute.node('OPT')].driver.data
     assert Scales not in study().graph[cx.absolute.node('OPT')].driver.data
     with pytest.raises(KeyError, match='takes Start'):

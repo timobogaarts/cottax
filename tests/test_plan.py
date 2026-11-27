@@ -9,7 +9,7 @@ import pytest
 from jax.tree_util import GetAttrKey
 
 from cottax.core.frozen import OrderedMap
-from cottax.core.plan import Composite, ComposedOp, Cut, Delete, Edit, GraphOp, Insert, Plan
+from cottax.core.plan import Composite, Cut, Delete, Edit, Insert, Plan
 from cottax.pytree.path import NodePath, VarPath
 from cottax.core import FunctionalNode, Graph
 from cottax.core.maths.executable import Executable
@@ -81,11 +81,11 @@ def test_insert_refuses_a_name_or_an_output_already_taken(looped):
 
 # ---------------------------------------------------------------- composed
 
-class Retype(ComposedOp):
+class Retype(Composite):
     '''`d2` replaced by a node owning the same variable: the insert is well-formed only
     against the graph the delete leaves.'''
 
-    def composed(self, graph):
+    def _ops(self, graph):
         return (
             Delete((N('d2'),)),
             Insert(OrderedMap({N('d2b'): call([Y1, Z], [Y2])})),
@@ -118,9 +118,6 @@ def test_a_plan_is_its_prefixes(looped):
 def test_a_plan_checks_at_append_time(looped):
     with pytest.raises(KeyError, match='not a node'):
         looped + Delete((N('nope'),))
-    with pytest.raises(TypeError, match='cannot add'):
-        Plan(looped) + N('d1')
-    assert not isinstance(N('d1'), GraphOp)
 
 
 def test_a_definition_that_cannot_rename_itself_cannot_exist():
@@ -192,3 +189,12 @@ def test_a_graph_need_not_be_valid_between_ops_and_a_plan_keeps_what_it_asks(loo
     Plan(looped, keeps=Valid) + add
     with pytest.raises(ValueError):
         Plan(looped, keeps=Executable) + add                     # the loop has no driver
+
+
+def test_a_plan_refuses_a_base_not_holding_what_it_keeps(looped):
+    '''`keeps` holds of every graph the plan holds, the base included.'''
+    from cottax.core.maths.graph import Graph
+    broken = Graph(looped.definitions, OrderedMap({N('d1'): N('nope')}))
+    assert Plan(broken).base == broken                      # nothing asked by default
+    with pytest.raises(KeyError, match='not a node'):
+        Plan(broken, keeps=Valid)

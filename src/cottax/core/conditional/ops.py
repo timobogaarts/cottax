@@ -5,11 +5,11 @@ their words.
 '''
 
 import dataclasses
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator
 
-from ..frozen import Violation
-from ..maths import Label, Graph, NodeDefinition, Place
-from ..plan import Redefine
+from ..frozen import OrderedMap, Violation
+from ..maths import Label, Graph, Place
+from ..plan import Edit, PrimitiveOp
 from .node import ConditionalNode, is_driven, kind_of
 
 
@@ -39,7 +39,7 @@ def check_owns_inside_is_stored(op: 'SetOwnsInside', graph: Graph) -> Iterator[V
         yield OwnsInsideDriven(op.node)
 
 
-class SetOwnsInside[N: Label, V: Place](Redefine[N, V]):
+class SetOwnsInside[N: Label, V: Place](PrimitiveOp[N, V]):
     """A condition node owns `owns_inside` inside, and nothing else of it changes: with
     none it is a requirement, with some an encloser. For a condition that stores
     `owns_inside` as a field."""
@@ -50,10 +50,10 @@ class SetOwnsInside[N: Label, V: Place](Redefine[N, V]):
     checks = (check_owned_once,)
     checks_graph = (check_owns_inside_is_stored,)
 
-    def redefined(self, graph: Graph[N, V]) -> Mapping[N, NodeDefinition[V]]:
+    def _edit(self, graph: Graph[N, V]) -> Edit[N, V]:
         node = graph[self.node]
-        return {self.node: dataclasses.replace(
-            node, condition=dataclasses.replace(node.condition, owns_inside=self.owns_inside))}
+        return Edit(redefine=OrderedMap({self.node: dataclasses.replace(
+            node, condition=dataclasses.replace(node.condition, owns_inside=self.owns_inside))}))
 
     def __repr__(self) -> str:
         return f'set_owns_inside({self.node} <- {", ".join(str(p) for p in self.owns_inside)})'

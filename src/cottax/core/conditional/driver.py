@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Collection, Iterator, Mapping
 from typing import ClassVar
 
-from ..frozen import AbstractVar, Frozen, OrderedMap, Violation, name_of
+from ..frozen import AbstractClassVar, Frozen, OrderedMap, Violation, name_of
 from ..maths import Place, Renaming, relabelled
 from .condition import Condition
 
@@ -24,70 +24,96 @@ class Role(ABC):
     
     @classmethod
     @abstractmethod
-    def index[V: Place](cls, condition: Condition[V], contract: 'DriverContract'
+    def index[V: Place](cls, condition: Condition[V]
               ) -> tuple[V | None, ...]:
         '''
         What each Role-keyed place stands for: a {Start : (^start.u,^start.v)} will map to the conditions's
-        unknowns as (u,v). `None` is the problem as a whole (a `Steps`).'''
+        unknowns as (u,v). None is the condition as a whole (a e.g. a NumberOfIterations).'''
 
     @classmethod
-    def arity(cls, condition: Condition, contract: 'DriverContract') -> int:
+    def arity(cls, condition: Condition) -> int:
         '''How many places the role requires.'''
-        return len(cls.index(condition, contract))
+        return len(cls.index(condition))
 
 class PerUnknown(Role):
     '''One place per unknown (e.g. where each starts).'''
 
     @classmethod
-    def index[V: Place](cls, condition: Condition[V], contract: 'DriverContract'
+    def index[V: Place](cls, condition: Condition[V]
               ) -> tuple[V | None, ...]:
         return condition.owns_inside
-class PerProblem(Role):
-    '''One place for the problem as a whole (e.g. a tolerance, the steps taken).'''
+class PerCondition(Role):
+    '''One place for the condition as a whole (e.g. a tolerance, the steps taken).'''
 
     @classmethod
-    def index[V: Place](cls, condition: Condition[V], contract: 'DriverContract'
+    def index[V: Place](cls, condition: Condition[V]
               ) -> tuple[V | None, ...]:
         return (None,)
 
 
 # ---------------------------------------------------------------- the contract
 
+def check_contract_coherent(c: 'DriverContract') -> Iterator[Violation]:
+    '''What a contract declares holds together, whatever it drives: each role it names has an
+    `index` and is named once on its side; a report's needs are for a report it makes; no
+    role is both required and optional, nor both data and a report.'''
+    name = type(c).__name__
+    data_side = (*c.takes, *c.may_take, *(r for rs in c.report_needs.values() for r in rs))
+    if unsized := tuple(r.__name__ for r in c.roles if inspect.isabstract(r)):
+        yield RoleUnsized(unsized)
+    for listed in (c.takes, c.may_take, c.may_report):
+        if twice := tuple(dict.fromkeys(r.__name__ for r in listed if list(listed).count(r) > 1)):
+            yield RoleListedTwice(name, twice)
+    if stray := tuple(r.__name__ for r in c.report_needs if r not in c.may_report):
+        yield NeedsUnreported(name, stray)
+    if both := tuple(r.__name__ for r in c.takes if r in c.may_take):
+        yield RequiredAndOptional(name, both)
+    if both := tuple(dict.fromkeys(r.__name__ for r in data_side if r in c.may_report)):
+        yield RoleOnBothSides(name, both)
+
+
 class DriverContract[V: Place](Frozen):
     '''
-    The algorithm answering a condition node: what it accepts, the data it must be given
-    (`takes`), the data it may be given (`may_take`), what it may report (`may_report`), and
-    the data a report needs of its own (`report_needs`). A report, or an optional datum, is
-    asked for by giving it places: nothing is switched on by a flag. A final binds each as a
-    value, or as a property read off its own fields. Not exhaustive: a choice the graph
-    cannot make (a Newton driver's linear solver) is a field of the final.
+    The algorithm answering a condition node: 
     '''
 
-    accepts : AbstractVar[Callable[[Condition[V]], bool]]
-    '''Whether it answers that condition.'''
+    accepts : AbstractClassVar[Callable[[Condition[V]], bool]]
+    '''Whether it answers that condition'''
 
-    takes   : AbstractVar[Collection[type[Role]]]
-    '''The data it must be given, whatever it is asked to report.'''
+    takes   : AbstractClassVar[Collection[type[Role]]]
+    '''The data it must be given.'''
 
     may_take     : ClassVar[Collection[type[Role]]] = ()
     '''The data it may be given besides: none, unless a final says.'''
+
     may_report   : ClassVar[Collection[type[Role]]] = ()
     '''What it may be asked to report: nothing, unless a final says.'''
     report_needs : ClassVar[Mapping[type[Role], tuple[type[Role], ...]]] = {}
-    '''Per report, the data it needs of its own (an integrator's trajectory, the times it is
-    saved at).'''
+    '''Per report, the data it needs (e.g. trajectory requires places to save at)'''
 
-    def required(self, reports: Collection[type[Role]]) -> tuple[type[Role], ...]:
-        '''The data it must be given when asked for `reports`, in order: `takes`, then what
-        each of those reports needs.'''
-        return tuple(dict.fromkeys((*self.takes, *(r for report in reports
-                                                     for r in self.report_needs.get(report, ())))))
+    checks = (check_contract_coherent,)
 
     @property
-    def may_be_given(self) -> tuple[type[Role], ...]:
-        '''Every role it may be given data for: what the most it can report requires, then
-        `may_take`.'''
-        return tuple(dict.fromkeys((*self.required(tuple(self.may_report)), *self.may_take)))
+    def options(self) -> tuple[type[Role], ...]:
+        '''What a driver of it may ask for: each report it may make, each datum it may take.'''
+        return (*self.may_report, *self.may_take)
+
+    @property
+    def roles(self) -> tuple[type[Role], ...]:
+        '''Every role it names, in the order a driver holds them: its data as `roles_for`
+        orders it, then its reports.'''
+        needed = (r for rs in self.report_needs.values() for r in rs)
+        return tuple(dict.fromkeys((*self.takes, *needed, *self.may_take, *self.may_report)))
+
+    def roles_for(self, asks: Collection[type[Role]]
+                  ) -> tuple[tuple[type[Role], ...], tuple[type[Role], ...]]:
+        '''The roles a driver asking `asks` (of its `options`) has, in order: its data -- what
+        it takes, what the reports asked need, the data asked -- and its reports. The one
+        place a choice turns into roles: everything placing or judging a driver asks this.'''
+        reports = tuple(r for r in self.may_report if r in asks)
+        needed = (r for report in reports for r in self.report_needs.get(report, ()))
+        data = tuple(dict.fromkeys((*self.takes, *needed, *(r for r in self.may_take if r in asks))))
+        return data, reports
 
 
 def entry_for[T, D](table: Mapping[type[DriverContract], T], contract: DriverContract,
@@ -100,20 +126,17 @@ def entry_for[T, D](table: Mapping[type[DriverContract], T], contract: DriverCon
 # ---------------------------------------------------------------- the driver
 
 def check_roles_offered(d: 'Driver') -> Iterator[Violation]:
-    '''Each role it is given the contract may be given, each it reports the contract may
-    report, none on both sides, none left without an `index`; and what the contract requires
-    for those reports is given. Asked of the driver alone: none of it needs the condition.'''
+    '''Its roles are those of one choice: what it reports the contract may report, and its
+    data exactly what `roles_for` gives for that choice -- what it asks being its reports and
+    the optional data it holds. Asked of the driver alone: none of it needs the condition.'''
     name, contract = repr(d), d.contract
-    for side, allowed, given in (('data', contract.may_be_given, d.data),
-                                 ('reports', tuple(contract.may_report), d.reports)):
-        if extra := tuple(r.__name__ for r in given if r not in allowed):
-            yield NotOffered(name, side, extra)
-    if both := tuple(r.__name__ for r in d.data if r in d.reports):
-        yield RoleOnBothSides(name, both)
-    if unsized := tuple(r.__name__ for r in (*d.data, *d.reports) if inspect.isabstract(r)):
-        yield RoleUnsized(unsized)
-    if missing := tuple(r.__name__ for r in contract.required(tuple(d.reports))
-                        if r not in d.data):
+    if extra := tuple(r.__name__ for r in d.reports if r not in contract.may_report):
+        yield NotOffered(name, 'reports', extra)
+    asks = (*d.reports, *(r for r in d.data if r in contract.may_take))
+    data, _ = contract.roles_for(asks)
+    if extra := tuple(r.__name__ for r in d.data if r not in data):
+        yield NotOffered(name, 'data', extra)
+    if missing := tuple(r.__name__ for r in data if r not in d.data):
         yield RoleMissing(name, missing)
 
 
@@ -148,7 +171,7 @@ class Driver[V: Place](Frozen):
         '''What each place of `role` stands for on `condition`, to the place (`{u: s_u, v:
         s_v}` for a start); `None` where it neither takes nor reports `role`.'''
         side = self.data if role in self.data else self.reports if role in self.reports else None
-        return None if side is None else dict(zip(role.index(condition, self.contract), side[role]))
+        return None if side is None else dict(zip(role.index(condition), side[role]))
 
     def relabel(self, renaming: Renaming[V]) -> 'Driver[V]':
         moved = lambda side: OrderedMap((r, relabelled(ps, renaming)) for r, ps in side.items())
@@ -160,7 +183,7 @@ class Driver[V: Place](Frozen):
         if not self.contract.accepts(condition):
             yield NotAccepted(repr(self), condition, name_of(self.contract.accepts))
         for role, places in (*self.data.items(), *self.reports.items()):
-            subjects = role.index(condition, self.contract)
+            subjects = role.index(condition)
             if len(set(subjects)) != len(subjects):
                 yield IndexRepeats(role.__name__, subjects)
             elif len(places) != len(subjects):
@@ -191,11 +214,33 @@ class NotOffered(Violation):
 
 
 class RoleOnBothSides(Violation):
-    driver : str
-    roles  : tuple
-    error    = ValueError
-    template = ('{driver} both takes and reports {roles!r}: a guess and an answer are two '
-                'roles')
+    contract : str
+    roles    : tuple
+    error    = TypeError
+    template = ('{contract} names {roles!r} as data and as a report: a guess and an answer are '
+                'two roles')
+
+
+class RoleListedTwice(Violation):
+    contract : str
+    roles    : tuple
+    error    = TypeError
+    template = '{contract} lists {roles!r} twice on one side'
+
+
+class NeedsUnreported(Violation):
+    contract : str
+    roles    : tuple
+    error    = TypeError
+    template = ('{contract} says what {roles!r} need, but may not report them: the needs would '
+                'never apply')
+
+
+class RequiredAndOptional(Violation):
+    contract : str
+    roles    : tuple
+    error    = TypeError
+    template = '{contract} both requires and may take {roles!r}'
 
 
 class RoleMissing(Violation):
@@ -209,7 +254,7 @@ class RoleUnsized(Violation):
     roles : tuple
     error    = TypeError
     template = ('{roles!r} leave `index` abstract, so nothing says what their places stand '
-                'for: a role is per unknown, per problem, or says its own')
+                'for: a role is per unknown, per condition, or says its own')
 
 
 class IndexRepeats(Violation):

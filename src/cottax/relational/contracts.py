@@ -8,11 +8,11 @@ Driver contracts:
 '''
 
 from ..core import Place
-from ..core.conditional import DriverContract, PerProblem, Start, Steps
+from ..core.conditional import DriverContract, PerCondition, Start, Steps
 from .classification import is_equalities, is_fixed_point, is_optimise, is_unconstrained_optimise
 
 
-class Scales(PerProblem):
+class Scales(PerCondition):
     '''A problem's one `Scaling`.'''
 
 

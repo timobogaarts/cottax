@@ -8,12 +8,12 @@ MDAO architectures as one op each, over the cut rules and a `Closing` handed in:
 
 from abc import abstractmethod
 from dataclasses import field
-from collections.abc import Generator, Iterator, Sequence
+from collections.abc import Iterator, Sequence
 from typing import Any, ClassVar
 
 from ...core import (
     AbstractConditionalNode, FunctionalNode, Label, kind_of, Graph, Place, Violation,
-    enclosers, owns_inside, GraphOp, Nest, StagedOp, Dependencies, Nesting)
+    enclosers, owns_inside, Composite, GraphOp, Nest, Dependencies, Nesting, Valid, in_turn)
 from ...core.frozen import AbstractVar, Frozen, OrderedMap, answer
 from .closing import closed
 from .combine import Combine
@@ -155,6 +155,20 @@ class Boxes[N: Label, V: Place](Frozen):
 # ---------------------------------------------------------------- the skeleton
 
 
+def check_design_bound(op: 'Architecture', graph: Graph) -> Iterator[Violation]:
+    '''Every problem of the design (the top) is a node of the graph.'''
+    for n in op.design:
+        if n not in graph:
+            yield TopUnbound(str(n))
+
+
+def check_design_is_problem(op: 'Architecture', graph: Graph) -> Iterator[Violation]:
+    '''Every problem of the design is a problem: it owns something inside.'''
+    for n in op.design:
+        if n in graph and not owns_inside(graph[n]):
+            yield TopNotAProblem(str(n))
+
+
 def check_nothing_nested(op: 'Architecture', graph: Graph) -> Iterator[Violation]:
     if graph.within:
         yield NestedAlready(tuple((str(i), str(o)) for i, o in graph.within.items()))
@@ -185,12 +199,13 @@ def check_implicit_models(op: 'Architecture', graph: Graph) -> Iterator[Violatio
     yield from shared_bodies(free, bodies)
 
 
-class Architecture[N: Label, V: Place](StagedOp[N, V]):
+class Architecture[N: Label, V: Place](Composite[N, V]):
     '''
     An MDAO architecture, with a top (`Monolithic`) or without (`Coupled`).
 
-    A `StagedOp`, since each stage is decided off the graph the one before leaves; like
-    any composition it proves nothing of its own, every op it applies being checked.
+    A `Composite` decided in stages, each a `Composite` of its own decided off the graph
+    the one before leaves (`_Outside`, `_Cutting`, `_Placing`); like any composition it
+    proves nothing of its own, every op it applies being checked.
 
     1. what the level absorbs is combined (`absorbing`), and every cycle then off the
        level's own is resolved (`outside`);
@@ -216,7 +231,10 @@ class Architecture[N: Label, V: Place](StagedOp[N, V]):
     combine as the top does; a level that only nests them says `False`, and then takes a
     problem combining as nothing.'''
 
-    checks_graph = (check_nothing_nested, check_implicit_models)
+    needs = Valid
+
+    checks_graph = (check_design_bound, check_design_is_problem, check_nothing_nested,
+                    check_implicit_models)
 
     @abstractmethod
     def scope(self, graph: Graph[N, V]) -> Graph[N, V]:
@@ -236,17 +254,25 @@ class Architecture[N: Label, V: Place](StagedOp[N, V]):
         '''The ops placing what lies in the scope, read off `opened`, the graph the
         cutting leaves; `closures` is the problems it bound.'''
 
-    def stages(self, graph: Graph[N, V]
-               ) -> Generator[Sequence[GraphOp[N, V]], Graph[N, V], None]:
-        '''Absorb; resolve what then lies outside; cut and close the scope of what is
-        left; place every problem on its cycles, the closures being the problems the
-        cutting bound.'''
-        absorbed = yield self.absorbing(graph)
-        resolved = yield self.outside(absorbed)
-        scope    = self.scope(resolved)
-        opened   = yield closed(cuts_per_cycle_boxed(scope, self.boxes, self.rule), self.closing)
-        nested   = yield self.nesting_inside(scope)
-        yield self.combining(nested, tuple(p for p in enclosers(opened.definitions) if p not in set(enclosers(resolved.definitions))))
+    def _ops(self, graph: Graph[N, V]) -> Sequence[GraphOp[N, V]]:
+        '''Absorb; then the stages, each decided off the graph the last left: resolve what
+        lies outside; cut and close the scope; place every problem on its cycles.'''
+        return (*self.absorbing(graph), _Outside(self))
+
+    def cutting(self, resolved: Graph[N, V]
+                ) -> tuple[tuple[GraphOp[N, V], ...], tuple[GraphOp[N, V], ...]]:
+        '''Off `resolved`: the closures of the scope's cut cycles, then the nesting of each
+        problem lying inside another's body, both read before anything is cut.'''
+        scope = self.scope(resolved)
+        return (closed(cuts_per_cycle_boxed(scope, self.boxes, self.rule), self.closing),
+                self.nesting_inside(scope))
+
+    def placing(self, nested: Graph[N, V], resolved: Graph[N, V]) -> tuple[GraphOp[N, V], ...]:
+        '''The final's ops placing every problem, off `nested`; the closures are the
+        problems `nested` has and `resolved`, the graph before the cutting, had not.'''
+        before = set(enclosers(resolved.definitions))
+        return tuple(self.combining(nested, tuple(p for p in enclosers(nested.definitions)
+                                                  if p not in before)))
 
     def nesting_inside(self, scope: Graph[N, V]) -> tuple[GraphOp[N, V], ...]:
         '''Each problem of the scope lying wholly inside another's body nested there, read
@@ -259,9 +285,17 @@ class Architecture[N: Label, V: Place](StagedOp[N, V]):
     def resolution(self, graph: Graph[N, V]) -> Resolution[N, V]:
         '''The whole derivation: each stage's ops and the graph it leaves. Refused as
         `apply` refuses.'''
-        absorbed, outside, closures, nested, combining = self.staged(graph)
-        return Resolution(absorbed.ops, outside.ops, closures.ops, closures.graph,
-                          (*nested.ops, *combining.ops), combining.graph)
+        self.apply(graph)
+        absorbed = tuple(self.absorbing(graph))
+        resolved = in_turn(absorbed, graph)[0]
+        outside  = tuple(self.outside(resolved))
+        resolved = in_turn(outside, resolved)[0]
+        closures, nesting = self.cutting(resolved)
+        opened   = in_turn(closures, resolved)[0]
+        nested   = in_turn(nesting, opened)[0]
+        placing  = self.placing(nested, resolved)
+        return Resolution(absorbed, outside, closures, opened, (*nesting, *placing),
+                          in_turn(placing, nested)[0])
 
     def cycles_under(self, opened: Graph[N, V], closures: Sequence[N]
                      ) -> tuple[OnCycle[N], ...]:
@@ -277,17 +311,40 @@ class Architecture[N: Label, V: Place](StagedOp[N, V]):
         return tuple(out)
 
 
+# ---------------------------------------------------------------- the stages
+
+class _Outside[N: Label, V: Place](Composite[N, V]):
+    '''What resolves the cycles off the scope's, then the cutting.'''
+    arch : Architecture[N, V]
+    def _ops(self, graph: Graph[N, V]) -> Sequence[GraphOp[N, V]]:
+        return (*self.arch.outside(graph), _Cutting(self.arch))
+    def __repr__(self) -> str:
+        return 'outside'
+
+
+class _Cutting[N: Label, V: Place](Composite[N, V]):
+    '''The scope cut and closed, what lies inside another's body nested; then the placing,
+    told the graph before the cutting.'''
+    arch : Architecture[N, V]
+    def _ops(self, graph: Graph[N, V]) -> Sequence[GraphOp[N, V]]:
+        closures, nesting = self.arch.cutting(graph)
+        return (*closures, *nesting, _Placing(self.arch, graph))
+    def __repr__(self) -> str:
+        return 'cutting'
+
+
+class _Placing[N: Label, V: Place](Composite[N, V]):
+    '''The final's ops placing every problem on its cycles.'''
+    arch     : Architecture[N, V]
+    resolved : Graph[N, V]
+    '''The graph before the cutting: what tells the closures apart.'''
+    def _ops(self, graph: Graph[N, V]) -> Sequence[GraphOp[N, V]]:
+        return self.arch.placing(graph, self.resolved)
+    def __repr__(self) -> str:
+        return 'placing'
+
+
 # ---------------------------------------------------------------- the two scopes
-
-
-def check_top_bound(op: 'Monolithic', graph: Graph) -> Iterator[Violation]:
-    if op.top not in graph.definitions:
-        yield TopUnbound(str(op.top))
-
-
-def check_top_is_problem(op: 'Monolithic', graph: Graph) -> Iterator[Violation]:
-    if op.top in graph and not owns_inside(graph[op.top]):
-        yield TopNotAProblem(str(op.top))
 
 
 def check_top_combinable(op: 'Monolithic', graph: Graph) -> Iterator[Violation]:
@@ -320,7 +377,7 @@ class Monolithic[N: Label, V: Place](Architecture[N, V]):
     '''What resolves every cycle off the top's; `None` is an `MDA` with this rule and
     closing.'''
 
-    checks_graph = (check_top_bound, check_top_is_problem, check_top_combinable)
+    checks_graph = (check_top_combinable,)
 
     @property
     def design(self) -> tuple[N, ...]:

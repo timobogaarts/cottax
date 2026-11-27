@@ -177,12 +177,16 @@ def test_loading_imports_nothing():
 
 
 def test_a_slot_under_another_role_is_refused():
-    '''A slot's role is written for a reader; it must be the driver's own.'''
+    '''A slot's role is written for a reader; it must be one its contract names, on the side
+    the driver's own rule allows.'''
     data = written(solved())
     driven = next(e['definition']['node'] for e in data['nodes']
                   if e['definition'].get('node', {}).get('kind') == 'driven')
     driven['data'][0]['role'] = 'Steps'
-    with pytest.raises(ValueError, match='data names a role its driver.s contract does not offer'):
+    with pytest.raises(ValueError, match='handed data for .*Steps.*which its contract does not offer'):
+        read_json(data)
+    driven['data'][0]['role'] = 'Trajectory'
+    with pytest.raises(ValueError, match='data names a role its driver.s contract does not name'):
         read_json(data)
 
 

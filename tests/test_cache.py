@@ -89,7 +89,7 @@ def test_an_asked_graph_is_still_one_jit_cache_key():
 def test_a_rebuilt_instance_starts_empty():
     '''A new object gets its own cache, as `functools` does. Rebuilt directly rather than
     with `eqx.tree_at`: a `Graph` registers no flatten, so nothing reaches past its
-    constructor to swap a definition -- `Redefine` is how that is said.'''
+    constructor to swap a definition -- an op is how that is said.'''
     g = acyclic()
     ask_everything(g)
     rebuilt = graph_of(acyclic().definitions, g.within)

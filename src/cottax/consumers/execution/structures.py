@@ -25,7 +25,7 @@ class Inputs:
 
 class Slot[V: Place, N: Label](NamedTuple):
     '''A place a run takes a value at, under `key`, for `unknown` of `problem`, at `at` in a
-    structure: an input at itself; a per-problem datum for no unknown, at none.'''
+    structure: an input at itself; a per-condition datum for no unknown, at none.'''
     place   : V
     key     : type
     problem : N | None = None
@@ -69,7 +69,7 @@ def read_from[N: Label, V: Place](graph: Graph[N, V], table: tuple[Slot[V, N], .
     it: under `Inputs`, an input where the structure holds it; under a role whose places stand
     for unknowns, the datum at its unknown's place. What a structure holds beyond is never
     asked; a slot holding `None` gives nothing. Refused: a role no driver takes, one whose
-    places stand for no unknown (one per problem).
+    places stand for no unknown (one per condition).
     '''
     structure = answer_for_places(DataStructure, graph)
     open_ = set(graph.boundary_inputs)
@@ -204,7 +204,7 @@ def write_role[V: Place](graph: Graph[Any, V], state: Any, values: Mapping[V, An
                          role: type, at: Callable[[V], V]) -> Any:
     '''`state` with the value of each place a driver takes or reports `role` at, written at
     `at(unknown)` where the state holds it: a structure keyed as the unknowns are. Refused: a
-    role no driver has, one whose places stand for no unknown (one per problem).'''
+    role no driver has, one whose places stand for no unknown (one per condition).'''
     if not (found := _by_unknown(graph, role)):
         raise NoneTakes(role.__name__).raised
     if any(u is None for _, _, u in found):

@@ -54,12 +54,6 @@ class ClosuresCollide(Violation):
                 'one closure per cycle under `AtFirstMember`: cut it as one group, or write an `At` naming them apart')
 
 
-class Stranded(Violation):
-    inner : tuple[Label, ...]
-    outer : tuple[Label, ...]
-    error    = ValueError
-    template = ('{inner} in {outer} would lose one end and keep the other -- `Unnest` it first, '
-                 'so a plan never quietly voids what an earlier op recorded')
 
 
 class NothingToCombine(Violation):

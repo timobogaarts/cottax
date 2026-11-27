@@ -135,7 +135,7 @@ def test_a_start_given_by_name_and_read_from_the_tree_is_given_twice():
 
 def test_a_role_no_driver_takes_is_refused_from_a_structure():
     '''A report is no datum, and a role nothing here has is none either: neither is read from
-    a structure. (A per-problem datum is refused as `NoSlotFor`: `test_ode_trajectory`.)'''
+    a structure. (A per-condition datum is refused as `NoSlotFor`: `test_ode_trajectory`.)'''
     from cottax.consumers.execution.refusals import NoneTakes
     from cottax.core.conditional import Steps
     with pytest.raises(KeyError) as refused:

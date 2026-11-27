@@ -81,8 +81,8 @@ def problem(at: str) -> NodePath:
     return s.node(cx.solve(name))
 
 
-def per_problem(purpose, at: str) -> VarPath:
-    '''Where a per-problem role of the ODE beside `at` sits by default: `^times.^solve.at`.'''
+def per_condition(purpose, at: str) -> VarPath:
+    '''Where a per-condition role of the ODE beside `at` sits by default: `^times.^solve.at`.'''
     return s.place(purpose(VarPath(problem(at).segments)))
 
 
@@ -134,8 +134,8 @@ def test_a_history_declares_the_ode_driven_its_initial_values_and_span_on_the_co
                               span='span')).graph[problem('oscillator')]
     assert ode.driver.contract == RECORDING and ode.condition == undriven.condition
     assert ode.condition.reads_outside == (s.place('x0'), s.place('v0'), s.place('span'))
-    assert (RECORDING.takes, RECORDING.may_report, RECORDING.required((Trajectory,))) == (
-        (), (Trajectory,), (Times,))
+    assert (RECORDING.options, RECORDING.roles_for((Trajectory,))) == (
+        (Trajectory,), ((Times,), (Trajectory,)))
     assert ode.driver.data == OrderedMap({Times: (s.place('times'),)})
     assert ode.driver.reports == OrderedMap({Trajectory: (s.place('xs'), s.place(cx.trajectory('v')))})
     assert declare(s.rate(bare.fn, 'x', span='span')).graph[problem('bare')] == ConditionalNode(
@@ -305,7 +305,7 @@ def test_5_sand_refuses_a_recording_ode_as_any():
 
 # ================================================================ 6. the mechanism, no sugar
 
-@s.function('area', reads={'xs': s.place(cx.trajectory('x')), 'ts': per_problem(cx.times, 'bare')})
+@s.function('area', reads={'xs': s.place(cx.trajectory('x')), 'ts': per_condition(cx.times, 'bare')})
 def area_of_bare(xs, ts):
     return jnp.trapezoid(xs, ts)
 
@@ -313,7 +313,7 @@ def area_of_bare(xs, ts):
 def test_6_the_trajectory_asked_of_drive_or_assigned_by_hand():
     ts = jnp.linspace(0.0, 2.0, 201)
     inputs = OrderedMap({s.place('k'): 0.5, s.place(cx.initial('x')): 1.0,
-                         s.place(cx.span('x')): (0.0, 2.0), per_problem(cx.times, 'bare'): ts})
+                         s.place(cx.span('x')): (0.0, 2.0), per_condition(cx.times, 'bare'): ts})
     by_drive = driven(bare, area_of_bare, implementation=diffrax_run(), asks=(Trajectory,))
     at, g = problem('bare'), declare(bare, area_of_bare).graph
     by_hand = (Plan(g) + s.assign(at, RECORDING, asks=(Trajectory,))
@@ -394,8 +394,11 @@ class Bisection(DriverImplementation[RootFinder]):
         raise NotImplementedError
 
 
-def test_8_an_implementation_without_the_report_is_refused_by_the_proof():
-    g = (Plan(declare(decay).graph) + Drive((EndOnly(10),), (), s.role_places)).graph
+def test_8_an_implementation_without_the_report_is_refused_by_drive_and_by_the_proof():
+    '''`Drive` asks before the graph is touched; implemented by hand, the proof refuses it.'''
+    with pytest.raises(TypeError, match='EndOnly cannot produce'):
+        Plan(declare(decay).graph) + Drive((EndOnly(10),), (), s.role_places)
+    g = (Plan(declare(decay).graph) + Implement(OrderedMap({problem('decay'): EndOnly(10)}))).graph
     assert [type(v) for v in Runnable.check(g)] == [ReportUnavailable]
     Runnable.prove((Plan(declare(bare).graph)
            + Drive((EndOnly(10),), ODE_CONTRACTS, s.role_places)).graph)
@@ -408,8 +411,16 @@ def test_8_drive_on_a_contracted_problem_nothing_given_implements_is_refused():
 
 
 def test_8_drive_leaves_a_problem_already_implemented_alone():
-    once = (Plan(declare(decay).graph) + Drive((EndOnly(10),), (), s.role_places)).graph
-    assert (Plan(once) + Drive((EndOnly(20),), (), s.role_places)).graph == once
+    once = (Plan(declare(bare).graph) + Drive((EndOnly(10),), ODE_CONTRACTS, s.role_places)).graph
+    assert (Plan(once) + Drive((EndOnly(20),), ODE_CONTRACTS, s.role_places)).graph == once
+
+
+def test_8_an_ask_no_problem_offers_is_refused():
+    '''Asked for, and no problem driven here offers it: it would be placed nowhere.'''
+    from cottax.consumers.execution.refusals import NotOfferedAnywhere
+    from graphs import refusals
+    op = Drive((diffrax_run(),), ODE_CONTRACTS, s.role_places, (cx.Scales,))
+    assert [type(v) for v in refusals(op, declare(bare).graph)] == [NotOfferedAnywhere]
 
 
 # ================================================================ 9. two recording ODEs joined
@@ -452,7 +463,7 @@ def test_9_two_odes_recording_alike_join_as_one_driven_problem():
 def test_10_a_report_is_read_by_role_at_its_state_and_written_keyed_by_the_states():
     '''`out[Trajectory, 'x']` is the history at whatever place it sits; `out.into(history,
     Trajectory)` writes each state's at the state's own place, so a history structure is
-    keyed as the state is. A per-problem role has no state's place.'''
+    keyed as the state is. A per-condition role has no state's place.'''
     from cottax.consumers.execution.refusals import NoRoleAt, NoSlotFor
     graph = driven(oscillator, implementation=diffrax_run())
     ts = jnp.linspace(0.0, 1.5, 7)

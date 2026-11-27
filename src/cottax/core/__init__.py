@@ -31,8 +31,7 @@ from .mints import Closure, Copy, Mint, Minting, mint_of, minted, unminted
 from .answers import answer_for_labels, answer_for_places
 from .plan import (
     Plan, GraphOp, PrimitiveOp, Composite, Edit, in_turn,
-    Cut, Delete, Insert, Nest, Rename, Replace, SetAttribute, RemoveAttribute, Unnest,
-    ComposedOp, StagedOp, Stage, Rebind, Rebinding, Redefine,   # legacy, phase 2 removes
+    Contract, Cut, Delete, Insert, Nest, Rename, Replace, SetAttribute, RemoveAttribute, Unnest,
 )
 from .conditional import (
     Condition, ConditionalNode, SetOwnsInside, is_driven, kind_of,
