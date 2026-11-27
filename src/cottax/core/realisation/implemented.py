@@ -14,7 +14,7 @@ from ...core import (
 )
 from ...core.frozen import OrderedMap, name_of
 from ...core import is_driven
-from ...core.driven import DriverContract, entry_for
+from ...core.conditional import DriverContract, entry_for
 
 
 class Implementation:

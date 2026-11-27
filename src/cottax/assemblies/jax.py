@@ -13,7 +13,7 @@ from ..consumers.architectures.cut_rules import (
     ByName, GaussSeidel, GaussSeidelMinimal, GaussSeidelOrdered, Jacobi, NoCuts,
 )
 from ..core.frozen import OrderedMap, choice
-from ..core.driven import Start, driven
+from ..core.conditional import Start, driven
 from ..consumers.architectures import (
     IDF, MDA, MDF, SAND, AtFirstMember, Analysis, Architecture, Bodies, Boxes,
     Architecting, CloseFunctionalCycles, Combine, Coupled, Disciplines, IndividualFeasible, Monolithic,
@@ -77,9 +77,6 @@ CONTRACTS = (*_RELATIONAL_CONTRACTS, *_ODE_CONTRACTS)
 '''The default contracts, every shipped language's: an implementation answers a problem by the
 first one it implements.'''
 
-SCALED = (ConstrainedMinimisation(steps=False, scaled=True), *CONTRACTS)
-'''The defaults, a constrained minimisation taking `Scales`: `flat.drive(..., contracts=SCALED)`,
-its `Scaling` a value like a start's, `flat.run(model, {Scales: {'z': flat.scaling(...)}})`.'''
 
 @choice(Part)
 class ShippedSurface(RelationalDeclaring, OdeDeclaring, RelationalEditing, Architecting,
@@ -196,7 +193,7 @@ __all__ = [
     'Eq', 'Le', 'Min', 'Max', 'Objective', 'Relation', 'RelationalCondition',
     'RootFinder', 'FixedPointIterator', 'Minimiser', 'ConstrainedMinimiser',
     'RootFinding', 'FixedPointIteration', 'Minimisation', 'ConstrainedMinimisation', 'CONTRACTS',
-    'SCALED', 'Scales', 'Scaling', 'scaled', 'scaled_unknowns', 'unscaled_unknowns',
+    'Scales', 'Scaling', 'scaled', 'scaled_unknowns', 'unscaled_unknowns',
     'OdeDeclaring', 'Rate', 'Dt', 'OdeCondition', 'Integration', 'Integrator',
     'Times', 'Trajectory',
     'Newton', 'Picard', 'BFGS', 'ScipyMinimize', 'HostMinimiser', 'HostProblem',

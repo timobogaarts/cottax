@@ -103,11 +103,10 @@ CORE = (('cottax.core.maths', MATHS), ('cottax.core.frozen', ('cottax.core.froze
         ('cottax.core.mints', MINTS), ('cottax.core.answers', ANSWERS), ('cottax.core.plan', PLAN),
         ('cottax.core.conditional', (*PLAN, 'cottax.core.conditional')),
         ('cottax.core.refusal_kinds', (*DOOR, 'cottax.core.refusal_kinds')),
-        ('cottax.core.driven', (*DOOR, 'cottax.core.driven')),
-        ('cottax.core.realisation', (*DOOR, 'cottax.core.driven', 'cottax.core.realisation')))
+        ('cottax.core.realisation', (*DOOR, 'cottax.core.realisation')))
 '''Each layer of core and what of cottax it may import, in order: the maths; the mints, the
-answers and the plan, each over it alone; the condition node; `refusals`, their kinds. `driven` and `realisation` may also take names from
-the front door `cottax.core`, which is `DOOR`.'''
+answers and the plan, each over it alone; the condition node, its driver with it; `refusals`, their kinds. `realisation` may also take
+names from the front door `cottax.core`, which is `DOOR`.'''
 
 
 def _core_allows(module: str) -> tuple[str, ...]:
@@ -125,8 +124,8 @@ def _core_import(module: str, name: str) -> bool:
 
 def test_core_imports_its_layers_in_order_and_only_the_stdlib_and_networkx():
     '''Rule 1. `frozen` imports nothing else of cottax; the maths `frozen`; the mints and the
-    plan the maths, neither the other; the condition node the plan; `driven` those; `realisation` those and `driven`; the front
-    door those four. Every module of core is in one of these layers, and imports nothing
+    plan the maths, neither the other; the condition node and its driver the plan; `realisation` those; the front door those
+    four. Every module of core is in one of these layers, and imports nothing
     outside the standard library but networkx.'''
     core = [m for m in MODULES if _under(m, 'cottax.core')]
     assert [m for m in core if not _core_allows(m)] == []
@@ -235,11 +234,6 @@ def test_a_name_the_core_door_gives_is_imported_from_it():
 
 # ================================================================ 2. the features
 
-DRIVEN = {'cottax.relational.contracts': 'the shipped contracts are `DriverContract`s',
-          'cottax.ode.contracts':        'the integrator and its roles'}
-'''The modules of a feature outside its `consumers/` that also import `core.driven`.'''
-
-
 def _feature_import(module: str, name: str) -> bool:
     feature = module.split('.')[1]
     if _under(name, ASSEMBLY, *(f'cottax.{f}' for f in FEATURES if f != feature)):
@@ -247,14 +241,13 @@ def _feature_import(module: str, name: str) -> bool:
     if _is_answer_module(module) or not name.startswith('cottax'):
         return True
     return (name == 'cottax.core' or _under(name, *DOOR)
-            or _under(name, f'cottax.{feature}') and not _under(name, f'cottax.{feature}.consumers')
-            or module in DRIVEN and _under(name, 'cottax.core.driven'))
+            or _under(name, f'cottax.{feature}') and not _under(name, f'cottax.{feature}.consumers'))
 
 
 def test_a_feature_imports_no_other_and_outside_its_consumers_the_maths_alone():
     '''Rule 2. No feature imports another, nor the assembly. Outside its `consumers/` it imports
     of cottax the front door's layers (`DOOR`) and itself, not its own `consumers/` and no
-    consumer; `DRIVEN` also `core.driven`.'''
+    consumer.'''
     assert _offences([m for m in MODULES if _under(m, *(f'cottax.{f}' for f in FEATURES))],
                      _feature_import) == {}
 

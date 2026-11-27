@@ -1,83 +1,44 @@
 '''
-The condition node: a `Condition`, the value it states, and what is attached to it
-(`Attachment`) -- its driver. Above the maths, which knows neither: every rule reads a node
-through `AbstractConditionalNode`'s four names, and the driver's places are in them.
+The condition node: a `Condition`, the value it states, and the `Driver` answering it. Above
+the maths, which knows neither: every rule reads a node through `AbstractConditionalNode`'s
+four names, and the driver's places are in them.
 '''
 
 import dataclasses
-from abc import abstractmethod
+from collections.abc import Iterator
 from dataclasses import field
 
-from ..frozen import AbstractVar, Frozen
-from ..maths.definition import Renaming, check_owns_are_separate, check_reads_outside_owns
-from ..maths.kinds import AbstractConditionalNode, check_reads_on_one_side, check_states_something
+from ..frozen import Violation
+from ..maths.definition import Renaming
+from ..maths.kinds import AbstractConditionalNode
 from ..maths.places import Place
+from .condition import Condition
+from .driver import Driver
 
 
-# ---------------------------------------------------------------- the condition, a value
-
-class Condition[V: Place](Frozen):
-    """
-    What a condition node states, as a value over places: the four names and a way to rename
-    them. Not a node: a node holds one (`ConditionalNode`).
-    Checked on its own at construction, so a node is built from one already well formed.
-    """
-
-    owns_inside   : AbstractVar[tuple[V, ...]]
-    """What it gives to its subgraph (cycle)."""
-    reads_inside  : AbstractVar[tuple[V, ...]]
-    """What it reads back from its subgraph (cycle)."""
-    reads_outside : AbstractVar[tuple[V, ...]]
-    """What it reads that its cycle does not produce."""
-    owns_outside  : AbstractVar[tuple[V, ...]]
-    """What it owns that its cycle does not read."""
-
-    checks = (check_owns_are_separate, check_reads_outside_owns,
-              check_states_something, check_reads_on_one_side)
-    '''A node's place rules, then a condition node's: a condition is well formed in itself,
-    whatever is attached to it later.'''
-
-    @property
-    def owns(self) -> tuple[V, ...]:   return self.owns_inside + self.owns_outside
-    @property
-    def reads(self) -> tuple[V, ...]:  return self.reads_inside + self.reads_outside
-
-    @abstractmethod
-    def relabel(self, renaming: Renaming[V]) -> 'Condition[V]':
-        """The same condition with its places renamed."""
-
-
-class Attachment[V: Place](Frozen):
-    """
-    What a node carries that has places: a detachable bundle of them, added to what the node
-    reads (`reads`) and owns (`owns`) -- on a condition node, both outside its cycle. Renamed
-    with the node. Known here by this protocol only: what a concrete one is (a driver: an
-    algorithm, its roles), and whether it fits the condition it is attached to, live above.
-    An `Attribute` has no places; an attachment does.
-    """
-
-    reads : AbstractVar[tuple[V, ...]]
-    """The places it adds to what the node reads."""
-    owns  : AbstractVar[tuple[V, ...]]
-    """The places it adds to what the node owns."""
-
-    @abstractmethod
-    def relabel(self, renaming: Renaming[V]) -> 'Attachment[V]':
-        """The same attachment with its places renamed."""
+def check_driver_fits(node: 'ConditionalNode') -> Iterator[Violation]:
+    '''The driver fits the condition it is on: its contract accepts it, and each role sits at
+    as many places as the role's `index` has entries on it. A node whose driver does not fit
+    is never a meaningful state, so it is never built. Asked after the place rules.'''
+    if node.driver is not None:
+        yield from node.driver.violations_on(node.condition)
 
 
 class ConditionalNode[V: Place](AbstractConditionalNode[V]):
     """
-    The condition node: a condition, and what answers it, attached. Final: a kind of
-    condition is a `Condition`, not a node class. Its rules are a node's place rules over
-    the four names; whether the driver fits the condition is the driven layer's.
+    The condition node: a condition, and the driver answering it. Final: a kind of
+    condition is a `Condition`, not a node class. Its rules: a node's place rules over the
+    four names, then that the driver fits the condition (`check_driver_fits`).
     """
 
     condition : Condition[V]
     """What it states."""
-    driver    : 'Attachment[V] | None' = field(default=None, kw_only=True)
-    """What answers it, attached: what it reads is read outside, what it owns owned outside.
-    A field, since its places are edges; the maths knows it as an `Attachment` only."""
+    driver    : 'Driver[V] | None' = field(default=None, kw_only=True)
+    """What answers it: what it takes is read outside, what it reports owned outside. A
+    field, since its places are edges; kept apart from the condition, since the driver is
+    judged against the condition alone and taken off again (`Undrive`)."""
+
+    checks = (check_driver_fits,)
 
     @property
     def owns_inside(self) -> tuple[V, ...]:   return self.condition.owns_inside

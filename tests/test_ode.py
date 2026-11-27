@@ -33,8 +33,9 @@ from cottax.core.maths.executable import SeveralOutermost
 from cottax.core.refusal_kinds import OwnsInsideNotAChoice
 from cottax.relational.rewrites import Determine, Undetermine
 from cottax.core.frozen import OrderedMap, choice, violations
-from cottax.core.plan import Nest, Plan, refusals
-from cottax.core.driven import Assign, Driven, Start
+from cottax.core.plan import Nest, Plan
+from graphs import refusals
+from cottax.core.conditional import Assign, Driven, Start
 from cottax.core.realisation import Implement, implemented
 from cottax.consumers.declaration import declare
 from cottax.consumers.execution import Runnable, run
@@ -193,7 +194,7 @@ def test_over_a_toy_place_an_ode_is_proved_rewritten_driven_and_run_on_floats():
     moved = Rename(w('ode'), ((w('r'), w('q')),)).apply(
         Rename(w('body'), ((w('r'), w('q')),)).apply(g))
     assert moved[w('ode')].condition.rates == (w('q'),)
-    solved = (Plan(g) + Assign(w('ode'), Integration(trajectory=False), (), ())
+    solved = (Plan(g) + Assign(w('ode'), Integration())
               + Implement(OrderedMap({w('ode'): Euler(10_000)}))).graph
     Driven.prove(solved)
     out = run(GraphWithValues(solved,
@@ -529,8 +530,8 @@ def test_a_closure_written_by_hand_through_the_loop_is_a_model_of_its_own():
 def assigned():
     g = declare(decay).graph
     at = solve_at('decay')
-    contract = Integration(trajectory=False)
-    return (Plan(g) + Assign(at, contract, *s.role_places(at, (s.place('x'),), contract))).graph
+    contract = Integration()
+    return (Plan(g) + s.assign(at, contract)).graph
 
 
 def test_an_ode_driven_by_integration_is_written_to_json_and_read_back():

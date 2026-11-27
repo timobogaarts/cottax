@@ -15,14 +15,18 @@ from .maths.valid import (
 )
 from .maths.kinds import OwnsNothing, ReadOnBothSides, StatesNothing
 from .maths.valid import EndOwnsNothingInside, NestingLoop, SelfNested, Unbound
-from .plan.ops import (
+from .plan.primitive_ops import (
     AlreadyCut, AttributeAlreadySet, AttributeNotSet, BlockTooSmall, BoxOwnsNothing,
     DoesNotRead, NoAttributeNamed, NoReaders, NodeInTwoBlocks, NotProduced, NotRenamed,
 )
 from .conditional.ops import OwnedInsideTwice, OwnsInsideDriven, OwnsInsideNotAChoice
-from .plan.primitive import (
-    AlreadyNested, NameTaken, NotBound, NotNested, NothingDeleted, NothingInserted, Stranded,
+from .conditional.driver import (
+    IndexRepeats, NotAccepted, NotOffered, RoleMisplaced, RoleMissing, RoleOnBothSides, RoleUnsized,
 )
+from .conditional.assign import DrivenTwice, NotAConditionalNode, NotDriven
+from .conditional.proof import Undriven
+from .maths.graph import NotBound
+from .plan.edit import AlreadyNested, NameTaken, NamedTwice, NotNested
 
 __all__ = [
     'OwnInsideRead', 'OwnsNested', 'OwnsTwice', 'ReadInsideOwn', 'ReadsOwn',
@@ -35,7 +39,9 @@ __all__ = [
     'SelfNested', 'Unbound', 'Unreachable',
     'AlreadyCut', 'DoesNotRead', 'NoReaders', 'NotProduced', 'NotRenamed', 'OwnedInsideTwice',
     'OwnsInsideDriven', 'OwnsInsideNotAChoice',
+    'IndexRepeats', 'NotAccepted', 'NotOffered', 'RoleMisplaced', 'RoleMissing', 'RoleOnBothSides',
+    'RoleUnsized',
+    'DrivenTwice', 'NotAConditionalNode', 'NotDriven', 'Undriven',
     'AttributeAlreadySet', 'AttributeNotSet', 'NoAttributeNamed',
-    'AlreadyNested', 'NameTaken', 'NotBound', 'NotNested', 'NothingDeleted', 'NothingInserted',
-    'Stranded',
+    'AlreadyNested', 'NameTaken', 'NamedTwice', 'NotBound', 'NotNested',
 ]

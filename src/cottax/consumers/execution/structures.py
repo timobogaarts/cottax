@@ -10,9 +10,8 @@ from collections.abc import Callable, Collection, Iterable, Mapping
 from typing import Any, NamedTuple
 
 from ...core import Label, Graph, Place, Rules, answer_for_places, comparable
-from ...core.driven import role_slots
-from ...core import conditions, is_driven
-from ...core.driven import PerUnknown
+from ...core.conditional import role_slots
+from ...core import conditions, is_driven, owns_inside
 from ...core.frozen import Frozen, OrderedMap
 from .interface import DataStructure
 from .refusals import NoneTakes, NoSlotFor, Unvalued, ValuedTwice
@@ -48,28 +47,38 @@ def slots[N: Label, V: Place](graph: Graph[N, V], at: Callable[[V], V]) -> tuple
     datum, also one it computes (a warm start), then each boundary input. A place two problems
     take is there twice.'''
     roles = dict.fromkeys(r for n in conditions(graph.definitions) if is_driven(graph[n])
-                          for r in graph[n].driver.contract.takes)
-    return (*(Slot(place, role, problem, unknown, None if unknown is None else at(unknown))
-              for role in roles for place, problem, unknown in role_slots(graph, role)),
+                          for r in graph[n].driver.data)
+    return (*(Slot(place, role, problem, u, None if u is None else at(u))
+              for role in roles for place, problem, u in _by_unknown(graph, role)),
             *(Slot(p, Inputs, at=p) for p in graph.boundary_inputs))
+
+
+def _by_unknown[N: Label, V: Place](graph: Graph[N, V], role: type
+                                    ) -> tuple[tuple[V, N, V | None], ...]:
+    '''Each place a driven problem takes or reports `role` at, with the unknown it stands for:
+    `None` where it stands for none (the problem as a whole), so a caller's structure keeps it
+    nowhere.'''
+    return tuple((place, problem, subject if subject in owns_inside(graph[problem]) else None)
+                 for place, problem, subject in role_slots(graph, role))
 
 
 def read_from[N: Label, V: Place](graph: Graph[N, V], table: tuple[Slot[V, N], ...],
                                   structures: Mapping[type, Any]) -> tuple[tuple[V, Any, str], ...]:
     '''
     Each value a structure of `structures` gives an open slot of `table`, where its key reads
-    it: under `Inputs`, an input where the structure holds it; under a per-unknown role, the
-    datum at its unknown's place. What a structure holds beyond is never asked; a slot holding
-    `None` gives nothing. Refused: a per-problem role, a role no driver takes.
+    it: under `Inputs`, an input where the structure holds it; under a role whose places stand
+    for unknowns, the datum at its unknown's place. What a structure holds beyond is never
+    asked; a slot holding `None` gives nothing. Refused: a role no driver takes, one whose
+    places stand for no unknown (one per problem).
     '''
     structure = answer_for_places(DataStructure, graph)
     open_ = set(graph.boundary_inputs)
     found = []
     for key, state in structures.items():
-        if key is not Inputs and not issubclass(key, PerUnknown):
-            raise NoSlotFor(key.__name__).raised
         if not (taken := [s for s in table if s.key is key]) and key is not Inputs:
             raise NoneTakes(key.__name__).raised
+        if key is not Inputs and any(s.unknown is None for s in taken):
+            raise NoSlotFor(key.__name__).raised
         for s in taken:
             if s.place in open_ and structure.holds(state, s.at) and \
                     (v := structure.read(state, (s.at,))[s.at]) is not None:
@@ -193,13 +202,13 @@ def write_back[V: Place](graph: Graph[Any, V], state: Any,
 
 def write_role[V: Place](graph: Graph[Any, V], state: Any, values: Mapping[V, Any],
                          role: type, at: Callable[[V], V]) -> Any:
-    '''`state` with the value of each place a driver takes or reports a per-unknown `role` at,
-    written at `at(unknown)` where the state holds it: a structure keyed as the unknowns are.
-    Refused: a per-problem role, one no driver has.'''
-    if not issubclass(role, PerUnknown):
-        raise NoSlotFor(role.__name__).raised
-    if not (found := role_slots(graph, role)):
+    '''`state` with the value of each place a driver takes or reports `role` at, written at
+    `at(unknown)` where the state holds it: a structure keyed as the unknowns are. Refused: a
+    role no driver has, one whose places stand for no unknown (one per problem).'''
+    if not (found := _by_unknown(graph, role)):
         raise NoneTakes(role.__name__).raised
+    if any(u is None for _, _, u in found):
+        raise NoSlotFor(role.__name__).raised
     structure = answer_for_places(DataStructure, graph)
     return structure.write(state, OrderedMap(
         (at(u), values[p]) for p, _, u in found if p in values and structure.holds(state, at(u))))

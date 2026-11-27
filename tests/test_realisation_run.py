@@ -1,5 +1,5 @@
 '''
-A graph driven through `driven/`, realised through `realisation/` and run by
+A graph driven through `conditional/`, realised through `realisation/` and run by
 `execution`, with the default places the surface's `assign` fills in.
 
 The model is one implicit discipline, exact to
@@ -28,7 +28,7 @@ from graphs import graph_from_pytree
 import purposes
 from cottax.core.frozen import OrderedMap
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core.driven import DriverContract, PerProblem, PerUnknown
+from cottax.core.conditional import DriverContract, PerProblem, PerUnknown
 from cottax.core.realisation import implemented
 from cottax.relational import Eq, Relation, RelationalCondition, is_root_find
 from cottax.consumers.execution import GraphWithValues
@@ -79,8 +79,8 @@ class Newton(DriverContract):
     contract, and nothing that runs.'''
 
     accepts = staticmethod(is_root_find)
-    takes   = (Start, Budget)
-    reports = (Steps,)
+    takes      = (Start, Budget)
+    may_report = (Steps,)
 
 
 class ScalarNewton(DriverImplementation[Newton]):
@@ -123,8 +123,9 @@ def run(graph, given) -> OrderedMap:
 
 
 def driven(implementation=newton, *after) -> Plan:
-    '''The model, `Newton` assigned at its defaults and implemented by `implementation`.'''
-    plan = Plan(model()) + assign(CLOSE, Newton())
+    '''The model, `Newton` assigned at its defaults, its steps asked for, and implemented by
+    `implementation`.'''
+    plan = Plan(model()) + assign(CLOSE, Newton(), asks=(Steps,))
     for op in (*after, implement({CLOSE: implementation})):
         plan = plan + op
     return plan
@@ -133,13 +134,16 @@ def driven(implementation=newton, *after) -> Plan:
 # ---------------------------------------------------------------- the run
 
 def test_role_places_are_minted_off_each_unknown_and_off_the_problem():
-    assert ROLE_PLACES(CLOSE, (U,), Newton()) == (((START,), (BUDGET,)), ((STEPS,),))
+    condition = RelationalCondition((Relation(R_U, None, Eq),), (), (U,), ())
+    assert tuple(ROLE_PLACES(CLOSE, condition, Newton(), role) for role in (Start, Budget, Steps)
+                 ) == ((START,), (BUDGET,), (STEPS,))
 
 
 def test_a_role_with_no_rule_is_refused_by_name():
     from cottax.consumers.surface.refusals import NoPlaceFor
     with pytest.raises(KeyError, match='Budget has no place'):
-        RolePlaces(OrderedMap(((Start, purposes.Start()),)))(CLOSE, (U,), Newton())
+        condition = RelationalCondition((Relation(R_U, None, Eq),), (), (U,), ())
+        RolePlaces(OrderedMap(((Start, purposes.Start()),)))(CLOSE, condition, Newton(), Budget)
 
 
 def test_a_role_takes_its_nearest_ancestors_rule():
@@ -152,7 +156,7 @@ def test_a_start_renamed_onto_a_model_is_still_the_start():
     '''A warm start from another node's output: one place moved, the role untouched --
     the Newton reads `Start` and never learns where it came from.'''
     graph = driven(newton, Rename(CLOSE, ((START, K),))).graph
-    assert graph[CLOSE].driver.data[0] == (K,)
+    assert graph[CLOSE].driver.data[Start] == (K,)
     out = run(graph, {X: 1.0, BUDGET: 50})
     assert math.isclose(out[U], exact_u(1.0), rel_tol=1e-12)
 

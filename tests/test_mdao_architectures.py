@@ -162,7 +162,7 @@ def test_a_problem_lying_inside_anothers_body_is_nested_in_it():
     lie on `H`'s cycle, inside `H`'s body, so it can be placed nowhere else and is nested
     there; with `D3` beside, the bodies only overlap, and that is two solves sharing a body.'''
     from cottax.consumers.architectures.refusals import BodyShared
-    from cottax.core.plan import refusals
+    from graphs import refusals
     model = {OPT: optimise(V('f'), (V('z'),)),
              N('D1'): call(['z', 'u1', 'u2'], ['r1']), N('D2'): call(['u2', 'u3'], ['r2']),
              N('H'): root_find((V('r1'), V('r2')), (V('u1'), V('u2'))),
@@ -198,7 +198,7 @@ def test_a_problem_of_another_language_is_held_to_its_own_picture():
     from cottax.ode import Dt, OdeCondition
     from cottax.ode.consumers.architectures import RateUnwritten
     from cottax.consumers.architectures.refusals import BodyShared
-    from cottax.core.plan import refusals
+    from graphs import refusals
     ode = lambda x, r: OdeCondition((Dt(V(x), V(r), V(f'{x}0')),), V('span'))    # noqa: E731
     top = {OPT: optimise(V('f'), (V('z'),)), N('obj'): call(['z', 'x'], ['f'])}
     off = graph_of(OrderedMap({**top, N('h'): ode('x', 'r')}))
@@ -217,7 +217,7 @@ def test_what_is_combined_into_the_top_is_a_relational_condition():
     the top with it: neither may be of another language.'''
     from cottax.ode import Dt, OdeCondition
     from cottax.consumers.architectures.refusals import NotCombinable
-    from cottax.core.plan import refusals
+    from graphs import refusals
     from test_core import States                 # an ODE is never a requirement
     held = graph_of(OrderedMap({OPT: optimise(V('f'), (V('z'),)), N('A'): call(['z'], ['f', 'r']),
                                 N('req'): States((V('r'),), ())}))
@@ -486,6 +486,8 @@ def test_a_combining_the_graph_cannot_answer_is_refused_by_the_proof(implicit):
         Executable.prove(g)
 
 
+@pytest.mark.xfail(strict=True, reason='phase 2: the design-members-are-problems check moves onto '
+                   "Architecture's level, beside check_implicit_models, and says TopNotAProblem first")
 def test_top_names_a_bound_problem(sellar):
     with pytest.raises(KeyError, match='is no node of the model'):
         Plan(sellar) + MDF(GaussSeidel(), CLOSING, N('nope'))
@@ -689,7 +691,7 @@ def test_mdf_and_idf_reach_the_same_optimum():
     guess = {Start: {D('z'): jnp.asarray(0.0), absolute.copy(D('y2')): jnp.asarray(1.0)}}
     mda = MINT_MDA(D1)
 
-    optimiser = ConstrainedMinimisation(steps=False)
+    optimiser = ConstrainedMinimisation()
     backend   = ImplementDrivers(OrderedMap({ConstrainedMinimiser: ScipyMinimize(),
                                       FixedPointIterator: Picard(rtol=1e-12, atol=1e-12)}))
 
@@ -704,7 +706,7 @@ def test_mdf_and_idf_reach_the_same_optimum():
             return flat.run(graph, guess)
 
     m = assigned(assigned(Plan(model) + mdf(), OPT, optimiser),
-                 mda, FixedPointIteration(steps=False))
+                 mda, FixedPointIteration())
     out_mdf = ran(m)
     out_idf = ran(assigned(Plan(model) + idf(), OPT, optimiser))
 

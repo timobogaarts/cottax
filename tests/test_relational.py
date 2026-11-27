@@ -28,7 +28,7 @@ from cottax.core import ConditionalNode, FunctionalNode, owns_inside, violations
 from cottax.core.maths.definition import ReadsOwn
 from cottax.core.maths.kinds import ReadOnBothSides
 from cottax.core.realisation import implemented
-from cottax.core.driven import driven as with_driver
+from cottax.core.conditional import Start, driven as with_driver
 from cottax.relational.contracts import RootFinding, is_iteration
 from cottax.assemblies.jax import absolute
 
@@ -362,8 +362,8 @@ def test_a_shape_predicate_answers_false_off_a_relational_condition():
 def test_a_driven_nodes_shape_is_its_conditions():
     """A shape is read off a condition, and a driven node keeps its condition as it was, so
     its shape is the same before and after `Assign`: a drawing asks the node's condition."""
-    driven = with_driver(root_find((v('r'),), (v('u'),)), RootFinding(steps=False),
-                         ((purposes.Start()(v('u')),),), ())
+    driven = with_driver(root_find((v('r'),), (v('u'),)), RootFinding(),
+                         OrderedMap({Start: (purposes.Start()(v('u')),)}))
     assert is_root_find(driven.condition)
     assert problem_type_of(driven) == 'root-find'
 
@@ -388,11 +388,11 @@ def test_combine_folds_relational_conditions_by_their_join_and_no_driven_one():
     driven node is refused, to be driven after the fold."""
     from cottax.consumers.architectures import Combine
     from cottax.consumers.architectures.refusals import FoldsDriven
-    from cottax.core import refusals
+    from graphs import refusals
     a, b = root_find((v('r'),), (v('u'),)), fixed_point((v('g'),), (v('w'),))
     fold = Combine(n('a'), (n('a'), n('b')), RelationalCondition)
     assert fold.apply(graph_of({n('a'): a, n('b'): b}))[n('a')] == ConditionalNode(a.join(b))
-    driven = with_driver(a, RootFinding(steps=False), ((purposes.Start()(v('u')),),), ())
+    driven = with_driver(a, RootFinding(), OrderedMap({Start: (purposes.Start()(v('u')),)}))
     assert list(refusals(fold, graph_of({n('a'): driven, n('b'): b}))) == [FoldsDriven((n('a'),))]
 
 
@@ -427,7 +427,7 @@ def test_a_problem_with_no_conditions_is_off_its_cycle():
     vacuously true here, and once let it through.
     """
     p = Plan(graph_with(RelationalCondition((Relation(v('u'), None, Eq),), (), (v('u'),), ())))
-    p = p + assign(n('c'), RootFinding(steps=False))
+    p = p + assign(n('c'), RootFinding())
     assert p.graph[n('c')].reads_inside == ()
     with pytest.raises(ValueError, match='in no cycle'):
         Executable.prove(p.graph)

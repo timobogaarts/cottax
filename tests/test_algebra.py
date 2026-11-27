@@ -13,7 +13,7 @@ from jax.tree_util import GetAttrKey
 from cottax.core.frozen import OrderedMap, violations
 from cottax.pytree.path import NodePath, VarPath
 from cottax.core import FunctionalNode, body, conditions, Dependencies, Nesting, Valid, Contract
-from cottax.core.plan.ops import BlockTooSmall, NodeInTwoBlocks
+from cottax.core.plan.primitive_ops import BlockTooSmall, NodeInTwoBlocks
 from cottax.core.realisation import implemented
 from cottax.relational import Eq, Relation, RelationalCondition
 from cottax.consumers.visualization.sequencing import entries

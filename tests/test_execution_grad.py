@@ -17,7 +17,7 @@ from jax.tree_util import DictKey
 
 from cottax.core import FunctionalNode
 from cottax.core.frozen import OrderedMap
-from cottax.core.driven import driven as with_driver
+from cottax.core.conditional import Start, driven as with_driver
 from cottax.relational.contracts import RootFinding
 from cottax.consumers.execution import Runnable, run
 import purposes
@@ -52,8 +52,8 @@ def call(reads, owns, fn) -> 'FunctionalNode':
 
 def driven(relations, unknowns) -> 'ConditionalNode':
     condition = RelationalCondition(tuple(relations), (), tuple(unknowns), ())
-    return implemented(with_driver(condition, RootFinding(steps=False),
-                                    tuple((STARTS(u),) for u in unknowns), ()), newton)
+    return implemented(with_driver(condition, RootFinding(),
+                                    OrderedMap({Start: tuple(STARTS(u) for u in unknowns)})), newton)
 
 
 STARTS = purposes.Start()

@@ -11,7 +11,7 @@ import numpy as np
 from scipy.optimize import minimize
 
 from .....core import Violation, first
-from .....core.driven import Steps
+from .....core.conditional import Steps
 from .....core.frozen import choice
 from .....relational import RelationalCondition, programme
 from .....relational.contracts import ConstrainedMinimiser

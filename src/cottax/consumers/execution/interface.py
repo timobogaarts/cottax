@@ -15,7 +15,7 @@ from typing import Any, TypeVar, get_args, get_origin
 
 from ...core import Place
 from ...core.frozen import AbstractClassVar, Answer, Choice, Frozen, OrderedMap
-from ...core.driven import DriverContract, Role
+from ...core.conditional import DriverContract, Role
 from .interface_types import ByRole, Context, Posed, Unknowns
 
 

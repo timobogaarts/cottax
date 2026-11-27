@@ -74,6 +74,10 @@ class per_node_check[N: Label, V: Place]:
             yield from self.node(name, definition)
 
 
+class AnyGraph(Rules):
+    '''No rules: any graph holds it. What an op assuming nothing of its input needs.'''
+
+
 def _own(graph: Graph, group: type[Rules]) -> Iterator[Violation]:
     '''The violations of `group`'s own rules, not its bases'.'''
     for rule in group.__dict__.get('rules', ()):

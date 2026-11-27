@@ -9,7 +9,7 @@ from typing import Any, Protocol
 
 from ...core import ConditionalNode, Graph, Place
 from ...core.frozen import Frozen
-from ...core.driven import Role
+from ...core.conditional import Role
 
 
 class Model(Protocol):
@@ -57,7 +57,7 @@ class Posed[V: Place](Frozen):
     what they mean.'''
 
     reports    : tuple[type[Role], ...]
-    '''The roles asked back: the driver's `reports`.'''
+    '''The roles asked back: those the driver reports at.'''
     
     conditions : ConditionMap
     '''`conditions(unknowns, context)`: the value at each of `condition.reads`, the

@@ -21,7 +21,7 @@ from cottax.relational.consumers.execution.jax_solvers.canonical_nlp import (
     Box, Canonical, canonical, scaled, scaled_unknowns, unscaled_unknowns,
 )
 from cottax.relational.contracts import CONTRACTS, ConstrainedMinimisation, Scales
-from cottax.core.driven import Start
+from cottax.core.conditional import Start
 from cottax.relational.programme import (
     ScaleOnABound, ScaleOnNoConstraint, ScaleOnNoUnknown, check_scaling, scales_by_group,
 )
@@ -204,19 +204,22 @@ STARTS = {'z': 0.0, COPY: M}
 OF_M = flat.scaling(unknowns={COPY: M}, constraints={COPY: M})
 
 
-def test_the_default_contract_takes_no_scales():
-    assert ConstrainedMinimisation(steps=False).takes == (Start,)
-    assert ConstrainedMinimisation(steps=False, scaled=True).takes == (Start, Scales)
-    assert ConstrainedMinimisation(steps=False) in CONTRACTS
+def test_the_contract_takes_scales_only_when_asked():
+    '''`Scales` is data the contract may take: placed when asked for, and not required.'''
+    contract = ConstrainedMinimisation()
+    assert contract.takes == (Start,) == contract.required(())
+    assert Scales in contract.may_be_given and contract in CONTRACTS
+    assert Scales in study(asks=(cx.Scales,)).graph[cx.absolute.node('OPT')].driver.data
+    assert Scales not in study().graph[cx.absolute.node('OPT')].driver.data
     with pytest.raises(KeyError, match='takes Start'):
         flat.run(study(), {cx.Start: STARTS, Scales: {'z': OF_M}})
 
 
 def test_a_scaling_gets_the_answer_a_badly_scaled_idf_otherwise_misses():
     '''Unscaled, scipy calls `y2`'s relation met while it is still far off.'''
-    without = flat.run(study(contracts=cx.SCALED), {cx.Start: STARTS, Scales: {'z': Scaling()}})
+    without = flat.run(study(asks=(cx.Scales,)), {cx.Start: STARTS, Scales: {'z': Scaling()}})
     plain   = flat.run(study(), {cx.Start: STARTS})
-    out     = flat.run(study(contracts=cx.SCALED), {cx.Start: STARTS, Scales: {'z': OF_M}})
+    out     = flat.run(study(asks=(cx.Scales,)), {cx.Start: STARTS, Scales: {'z': OF_M}})
     assert float(without['z']) == float(plain['z'])
     assert abs(float(plain['z']) - 1.0) > 1e-3
     assert float(out['z']) == pytest.approx(1.0, abs=1e-6)
@@ -225,7 +228,7 @@ def test_a_scaling_gets_the_answer_a_badly_scaled_idf_otherwise_misses():
 
 
 def test_a_scaling_and_its_scales_may_be_traced():
-    ran = study(contracts=cx.SCALED)
+    ran = study(asks=(cx.Scales,))
     def solved(scale):
         return flat.run(ran, {cx.Start: STARTS, Scales: {'z': flat.scaling(
             unknowns={COPY: scale}, constraints={COPY: scale})}})['z']
@@ -238,7 +241,7 @@ def test_a_scaling_and_its_scales_may_be_traced():
 def test_a_scale_neither_finite_nor_non_zero_is_refused_by_name(scale, traced, of):
     '''Not a solver's failure to converge at the end of its iterations: under a jit too, where
     the scale is traced and SLSQP runs inside a callback.'''
-    ran = study(contracts=cx.SCALED)
+    ran = study(asks=(cx.Scales,))
     def solved(s):
         return flat.run(ran, {cx.Start: STARTS, Scales: {'z': flat.scaling(
             unknowns={COPY: s} if of == 'unknown' else {},
@@ -265,7 +268,7 @@ def test_scipy_is_handed_everything_in_the_scaling(monkeypatch):
 
     opt = flat.optimise(minimise='f', design={'x': (None, 4.0)},
                         subject_to=flat.requirement(flat.place('h')))
-    ran = cx.absolute.declare(model, {'OPT': opt}) + flat.drive(cx.ScipyMinimize(), contracts=cx.SCALED)
+    ran = cx.absolute.declare(model, {'OPT': opt}) + flat.drive(cx.ScipyMinimize(), asks=(cx.Scales,))
     out = flat.run(ran, {cx.Start: {'x': 0.0}, Scales: {'x': flat.scaling(
         unknowns={'x': 2.0}, objective=3.0, constraints={'h': 1e8})}})
     assert handed == {'objective': 3.0, 'bounds': [(None, 2.0)], 'residual': [[-1.0]]}
@@ -274,7 +277,7 @@ def test_scipy_is_handed_everything_in_the_scaling(monkeypatch):
 
 def test_a_key_of_another_architecture_is_refused_when_it_runs():
     '''Written for IDF's copy: MDF's problem has no such unknown or constraint.'''
-    ran = study(architecture=flat.mdf, contracts=cx.SCALED)
+    ran = study(architecture=flat.mdf, asks=(cx.Scales,))
     with pytest.raises(ValueError, match='a scale at'):
         flat.run(ran, {cx.Start: {'z': 0.0, COPY: M}, Scales: {'z': OF_M}})
 
@@ -282,7 +285,7 @@ def test_a_key_of_another_architecture_is_refused_when_it_runs():
 # ---------------------------------------------------------------- at a place of the graph
 
 def test_a_scaling_is_a_read_of_the_graph_and_drawn():
-    ran = study(contracts=cx.SCALED)
+    ran = study(asks=(cx.Scales,))
     place = flat.place(cx.scales('OPT'))
     assert place in ran.graph.boundary_inputs
     assert 'scales' in cx.render_xdsm_svg(ran)
@@ -295,7 +298,7 @@ def test_a_node_may_compute_the_scaling():
     def scaling_from(magnitude):
         return flat.scaling(unknowns={COPY: magnitude}, constraints={COPY: magnitude})
 
-    ran = study(scaling_from, contracts=cx.SCALED)
+    ran = study(scaling_from, asks=(cx.Scales,))
     out = flat.run(ran, {cx.Inputs: {'magnitude': M}, cx.Start: STARTS})
     assert float(out['z']) == pytest.approx(1.0, abs=1e-6)
     with pytest.raises(ValueError, match='it takes no value'):
@@ -309,28 +312,13 @@ def test_a_scale_read_from_the_solve_itself_is_refused():
         return flat.scaling(unknowns={COPY: y2})
 
     with pytest.raises(ValueError, match='driver'):
-        flat.run(study(scaling_from, contracts=cx.SCALED), {cx.Start: STARTS})
+        flat.run(study(scaling_from, asks=(cx.Scales,)), {cx.Start: STARTS})
 
 
 # ---------------------------------------------------------------- written out
 
-def test_a_scaled_contract_is_written_and_read_back():
-    written = json.loads(json.dumps(write_json(study(contracts=cx.SCALED).graph, False)))
-    back = read_json(written)
-    opt = cx.absolute.node('OPT')
-    assert back[opt].driver.contract == ConstrainedMinimisation(steps=False, scaled=True)
-
-
-def test_a_contract_written_before_scaled_existed_reads_back_unscaled():
-    written = json.loads(json.dumps(write_json(study().graph, False)))
-    def without(node):
-        if isinstance(node, dict):
-            node.get('fields', {}).pop('scaled', None)
-            for v in node.values():
-                without(v)
-        elif isinstance(node, list):
-            for v in node:
-                without(v)
-    without(written)
+def test_a_scaled_driver_is_written_and_read_back():
+    '''The scales are a role the driver is placed at, written by name like any other.'''
+    written = json.loads(json.dumps(write_json(study(asks=(cx.Scales,)).graph, False)))
     back = read_json(written)[cx.absolute.node('OPT')]
-    assert back.driver.contract == ConstrainedMinimisation(steps=False)
+    assert back.driver.contract == ConstrainedMinimisation() and Scales in back.driver.data

@@ -43,20 +43,21 @@ def check_implements_its_driver[N: Label, V: Place](name: N, node: NodeDefinitio
     Check:
     - is the implementation a `DriverImplementation`
     - is the node implementing the driver contract?
-    - Is the implementation capable of taking and reporting the contract's (chosen) input
-    data and reports?
+    - Is the implementation capable of taking and reporting what the driver is given and
+    asked for?
     '''
     if is_driven(node) and is_implemented(node):
-        implementation, contract = implementation_of(node), node.driver.contract
+        implementation, driver = implementation_of(node), node.driver
+        contract = driver.contract
         if not isinstance(implementation, DriverImplementation):
             yield NotADriverImplementation(name, implementation)
         elif not isinstance(contract, implementation.implements):
             yield ImplementsAnother(name, type(contract).__name__,
                                     implementation.implements.__name__)
         else:
-            if missing := tuple(r for r in implementation.needs if r not in contract.takes):
+            if missing := tuple(r for r in implementation.needs if r not in driver.data):
                 yield DataMissing(name, type(implementation).__name__, _names(missing))
-            if absent := tuple(r for r in contract.reports if r not in implementation.provides):
+            if absent := tuple(r for r in driver.reports if r not in implementation.provides):
                 yield ReportUnavailable(name, type(implementation).__name__, _names(absent))
 
 
@@ -155,14 +156,14 @@ def _solve(node: ConditionalNode, interior: Graph, env: Env) -> None:
 
     # Solve: posed what the values mean and what is asked back, nothing of the graph
     values, reports = implementation_of(node)(
-        Posed(node.condition, driver.contract.reports, conditions, conditions.context_places),
+        Posed(node.condition, driver.reports.keys(), conditions, conditions.context_places),
         env.read(conditions.context_places),
-        dict(zip(driver.contract.takes, map(env.read, driver.data))))
+        {role: env.read(places) for role, places in driver.data.items()})
 
     # Add unknowns and reports to data
     env.write(node.owns_inside, values)
-    for role, slot in zip(driver.contract.reports, driver.reports):
-        env.write(slot, reports[role])
+    for role, places in driver.reports.items():
+        env.write(places, reports[role])
     # Walk interior again for consistent values in non-unknowns.
     walk(interior, env, _solve)
 

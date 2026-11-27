@@ -111,7 +111,7 @@ def test_a_problem_leads_the_block_it_drives(sellar):
     drawing permutes it there -- within the block's own slots, so `.obj` (which sits
     between `.d1` and `.d2` in binding order) does not move.
     '''
-    g = FixedPointCut((Cut(V('y2'), (N('d1'),), HAT),), PROBLEM(N('y2')))(sellar)
+    g = FixedPointCut((Cut(V('y2'), (N('d1'),), HAT),), PROBLEM(N('y2'))).apply(sellar)
     assert [n.spelling for n in g.nodes] == ['.z', '.d1', '.obj', '.d2', '^solve.y2']
 
     assert xdsm_struct(g)['steps'] == ['.z', '^solve.y2', '.obj', '.d1', '.d2']
@@ -334,11 +334,11 @@ def test_the_struct_keys_by_spelling_and_carries_what_is_drawn(sellar):
     '''Every name keyed by its plain spelling, whatever a formatter makes of it, and what
     is drawn for each carried beside it -- so no renderer spells.'''
     op     = FixedPointCut((Cut(V('y2'), (N('d1'),), HAT),), PROBLEM(N('y2')))
-    struct = xdsm_struct(op(sellar), formatter=PLAIN)
+    struct = xdsm_struct(op.apply(sellar), formatter=PLAIN)
     assert '^solve.y2' in struct['steps'] and '^copy.y2' in struct['producer']
     assert struct['shown_steps']['^solve.y2'] == ('solve(.y2)', None)
     assert struct['shown_vars']['^copy.y2'] == ('hat(.y2)', None)
-    assert xdsm_struct(op(sellar), formatter=CARET)['shown_vars']['^copy.y2'] == ('.y2', 'hat')
+    assert xdsm_struct(op.apply(sellar), formatter=CARET)['shown_vars']['^copy.y2'] == ('.y2', 'hat')
 
 
 def test_two_places_spelled_alike_are_refused_naming_both():
@@ -364,7 +364,7 @@ def test_two_node_names_spelled_alike_are_refused_naming_both():
 
 
 def test_a_cut_copy_is_drawn_with_a_hat_when_the_formatter_says_so(sellar):
-    cut = Cut(V('y2'), [N('d1')], HAT)(sellar)
+    cut = Cut(V('y2'), [N('d1')], HAT).apply(sellar)
     svg = render_xdsm_svg(cut, formatter=CARET)
     assert '^copy' not in svg                    # the namespace is a spelling, not a label
     assert svg.count('<polyline class="deco"') == 1

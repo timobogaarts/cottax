@@ -13,12 +13,13 @@ from jax.tree_util import GetAttrKey
 
 from cottax.core.frozen import OrderedMap
 from cottax.relational import Min, Objective
-from cottax.core.plan import Cut, Insert, Plan, refusals
+from cottax.core.plan import Cut, Insert, Plan
+from graphs import refusals
 from cottax.core import Condition, ConditionalNode, FunctionalNode, body, conditions, Dependencies
-from cottax.core.driven import Assign, driven as with_driver
+from cottax.core.conditional import Assign, driven as with_driver
 from cottax.core import is_driven
-from cottax.core.driven import DriverContract
-from cottax.core.driven import Start
+from cottax.core.conditional import DriverContract
+from cottax.core.conditional import Start
 from cottax.assemblies.jax import absolute
 
 assign = absolute.assign
@@ -29,7 +30,7 @@ from cottax.relational import (
 from cottax.consumers.architectures import Combine
 from cottax.relational.rewrites import Determine, FixedPointCut, Undetermine
 from cottax.relational.contracts import RootFinding
-from cottax.core.driven import Undrive
+from cottax.core.conditional import Undrive
 from cottax.core.maths.graph import Graph
 from cottax.consumers.visualization.kinds import problem_type_of
 from cottax.pytree.path import NodePath, VarPath
@@ -122,16 +123,16 @@ def test_a_closure_inherits_the_cut_preconditions(sellar, looped):
     with pytest.raises(ValueError, match='no readers'):
         FixedPointCut((Cut(Y1, (), HAT),), PROBLEM(N('y1')))
     with pytest.raises(KeyError, match='nothing to cut'):
-        closure(sellar, Y1)(graph_of(OrderedMap({N('d2'): call([Y1], [Y2])})))
+        closure(sellar, Y1).apply(graph_of(OrderedMap({N('d2'): call([Y1], [Y2])})))
     with pytest.raises(KeyError, match='not a node of this graph'):
-        FixedPointCut((Cut(Y1, (N('nope'),), HAT),), PROBLEM(N('y1')))(looped)
+        FixedPointCut((Cut(Y1, (N('nope'),), HAT),), PROBLEM(N('y1'))).apply(looped)
 
 
 def test_a_fixed_point_cut_is_one_node_and_stays_cyclic(looped):
     '''The loop is re-closed through the problem, and the relation's right side *is*
     the next iterate, so there is nothing to subtract.'''
     o = closure(looped, Y1)
-    g = o(looped)
+    g = o.apply(looped)
     assert names(g) == ['.d1', '.d2', '.obj', '^solve.y1']
     assert not Dependencies.of(g).is_acyclic
     assert conditions(g.definitions) == (o.at,)
@@ -146,7 +147,7 @@ def test_the_closure_is_exactly_its_parts(looped):
     where the parts are two.'''
     cut = opening(looped, Y1)
     fp  = FixedPointCut((cut,), PROBLEM(NodePath(cut.var.segments)))
-    assert fp(looped) == (looped + cut + Insert(OrderedMap({fp.at: fp.definition}))).graph
+    assert fp.apply(looped) == (looped + cut + Insert(OrderedMap({fp.at: fp.definition}))).graph
 
 
 def test_the_minted_names_follow_their_own_roots(looped):
@@ -156,7 +157,7 @@ def test_the_minted_names_follow_their_own_roots(looped):
     fp  = FixedPointCut((cut,), PROBLEM(NodePath(cut.var.segments)))
     assert cut.copy.spelling == '^guess.y1'
     assert fp.at.spelling == '^solve.y1'
-    assert Dependencies.of(fp(looped)).owner[cut.copy] == fp.at
+    assert Dependencies.of(fp.apply(looped)).owner[cut.copy] == fp.at
 
 
 def test_closure_repr(looped):
@@ -181,7 +182,7 @@ def test_a_closure_over_several_cuts_is_one_problem(two_cycles):
     by one driver in one iteration -- which is the whole difference from two closures.'''
     op = FixedPointCut((Cut(Y2, (N('d1'),), HAT), Cut(Z, (N('d1'), N('d2'),), HAT)),
                        PROBLEM(N('mda')))
-    g  = op(two_cycles)
+    g  = op.apply(two_cycles)
 
     assert op.at.spelling == '^solve.mda'
     assert [v.spelling for v in op.copies] == ['^copy.y2', '^copy.z']
@@ -195,7 +196,7 @@ def test_that_is_the_graph_two_cuts_and_a_combine_reach(two_cycles):
     '''Same graph, said in one op instead of three -- so the pairing is what is recorded
     rather than something a reader has to spot across three entries in `Plan.ops`.'''
     cuts = (Cut(Y2, (N('d1'),), HAT), Cut(Z, (N('d1'), N('d2'),), HAT))
-    one  = FixedPointCut(cuts, PROBLEM(N('mda')))(two_cycles)
+    one  = FixedPointCut(cuts, PROBLEM(N('mda'))).apply(two_cycles)
 
     a = FixedPointCut((cuts[0],), PROBLEM(NodePath(cuts[0].var.segments)))
     b = FixedPointCut((cuts[1],), PROBLEM(NodePath(cuts[1].var.segments)))
@@ -236,7 +237,7 @@ def two_problems():
 
 def test_combine_is_one_problem_over_every_unknown(two_problems):
     op = Combine(PROBLEM(N('mda')), (N('ha'), N('hb'),), RelationalCondition)
-    g  = op(two_problems)
+    g  = op.apply(two_problems)
 
     assert names(g) == ['.fa', '.fb', '^solve.mda']
     assert g[op.at].owns  == (M, Z)                 # concatenated, in `problems` order
@@ -248,13 +249,13 @@ def test_combine_is_the_join_written_by_hand(two_problems):
     op = Combine(PROBLEM(N('mda')), (N('ha'), N('hb'),), RelationalCondition)
     joined = ConditionalNode(two_problems[N('ha')].condition.join(two_problems[N('hb')].condition))
     assert op.definition(two_problems) == joined
-    assert op(two_problems)[op.at] == joined
+    assert op.apply(two_problems)[op.at] == joined
 
 
 def test_combining_makes_one_component(two_problems):
     '''The whole point: the blocking follows, so nothing has to state it.'''
     assert len(Dependencies.of(two_problems).cycles) == 2
-    g = Combine(PROBLEM(N('mda')), (N('ha'), N('hb'),), RelationalCondition)(two_problems)
+    g = Combine(PROBLEM(N('mda')), (N('ha'), N('hb'),), RelationalCondition).apply(two_problems)
     assert [[n.spelling for n in c] for c in Dependencies.of(g).cycles] == [['.fa', '.fb', '^solve.mda']]
 
 
@@ -267,7 +268,7 @@ def test_combining_pulls_in_what_lies_between():
         N('fb')  : call([C, Z], [Y2]),
         N('hb')  : root_find((Y2,), (Z,)),
     }))
-    h = Combine(PROBLEM(N('mda')), (N('ha'), N('hb'),), RelationalCondition)(g)
+    h = Combine(PROBLEM(N('mda')), (N('ha'), N('hb'),), RelationalCondition).apply(g)
     assert sorted(n.spelling for n in Dependencies.of(h).cycles[0]) == ['.fa', '.fb', '.glue', '^solve.mda']
 
 
@@ -284,7 +285,7 @@ def mdf():
 def test_an_optimise_absorbs_a_root_find(mdf):
     '''SAND: the unknowns join the design, the vanishing relations join the constraints.'''
     op = Combine(PROBLEM(N('sand')), (N('opt'), N('h'),), RelationalCondition)
-    g  = op(mdf)
+    g  = op.apply(mdf)
     joined = g[op.at].condition
 
     assert is_optimise(joined)
@@ -303,17 +304,17 @@ def test_two_fixed_points_stay_a_fixed_point():
         N('hb'): fixed_point((Y2,), (Z,)),
     }))
     op = Combine(PROBLEM(N('mda')), (N('ha'), N('hb'),), RelationalCondition)
-    assert is_fixed_point(op(g)[op.at].condition)
+    assert is_fixed_point(op.apply(g)[op.at].condition)
 
 
 def test_a_fold_refuses_a_node_that_is_not_the_kind_it_declared(two_problems):
     '''The kind is asked where the graph is read, so the refusal names which node and
     what it found -- against the join's own error, which names only two types.'''
     with pytest.raises(TypeError, match='well-defined over one kind only') as e:
-        Combine(PROBLEM(N('mda')), (N('ha'), N('fb'),), RelationalCondition)(two_problems)
+        Combine(PROBLEM(N('mda')), (N('ha'), N('fb'),), RelationalCondition).apply(two_problems)
     assert '.fb' in str(e.value) and 'FunctionalNode' in str(e.value)
     with pytest.raises(KeyError, match='not a node of this graph'):
-        Combine(PROBLEM(N('mda')), (N('ha'), N('nope'),), RelationalCondition)(two_problems)
+        Combine(PROBLEM(N('mda')), (N('ha'), N('nope'),), RelationalCondition).apply(two_problems)
 
 
 def test_a_fold_refuses_a_driven_problem(two_problems):
@@ -323,7 +324,7 @@ def test_a_fold_refuses_a_driven_problem(two_problems):
     fold = Combine(PROBLEM(N('mda')), (N('ha'), N('hb'),), RelationalCondition)
     assert [type(v).__name__ for v in refusals(fold, driven)] == ['FoldsDriven']   # as data
     with pytest.raises(TypeError, match='carry a driver'):
-        fold(driven)
+        fold.apply(driven)
 
 
 def test_a_fold_declares_what_it_folds(two_problems):
@@ -347,7 +348,7 @@ def test_a_fold_at_a_name_it_folds_keeps_that_binding(two_problems):
     '''The one decision the op records beside the join: naming one of the problems it
     folds lands on `Replace`, so the binding -- name and place in the order -- survives.'''
     op = Combine(N('ha'), (N('ha'), N('hb'),), RelationalCondition)
-    g  = op(two_problems)
+    g  = op.apply(two_problems)
 
     assert [n.spelling for n in g.nodes] == ['.fa', '.ha', '.fb']   # `.ha` where it was
     assert g[N('ha')] == ConditionalNode(
@@ -358,7 +359,7 @@ def test_a_fold_at_a_name_it_does_not_fold_is_refused(two_problems):
     '''A binding of its own is an insertion, so it may not land on a node that stays --
     the join would replace something it never read.'''
     with pytest.raises(ValueError, match='already bound'):
-        Combine(N('fa'), (N('ha'), N('hb'),), RelationalCondition)(two_problems)
+        Combine(N('fa'), (N('ha'), N('hb'),), RelationalCondition).apply(two_problems)
 
 
 def test_a_fold_needs_two_nodes_counting_the_one_it_binds_at(two_problems):
@@ -385,13 +386,13 @@ def test_a_rewire_works_on_a_statement_that_groups_its_places():
     }))
     # The optimiser is not even a reader here: every node of the graph is rebuilt.
     cut = Cut(Y1, (N('m'),), HAT)
-    out = cut(g)
+    out = cut.apply(g)
     assert out[N('m')].reads == (Z, cut.copy)
     assert out[N('opt')] is g[N('opt')]              # untouched, and the same object
 
     # ... and when it *is* the reader, the relation's operator survives the rename.
     op    = Cut(C, (N('opt'),), HAT)
-    moved = op(g)
+    moved = op.apply(g)
     assert is_optimise(moved[N('opt')].condition)
     assert moved[N('opt')].condition.relations == (Relation(op.copy, None, Eq),)
     assert moved[N('opt')].condition.objectives == (Objective(F, Min),) and moved[N('opt')].condition.unknowns == (Z,)
@@ -404,7 +405,6 @@ class Started(DriverContract):
     runs: what is under test is what the op writes into the graph.'''
 
     takes   = (Start,)
-    reports = ()
 
 
 def assigned(plan: Plan, problem, driver) -> Plan:
@@ -426,7 +426,7 @@ def test_assign_derives_one_start_per_unknown(sellar):
     node = g[cut.at]
 
     assert is_driven(node) and is_fixed_point(node.condition)
-    assert node.driver.data == ((START(HAT(Y2)),),)
+    assert node.driver.data == OrderedMap({Start: (START(HAT(Y2)),)})
     assert START(HAT(Y2)) in g.boundary_inputs
 
 
@@ -436,11 +436,10 @@ def test_assign_derives_nothing_for_a_driver_requiring_nothing(sellar):
     class SelfStarting(DriverContract):
         accepts = staticmethod(is_fixed_point)
         takes   = ()                        # starts itself from zeros
-        reports = ()
 
     cut = closure(sellar, Y2)
     g   = assigned(Plan(sellar) + cut, cut.at, SelfStarting()).graph
-    assert g[cut.at].driver.data == ()
+    assert g[cut.at].driver.data == OrderedMap()
     assert g[cut.at].reads == g[cut.at].reads_inside
 
 
@@ -448,11 +447,11 @@ def test_assign_refuses_a_body_and_a_second_time(sellar):
     # A body answers nothing, so there is no condition node to attach an algorithm to; and
     # replacing one algorithm with another silently is not a rewrite -- `Undrive` says it.
     with pytest.raises(TypeError, match='not a condition node'):
-        Plan(sellar) + Assign(N('d2'), Picard(), ((START(Y2),),), ())
+        Plan(sellar) + Assign(N('d2'), Picard(), OrderedMap({Start: (START(Y2),)}))
     cut  = closure(sellar, Y2)
     plan = assigned(Plan(sellar) + cut, cut.at, Picard())
     with pytest.raises(TypeError, match='already carries a'):
-        plan + Assign(cut.at, Picard(), ((START(Y2),),), ())
+        plan + Assign(cut.at, Picard(), OrderedMap({Start: (START(Y2),)}))
 
 
 def test_assign_refuses_a_driver_that_answers_another_shape(sellar):
@@ -473,7 +472,7 @@ def test_assign_keeps_an_optimise_start_apart_from_its_conditions():
     opt = assigned(Plan(g), N('opt'), Descent()).graph[N('opt')]
 
     assert is_driven(opt) and is_optimise(opt.condition)
-    assert opt.driver.data == ((START(V('x')),),)
+    assert opt.driver.data == OrderedMap({Start: (START(V('x')),)})
     assert opt.reads_inside == (V('f'),)
 
 
@@ -493,7 +492,7 @@ def test_a_rewire_reaches_the_statement_a_driver_wraps():
 
     assert [p.spelling for p in after.reads] == ['^copy.r', '^start.u']
     assert [p.spelling for p in after.reads_inside] == ['^copy.r']     # renamed, still a condition
-    assert [p.spelling for slot in after.driver.data for p in slot] == ['^start.u']   # untouched
+    assert [p.spelling for slot in after.driver.data.values() for p in slot] == ['^start.u']   # untouched
 
 
 # ---------------------------------------------------------------- the unknowns
@@ -561,16 +560,16 @@ def driven() -> Plan:
     refusal.'''
     g = graph_of(OrderedMap({N('m'): plain([U], [R]),
                           N('c'): RelationalCondition((Relation(R, None, Eq),), (), (U,), ())}))
-    return Plan(g) + assign(N('c'), RootFinding(steps=False))
+    return Plan(g) + assign(N('c'), RootFinding())
 
 
 def test_what_a_driven_statement_determines_cannot_be_edited():
     '''The algorithm was chosen for the problem as it stands and its data is derived
     from the unknowns it had: a driven node derives what it owns inside, so both ops refuse.'''
     p = driven()
-    with pytest.raises(TypeError, match='`Undrive` it first'):
+    with pytest.raises(TypeError, match='`Undrive` it, set what it owns inside'):
         p + Determine(N('c'), (Z,))
-    with pytest.raises(TypeError, match='`Undrive` it first'):
+    with pytest.raises(TypeError, match='`Undrive` it, set what it owns inside'):
         p + Undetermine(N('c'))
 
 
@@ -583,7 +582,7 @@ def test_undriving_first_is_what_makes_it_editable():
 def test_every_rewrite_case_has_wording():
     """The ops' own checks, each formatting: what `__post_init__` used to raise."""
     from cottax.core import violations
-    from cottax.core import refusals
+    from graphs import refusals
     from cottax.core.refusal_kinds import OwnedInsideTwice, OwnsInsideNotAChoice
     from cottax.relational.rewrites import (
         AlreadyDetermined, AlreadyUndetermined, CutTwice, NoUnknowns, NothingCut,

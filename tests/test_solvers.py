@@ -15,8 +15,8 @@ from jax.tree_util import DictKey
 from cottax.core import FunctionalNode
 from cottax.relational import Min, Objective
 from cottax.core.frozen import OrderedMap
-from cottax.core.driven import driven as with_driver
-from cottax.core.driven import Start, Steps
+from cottax.core.conditional import driven as with_driver
+from cottax.core.conditional import Start, Steps
 from cottax.relational.contracts import FixedPointIteration, Minimisation, RootFinding
 from cottax.consumers.execution import Runnable, run
 from cottax.consumers.execution.interface_types import ConditionMap, Posed
@@ -103,13 +103,13 @@ def test_next_values_are_the_right_sides_in_the_order_of_the_unknowns():
 
 def driven_node(condition, driver, reports=()):
     '''A start per unknown.'''
-    return with_driver(condition, driver, (tuple(STARTS(u) for u in condition.unknowns),),
-                  tuple((p,) for p in reports))
+    return with_driver(condition, driver, OrderedMap({Start: tuple(STARTS(u) for u in condition.unknowns)}),
+                       OrderedMap({Steps: tuple(reports)} if reports else {}))
 
 
 def posed(node, conditions) -> Posed:
     '''What an implementation is posed for `node`, tried through `conditions`.'''
-    return Posed(node.condition, node.driver.contract.reports, conditions, ())
+    return Posed(node.condition, tuple(node.driver.reports), conditions, ())
 
 
 SQUARE_ROOT = RelationalCondition((Relation(V('r'), None, Eq),), (), (V('u'),), ())
@@ -117,8 +117,8 @@ SQUARE_ROOT = RelationalCondition((Relation(V('r'), None, Eq),), (), (V('u'),), 
 
 @pytest.mark.slow
 def test_a_newton_reports_its_steps_only_when_asked():
-    quiet  = driven_node(SQUARE_ROOT, RootFinding(steps=False))
-    counts = driven_node(SQUARE_ROOT, RootFinding(steps=True), [V('n')])
+    quiet  = driven_node(SQUARE_ROOT, RootFinding())
+    counts = driven_node(SQUARE_ROOT, RootFinding(), [V('n')])
     start  = {Start: (jnp.asarray(1.0),)}
 
     (u,), reports = Newton(**TIGHT)(posed(quiet, SquareGap()), (jnp.asarray(9.0),), start)
@@ -144,7 +144,7 @@ class CountedSquareGap(ConditionMap):
 def test_an_eager_newton_compiles_once_per_node_not_once_per_call():
     '''What optimistix is handed is a module-level function, and the node and the map ride
     in `args` as static keys, so a second solve of the same node is a cache hit.'''
-    node, start = driven_node(SQUARE_ROOT, RootFinding(steps=False)), 1.0
+    node, start = driven_node(SQUARE_ROOT, RootFinding()), 1.0
     CALLS.clear()
     for z in (4.0, 9.0, 16.0):
         (u,), _ = Newton(**TIGHT)(posed(node, CountedSquareGap()), (jnp.asarray(z),),
@@ -159,7 +159,7 @@ def test_an_eager_newton_compiles_once_per_node_not_once_per_call():
 def test_a_newton_counts_squareness_in_leaves_not_relations():
     node = driven_node(RelationalCondition((Relation(V('r1'), None, Eq),
                                             Relation(V('r2'), None, Eq)), (), (V('u'),), ()),
-                       RootFinding(steps=False))
+                       RootFinding())
     (u,), _ = Newton(**TIGHT)(posed(node, TwoOfOne()), (), {Start: (jnp.asarray([1.0, 0.0]),)})
     assert u.tolist() == pytest.approx([2.0, 1.0], rel=1e-10)
 
@@ -192,7 +192,7 @@ def cosine(driver, implementation, reports=()) -> Runnable:
 BOWL = graph_of(OrderedMap({
     N('f')  : call([V('u'), V('a')], [V('f')], lambda u, a: (u - a) ** 2 + 1.0),
     N('opt'): driven(RelationalCondition((), (Objective(V('f'), Min),), (V('u'),), ()),
-                     Minimisation(steps=True), BFGS(**TIGHT), [V('n')]),
+                     Minimisation(), BFGS(**TIGHT), [V('n')]),
 }))
 Runnable.prove(BOWL)
 
@@ -211,8 +211,8 @@ def jitted(graph, wanted):
 
 
 @pytest.mark.parametrize('driver, implementation', [
-    (RootFinding(steps=True), Newton(**TIGHT)),
-    (FixedPointIteration(steps=True), Picard(**TIGHT)),
+    (RootFinding(), Newton(**TIGHT)),
+    (FixedPointIteration(), Picard(**TIGHT)),
 ], ids=['newton', 'picard'])
 def test_a_fixed_point_runs_on_newton_and_picard_tracing_once(driver, implementation):
     '''A fixed point is equalities too, so a `RootFinding` answers it through its gaps;
@@ -241,7 +241,7 @@ def test_the_proof_refuses_a_solver_on_a_contract_it_does_not_implement():
         Runnable.prove(graph_of(OrderedMap({
             N('f')  : call([V('u'), V('a')], [V('f')], lambda u, a: (u - a) ** 2),
             N('opt'): driven(RelationalCondition((), (Objective(V('f'), Min),), (V('u'),), ()),
-                             Minimisation(steps=False), Newton()),
+                             Minimisation(), Newton()),
         })))
     with pytest.raises(TypeError, match='implements a FixedPointIterator'):
-        cosine(RootFinding(steps=False), Picard())
+        cosine(RootFinding(), Picard())

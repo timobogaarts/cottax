@@ -1,6 +1,6 @@
 '''
-`relational/contracts.py`: the levels accept by shape, the finals' flags toggle their roles, and
-an implementation of a level covers every final under it -- in a toy place of plain
+`relational/contracts.py`: the levels accept by shape, the finals declare the roles they take
+and may report, and an implementation of a level covers every final under it -- in a toy place of plain
 strings, so the contracts are shown generic in the place.
 '''
 
@@ -11,11 +11,12 @@ from dataclasses import dataclass
 import pytest
 
 from cottax.core import ConditionalNode, violations
+from cottax.core.frozen import OrderedMap
 from cottax.relational import Min, Objective
-from cottax.core.driven import driven, driving_violations
-from cottax.core.driven import DriverContract, PerProblem, PerUnknown
-from cottax.core.driven.driver import NotAccepted
-from cottax.core.driven import Start, Steps
+from cottax.core.conditional import driven, driving_violations
+from cottax.core.conditional import DriverContract, PerProblem, PerUnknown
+from cottax.core.conditional.driver import NotAccepted
+from cottax.core.conditional import Start, Steps
 from cottax.relational.contracts import (
     ConstrainedMinimisation, ConstrainedMinimiser, FixedPointIteration,
     FixedPointIterator, Minimisation, Minimiser, RootFinder, RootFinding,
@@ -57,16 +58,16 @@ ACCEPTED = {
     ConstrainedMinimiser: {'minimise', 'constrained'},
 }
 
-EVERY = [RootFinding(steps=t) for t in (False, True)] + \
-        [FixedPointIteration(steps=t) for t in (False, True)] + \
-        [Minimisation(steps=t) for t in (False, True)] + \
-        [ConstrainedMinimisation(steps=t) for t in (False, True)]
+EVERY = [RootFinding(), FixedPointIteration(), Minimisation(), ConstrainedMinimisation()]
 
 
 # ---------------------------------------------------------------- the roles
 
 def test_the_shipped_roles_take_as_many_places_as_their_kind():
-    assert [r.arity(FIXED_POINT) for r in (Start, Steps)] == [2, 1]
+    '''A role's places stand for what its `index` says: a start for each unknown, the steps
+    for the problem as a whole.'''
+    assert [r.index(FIXED_POINT, RootFinding()) for r in (Start, Steps)] == [(U, V), (None,)]
+    assert [r.arity(FIXED_POINT, RootFinding()) for r in (Start, Steps)] == [2, 1]
     assert issubclass(Start, PerUnknown) and issubclass(Steps, PerProblem)
 
 
@@ -86,8 +87,8 @@ def test_an_iterator_refuses_a_fixed_point_without_one_update_per_unknown():
     for node in (twice, once):
         assert is_fixed_point(node) and RootFinder.accepts(node)
         assert not FixedPointIterator.accepts(node)
-        assert [type(v) for v in driving_violations(ConditionalNode(node), FixedPointIteration(steps=False),
-                                             *slots(FixedPointIteration(steps=False), node))
+        assert [type(v) for v in driving_violations(ConditionalNode(node), FixedPointIteration(),
+                                                    *slots(FixedPointIteration(), node))
                 ] == [NotAccepted]
 
 
@@ -101,41 +102,40 @@ def test_a_level_is_abstract_and_a_final_is_under_exactly_one_level():
         assert isinstance(final, DriverContract)
 
 
-def test_every_flag_is_required():
-    for final in (RootFinding, FixedPointIteration, Minimisation, ConstrainedMinimisation):
-        with pytest.raises(TypeError):
-            final()
-
-
 # ---------------------------------------------------------------- the finals
 
-def test_the_flags_toggle_the_optional_roles():
-    assert [(d.takes, d.reports) for d in EVERY] == [
-        ((Start,), ()),       ((Start,), (Steps,)),
-        ((Start,), ()),       ((Start,), (Steps,)),
-        ((Start,), ()),       ((Start,), (Steps,)),
-        ((Start,), ()),       ((Start,), (Steps,)),
+def test_the_finals_declare_what_they_take_and_may_report():
+    '''Every final starts from a `Start` and may report `Steps`; a constrained minimisation
+    may be given `Scales` too. Nothing is a flag: a report is asked for by placing it.'''
+    from cottax.relational.contracts import Scales
+    assert [(tuple(d.takes), tuple(d.may_take), tuple(d.may_report)) for d in EVERY] == [
+        ((Start,), (), (Steps,)), ((Start,), (), (Steps,)), ((Start,), (), (Steps,)),
+        ((Start,), (Scales,), (Steps,)),
     ]
+    assert [d.required((Steps,)) for d in EVERY] == [(Start,)] * 4
 
 
 def test_equal_contracts_hash_alike_and_different_ones_differ():
     '''A contract is a jit key: by value, and by its final.'''
-    counted = ConstrainedMinimisation(steps=True)
-    assert counted == ConstrainedMinimisation(steps=True)
-    assert hash(counted) == hash(ConstrainedMinimisation(steps=True))
+    assert ConstrainedMinimisation() == ConstrainedMinimisation()
+    assert hash(ConstrainedMinimisation()) == hash(ConstrainedMinimisation())
     assert len(set(EVERY)) == len(EVERY)
-    assert FixedPointIteration(steps=True) != Minimisation(steps=True)
-    assert RootFinding[Word](steps=False) == RootFinding(steps=False)
+    assert FixedPointIteration() != Minimisation()
+    assert RootFinding[Word]() == RootFinding()
 
 
 # ---------------------------------------------------------------- driven, in a toy place
 
-def slots(driver: DriverContract, node: RelationalCondition) -> tuple:
-    '''Each role at its namespace, one place per unknown or one per problem.'''
+def slots(contract: DriverContract, node: RelationalCondition, asks: tuple = ()) -> tuple:
+    '''The data the contract requires and the roles `asks` names, each at its namespace: a
+    place per entry of its `index`, named after the unknown it stands for, or `p` for the
+    problem as a whole.'''
     def at(role):
-        many = node.unknowns if issubclass(role, PerUnknown) else (W('p'),)
-        return tuple(W(f'^{role.__name__.lower()}.{u}') for u in many)
-    return tuple(map(at, driver.takes)), tuple(map(at, driver.reports))
+        return tuple(W(f'^{role.__name__.lower()}.{"p" if s is None else s}')
+                     for s in role.index(node, contract))
+    reports = tuple(r for r in asks if r in contract.may_report)
+    data = (*contract.required(reports), *(r for r in asks if r not in reports))
+    return OrderedMap((r, at(r)) for r in data), OrderedMap((r, at(r)) for r in reports)
 
 
 # ---------------------------------------------------------------- what implements a contract
@@ -166,8 +166,8 @@ class Minimises(DriverImplementation[ConstrainedMinimisation]):
         raise NotImplementedError
 
 
-def refusals(driver: DriverContract, implementation, condition=ROOT_FIND) -> list:
-    node = driven(condition, driver, *slots(driver, condition))
+def refusals(driver: DriverContract, implementation, condition=ROOT_FIND, asks=()) -> list:
+    node = driven(condition, driver, *slots(driver, condition, asks))
     return [type(v) for v in check_implements_its_driver.node(W('p'),
                                                          implemented(node, implementation))]
 
@@ -181,7 +181,6 @@ def test_an_implementation_implements_a_level_or_a_final_through_a_generic_level
 
 
 def test_an_implementation_of_a_level_answers_every_final_under_it():
-    plain = RootFinding(steps=True)
-    assert refusals(plain, AnyRootFinder()) == []
-    assert refusals(plain, OnlyRootFinding()) == []
-    assert refusals(ConstrainedMinimisation(steps=False), Minimises(), CONSTRAINED) == []
+    assert refusals(RootFinding(), AnyRootFinder(), asks=(Steps,)) == []
+    assert refusals(RootFinding(), OnlyRootFinding(), asks=(Steps,)) == []
+    assert refusals(ConstrainedMinimisation(), Minimises(), CONSTRAINED) == []

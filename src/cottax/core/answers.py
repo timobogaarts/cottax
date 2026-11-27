@@ -1,7 +1,5 @@
 '''
-The one `Answer` for a whole graph: the one registered for its place class, or its label
-class. An interface of core's, like `mints`, not maths: a lookup in the registry keyed by
-the classes a graph is over, and no statement about the graph.
+Answer for places/labels from a graph directly (convenience only)
 '''
 
 from collections.abc import Iterator, Sequence
@@ -41,7 +39,7 @@ def answer_for_labels[A: Answer](interface: type[A], graph: Graph) -> A:
     Its refusals are `violations(answer_for_labels, ...)`.'''
     return answer(interface, graph.nodes[0])
 
-
+# ----------------------------------------- violation finals
 class NothingToAsk(Violation):
     interface : str
     what      : str

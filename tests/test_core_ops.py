@@ -1,5 +1,5 @@
 '''
-`core/plan/ops.py`'s edits on what a node reads and owns: `Cut`, which names no
+`core/plan/primitive_ops.py`'s edits on what a node reads and owns: `Cut`, which names no
 relation. `Determine` / `Undetermine` are relational's, and `test_rewrites.py`'s.
 
 Names are built by hand from key entries, as in `test_algebra.py` and `test_rewrites.py`.
@@ -9,7 +9,8 @@ import pytest
 from jax.tree_util import GetAttrKey
 
 from cottax.core import FunctionalNode, Dependencies
-from cottax.core.plan import Cut, Insert, Plan, refusals
+from cottax.core.plan import Cut, Insert, Plan
+from graphs import refusals
 import purposes
 from cottax.core.frozen import OrderedMap
 from cottax.pytree.path import NodePath, VarPath
@@ -83,7 +84,7 @@ def opening(graph, var):
 def test_a_bare_cut_leaves_the_producer_droppable(looped):
     '''The hazard: `d2` was the only reader of `y1`, so after the cut nothing reads it
     and restricting to what `f` needs drops `d1` -- the cut has silently become a delete.'''
-    assert names(contributing(opening(looped, Y1)(looped), F)) == ['.d2', '.obj']
+    assert names(contributing(opening(looped, Y1).apply(looped), F)) == ['.d2', '.obj']
 
 
 def test_a_residual_makes_the_pair_an_edge(looped):
@@ -139,14 +140,12 @@ def test_what_an_op_needs_of_the_graph_can_be_asked_for(boundary_fed, sellar):
         unproduced.apply(boundary_fed)
 
 
-def test_an_ops_own_precondition_is_asked_before_the_one_it_inherits(boundary_fed):
-    """`Rewire`'s check reads the renaming `Cut` computes, so the derived level is asked
-    first -- otherwise a cut of a place the reader has not got reports the inherited
-    refusal and never says nothing produces it."""
+def test_a_cut_says_why_together(boundary_fed):
+    """A cut's own checks are one level, so both are said: nothing produces the place, and
+    the reader does not read it."""
     off = Cut(V('nope'), (N('a'),), HAT)          # `.a` does not read `.nope` either
     assert [type(v).__name__ for v in refusals(off, boundary_fed)] == ['NotProduced',
-                                                                       'DoesNotRead',
-                                                                       'NotRenamed']
+                                                                       'DoesNotRead']
 
 
 def test_a_cut_names_its_copy_by_the_function_it_carries():

@@ -1,17 +1,17 @@
 r'''
-What runs a node, at any level, a driven one included. Takes `core` and `driven/`. Generic
+What runs a node, at any level, a driven one included. Takes `core` and `conditional/`. Generic
 in the place, and no backend's.
 
 Dependency:
 
-driven/                          (is_driven: a driven node is implemented by what runs its driver)
+conditional/                     (is_driven: a driven node is implemented by what runs its driver)
  ||
  \/
 implemented                      (Implementation, the attribute a node carries; implemented /
  ||                               implementation_of / is_implemented; Implement /
  ||                               Unimplement, ImplementDrivers; the rule an implementation
  \/                               fits its node by, check_implementation_fits)
-proof                            (Realised over driven.Driven: every node implemented,
+proof                            (Realised over conditional.Driven: every node implemented,
                                   each where it fits)
 
 '''

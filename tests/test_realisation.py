@@ -1,5 +1,5 @@
 '''
-`driven/` and `realisation/` alone: the driver contract, the driven node, the two
+`conditional/`'s driver and `realisation/` alone: the driver contract, the driven node, the two
 implemented finals and the edits putting each on, over `core` and nothing else.
 
 Everything runs in a toy place of plain strings, with a condition node that holds no relation,
@@ -18,10 +18,11 @@ import inspect
 from dataclasses import dataclass
 
 import pytest
+from graphs import refusals
 
 from cottax.core import (
     AbstractConditionalNode, Condition, ConditionalNode, FunctionalNode, Graph, Rename, Replace,
-    first, refusals,
+    first,
     violations,
 )
 from cottax.core.maths.definition import relabelled
@@ -29,18 +30,20 @@ from cottax.core.refusal_kinds import OwnsInsideDriven
 from cottax.core.realisation.implemented import ImplementationWithoutDriver
 from cottax.relational.rewrites import Undetermine
 from cottax.core.frozen import OrderedMap
-from cottax.core.driven import Assign, driven as with_driver, driving_violations, Driven, Undrive
+from cottax.core.conditional import Assign, AssignByRule, driven as with_driver, driving_violations, Driven, Undrive
 from cottax.core import is_driven
-from cottax.core.driven import DriverContract, PerProblem, PerUnknown, Role
-from cottax.core.driven.driver import NotAccepted, RoleMisplaced, RoleTwice, RoleUnsized, SlotsMiscounted
-from cottax.core.driven.ops import DrivenTwice, NotAConditionalNode, NotDriven
-from cottax.core.driven.proof import Undriven
+from cottax.core.conditional import DriverContract, PerProblem, PerUnknown, Role
+from cottax.core.conditional.driver import (
+    IndexRepeats, NotAccepted, NotOffered, RoleMisplaced, RoleMissing, RoleOnBothSides, RoleUnsized,
+)
+from cottax.core.conditional.assign import DrivenTwice, NotAConditionalNode, NotDriven
+from cottax.core.conditional.proof import Undriven
 from cottax.core.realisation import (
     Implement, check_implementation_fits, implemented, Realised, Unimplement,
     implementation_of, is_implemented,
 )
 from cottax.core.realisation.proof import NoImplementation
-from cottax.core.plan.ops import (
+from cottax.core.plan.primitive_ops import (
     AttributeAlreadySet, AttributeNotSet, NoAttributeNamed,
 )
 
@@ -98,41 +101,59 @@ def single(statement) -> bool:
 
 
 class Solo(DriverContract):
-    '''A contract and nothing else: what it accepts and the roles it plays.'''
-    accepts = staticmethod(single)
-    takes   = (Start, Budget)
-    reports = (Steps,)
+    '''A contract and nothing else: what it accepts, the data it takes, what it may report.'''
+    accepts    = staticmethod(single)
+    takes      = (Start, Budget)
+    may_report = (Steps,)
 
 
 class Bare(DriverContract):
     '''No roles: a driver that adds no edge.'''
     accepts = staticmethod(lambda statement: True)
     takes   = ()
-    reports = ()
 
 
-class Twice(DriverContract):
-    '''A role listed twice: a run hands data over by role, so one slot would be lost.'''
-    accepts = staticmethod(lambda statement: True)
-    takes   = (Start, Start)
-    reports = ()
+class Echo(DriverContract):
+    '''A role it may both take and report: a guess and an answer would share one key.'''
+    accepts    = staticmethod(lambda statement: True)
+    takes      = (Start,)
+    may_report = (Start,)
 
 
 class Unsized(DriverContract):
-    '''A role that is neither per unknown nor per problem.'''
+    '''A role that says nothing of what its places stand for.'''
     accepts = staticmethod(lambda statement: True)
     takes   = (Role,)
-    reports = ()
+
+
+class Times(PerProblem):
+    '''Where a history is saved: data a report needs of its own.'''
+
+class History(PerUnknown):
+    '''Each unknown at every one of the `Times`.'''
+
+
+class Recording(DriverContract):
+    '''May report a `History`, and then takes the `Times` it is saved at.'''
+    accepts      = staticmethod(lambda statement: True)
+    takes        = ()
+    may_report   = (History,)
+    report_needs = {History: (Times,)}
 
 
 u, v, r, k, g = W('u'), W('v'), W('r'), W('k'), W('g')
-NONE = ((), ())
+NONE = (OrderedMap(), OrderedMap())
+
+
+def by_role(*pairs) -> OrderedMap:
+    return OrderedMap(pairs)
 
 
 def placed(unknowns=(u,)) -> tuple:
-    '''Where `Solo`'s roles sit for a problem over `unknowns`: its data, its reports.'''
-    return ((tuple(W(f'^start.{x}') for x in unknowns), (W('^budget.solve'),)),
-            ((W('^steps.solve'),),))
+    '''Where `Solo`'s roles sit for a problem over `unknowns`, `Steps` asked: its data, its
+    reports.'''
+    return (by_role((Start, tuple(W(f'^start.{x}') for x in unknowns)), (Budget, (W('^budget.solve'),))),
+            by_role((Steps, (W('^steps.solve'),))))
 
 
 def graph():
@@ -170,12 +191,15 @@ def test_a_role_is_a_symbol_and_not_a_value():
         Start()
 
 
-def test_the_places_are_one_slot_per_role():
-    '''Slot `i` is role `takes[i]`; both flattened after the problem's own reads and
-    owns -- `reads`, not `conditions`.'''
+def test_the_places_are_kept_by_role():
+    '''Per role, its places; both sides flattened after the problem's own reads and owns --
+    `reads`, not `conditions` -- and each place paired with what it stands for.'''
     node = with_driver(Holds((r,), (u,), (k,)), Solo(), *placed())
-    assert node.driver.data    == ((W('^start.u'),), (W('^budget.solve'),))
-    assert node.driver.reports == ((W('^steps.solve'),),)
+    assert node.driver.data    == by_role((Start, (W('^start.u'),)), (Budget, (W('^budget.solve'),)))
+    assert node.driver.reports == by_role((Steps, (W('^steps.solve'),)))
+    assert node.driver.places_for(Start, node.condition) == {u: W('^start.u')}
+    assert node.driver.places_for(Steps, node.condition) == {None: W('^steps.solve')}
+    assert node.driver.places_for(Role, node.condition) is None
     assert node.reads   == (r, k, W('^start.u'), W('^budget.solve'))
     assert node.owns    == (u, W('^steps.solve'))
     # what every rule reads outside is the condition's and the driver's together
@@ -202,20 +226,59 @@ def test_the_pairing_is_refused_by_kind(statement, driver, places, found):
 
 
 @pytest.mark.parametrize('data, reports, found', [
-    (((W('^start.u'),),),               ((g,),),  [SlotsMiscounted]),
-    (placed()[0],                       (),       [SlotsMiscounted]),
-    (((), (W('^budget.solve'),)),       ((g,),),  [RoleMisplaced]),
-    (((W('^start.u'),), (g, k)),        ((W('^steps.solve'),),), [RoleMisplaced]),
+    (by_role((Start, (W('^start.u'),))),                        by_role((Steps, (g,))), [RoleMissing]),
+    (placed()[0],                                                by_role(),              []),
+    (by_role(*placed()[0].items(), (Steps, (k,))),              by_role(),              [NotOffered]),
+    (placed()[0],                                                by_role((History, (g,))), [NotOffered]),
+    (by_role((Start, ()), (Budget, (W('^budget.solve'),))),     by_role((Steps, (g,))), [RoleMisplaced]),
+    (by_role((Start, (W('^start.u'),)), (Budget, (g, k))),      placed()[1],            [RoleMisplaced]),
 ])
-def test_one_slot_per_role_and_the_right_number_of_places(data, reports, found):
+def test_the_required_roles_and_the_right_number_of_places(data, reports, found):
+    '''Every role it takes is given; a report is optional, asked for by placing it; a role
+    the contract does not offer on that side is refused; each role sits at as many places as
+    its `index` has entries.'''
     assert kinds(driving_violations(Holds((r,), (u,)), Solo(), data, reports)) == found
+
+
+def test_a_report_may_need_data_of_its_own():
+    '''`Recording` takes nothing, until a `History` is asked for: then the `Times` too.'''
+    history, times = by_role((History, (W('^history.u'),))), by_role((Times, (W('^times'),)))
+    assert kinds(driving_violations(Holds((r,), (u,)), Recording(), by_role(), by_role())) == []
+    assert kinds(driving_violations(Holds((r,), (u,)), Recording(), by_role(), history)) == [RoleMissing]
+    assert kinds(driving_violations(Holds((r,), (u,)), Recording(), times, history)) == []
+    assert Recording().required((History,)) == (Times,) and Recording().may_be_given == (Times,)
+
+
+def test_a_driver_that_does_not_fit_is_never_built():
+    '''Whether the driver fits is the node's own rule: built by hand, or rebuilt with a
+    condition its driver no longer fits, the node is refused as it is made.'''
+    with pytest.raises(ValueError, match='its `accepts` is `single`'):
+        with_driver(Holds((r,), (u, v)), Solo(), *placed((u, v)))
+    node = with_driver(Holds((r,), (u,)), Recording(), by_role((Times, (W('^times'),))),
+                       by_role((History, (W('^history.u'),))))
+    with pytest.raises(ValueError, match='takes 2 on this node'):
+        dataclasses.replace(node, condition=Holding((r,), (u, v)))
+    with pytest.raises(TypeError, match='already carries an algorithm'):
+        with_driver(node, Bare())
+
+
+def test_an_index_names_each_place_once():
+    class Doubled(PerProblem):
+        @classmethod
+        def index(cls, condition, contract):
+            return (None, None)
+    class Doubling(DriverContract):
+        accepts = staticmethod(lambda statement: True)
+        takes   = (Doubled,)
+    found = driving_violations(Holds((r,), (u,)), Doubling(), by_role((Doubled, (g, k))), by_role())
+    assert kinds(found) == [IndexRepeats]
 
 
 def test_a_condition_refused_for_what_it_states_is_refused_for_that_first():
     '''The driver's rules are asked once the condition passes its own: a condition
     determining and reading nothing is refused as empty when it is built, before any driver
     is attached, not as something `Solo` does not accept.'''
-    from cottax.core.driven import Driver
+    from cottax.core.conditional import Driver
     from cottax.core.refusal_kinds import StatesNothing
     solo = Driver(Solo(), *placed(()))
     with pytest.raises(ValueError, match='an empty condition node'):
@@ -227,9 +290,9 @@ def test_what_a_driver_accepts_is_asked_of_the_condition_without_it():
     '''`accepts` sees the condition alone: neither the driver's places nor its name.'''
     seen = []
     class Spying(DriverContract):
-        accepts = staticmethod(lambda node: seen.append(node) or True)
-        takes   = (Start, Budget)
-        reports = (Steps,)
+        accepts    = staticmethod(lambda node: seen.append(node) or True)
+        takes      = (Start, Budget)
+        may_report = (Steps,)
     assert list(driving_violations(Holds((r,), (u,)), Spying(), *placed())) == []
     assert seen and all(type(n) is Holding and n.reads == (r,) for n in seen)
     with pytest.raises(ValueError) as refused:
@@ -237,14 +300,17 @@ def test_what_a_driver_accepts_is_asked_of_the_condition_without_it():
     assert ' by ' not in str(refused.value)
 
 
-def test_a_role_says_how_many_places_it_takes():
-    assert kinds(driving_violations(Holds((r,), (u,)), Unsized(), ((g,),), ())) == [RoleUnsized]
+def test_a_role_says_what_its_places_stand_for():
+    assert kinds(driving_violations(Holds((r,), (u,)), Unsized(), by_role((Role, (g,))), by_role())
+                 ) == [RoleUnsized]
 
 
-def test_arity_is_asked_of_the_role_class():
-    '''A role is a class, so `arity` is a class method, bound by its level.'''
+def test_index_is_asked_of_the_role_class():
+    '''A role is a class, so `index` is a class method, bound by its level; `arity` is how
+    many entries it has.'''
     node = Holding((r,), (u, v))
-    assert (PerUnknown.arity(node), Start.arity(node), Budget.arity(node)) == (2, 2, 1)
+    assert (Start.index(node, Solo()), Budget.index(node, Solo())) == ((u, v), (None,))
+    assert (PerUnknown.arity(node, Solo()), Start.arity(node, Solo()), Budget.arity(node, Solo())) == (2, 2, 1)
     assert inspect.isabstract(Role)
 
 
@@ -275,7 +341,7 @@ def test_a_rename_moves_the_place_and_keeps_the_role():
     slot it sits in is still `Start`.'''
     driven = Assign(W('solve'), Solo(), *placed()).apply(graph())
     moved  = Rename(W('solve'), ((W('^start.u'), g),)).apply(driven)[W('solve')]
-    assert moved.driver.data == ((g,), (W('^budget.solve'),))
+    assert moved.driver.data == by_role((Start, (g,)), (Budget, (W('^budget.solve'),)))
 
 
 def test_renaming_an_unknown_moves_that_place_and_no_other():
@@ -336,7 +402,7 @@ def test_implement_then_unimplement_is_the_function_again():
 
 @pytest.mark.parametrize('op, found', [
     (lambda: Assign(W('body'), Bare(), *NONE),           [NotAConditionalNode]),
-    (lambda: Assign(W('solve'), Solo(), *NONE),          [SlotsMiscounted, SlotsMiscounted]),
+    (lambda: Assign(W('solve'), Solo(), *NONE),          [RoleMissing]),
     (lambda: Undrive(W('solve')),                        [NotDriven]),
     (lambda: Implement(OrderedMap({W('solve'): print})), [ImplementationWithoutDriver]),
     (lambda: Unimplement((W('body'),)),                  [AttributeNotSet]),
@@ -421,7 +487,7 @@ def test_an_implemented_driven_node_keeps_what_runs_it_through_a_rename():
     driven = Assign(W('solve'), Solo(), *placed()).apply(graph())
     done   = Implement(OrderedMap({W('solve'): print})).apply(driven)
     moved  = Rename(W('solve'), ((W('^start.u'), g),)).apply(done)[W('solve')]
-    assert is_implemented(moved) and moved.driver.data[0] == (g,)
+    assert is_implemented(moved) and moved.driver.data[Start] == (g,)
 
 
 def test_one_op_implements_several_nodes_and_takes_them_off():
@@ -451,5 +517,18 @@ def test_driven_then_realised():
     assert recalled(done, Driven)
 
 
-def test_a_role_is_one_slot():
-    assert kinds(driving_violations(Holds((r,), (u,)), Twice(), ((g,), (k,)), ())) == [RoleTwice]
+def test_a_role_is_on_one_side():
+    found = driving_violations(Holds((r,), (u,)), Echo(), by_role((Start, (g,))), by_role((Start, (k,))))
+    assert kinds(found) == [RoleOnBothSides]
+
+
+def test_assign_by_rule_places_what_is_asked_and_what_it_needs():
+    '''The rule is given each role and the condition; `asks` wires a report, and a report
+    the contract does not offer is refused before anything is placed.'''
+    rule = lambda problem, condition, contract, role: tuple(
+        W(f'^{role.__name__.lower()}.{problem if s is None else s}') for s in role.index(condition, contract))
+    driven = AssignByRule(W('solve'), Solo(), rule, (Steps,)).apply(graph())[W('solve')]
+    assert (driven.driver.data, driven.driver.reports) == placed()
+    plain = AssignByRule(W('solve'), Solo(), rule).apply(graph())[W('solve')]
+    assert plain.driver.reports == by_role() and plain.driver.data == placed()[0]
+    assert kinds(violations(AssignByRule, W('solve'), Solo(), rule, (History,))) == [NotOffered]

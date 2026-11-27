@@ -17,9 +17,9 @@ from cottax.core import ConditionalNode,  Mint, minted
 import purposes
 from cottax.core.frozen import OrderedMap, answer, choice
 from cottax.core.plan import Plan
-from cottax.core.driven import Assign
-from cottax.core.driven import DriverContract, PerUnknown
-from cottax.core.driven import Start
+from cottax.core.conditional import Assign
+from cottax.core.conditional import DriverContract, PerUnknown
+from cottax.core.conditional import Start
 from cottax.relational.contracts import CONTRACTS, FixedPointIteration
 from cottax.consumers.execution import Runnable, Drive, run
 from cottax.consumers.execution.interface import DriverImplementation
@@ -173,7 +173,6 @@ class Bisect(DriverContract):
     '''A root find inside a bracket: a contract cottax does not ship.'''
     accepts = staticmethod(is_root_find)
     takes   = (Low, High)
-    reports = ()
 
 
 @choice(DriverImplementation)
@@ -286,8 +285,8 @@ def test_a_second_vocabulary_joins_and_its_problems_are_driven_by_its_own_contra
     drive = Drive((Picard(), Bisection()), (Bisect(), *CONTRACTS), places)
     assigned = [op for op in drive.composed(d.graph) if isinstance(op, Assign)]
     assert [(op.problem, op.contract) for op in assigned] == [
-        (T('^bracket.root'), Bisect()), (T('^solve.iterate'), FixedPointIteration(steps=False))]
-    assert assigned[0].data == ((T('^lo.x'),), (T('^hi.x'),))
+        (T('^bracket.root'), Bisect()), (T('^solve.iterate'), FixedPointIteration())]
+    assert assigned[0].data == OrderedMap({Low: (T('^lo.x'),), High: (T('^hi.x'),)})
 
     graph = (Plan(d.graph) + drive).graph
     out = run(GraphWithValues(graph, OrderedMap({

@@ -1,13 +1,13 @@
 '''`Driving` and `Running`: driving a model's problems, and running it on values written by
 name or read from a caller's structures, as a surface's methods.'''
 
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Collection, Iterator, Mapping
 from typing import Any
 
 from ...core import Label, Minting, Graph, Place, PlaceToPlace, Rules, owns_inside, Dependencies
-from ...core.driven import AssignByRule, role_slots
+from ...core.conditional import AssignByRule, role_slots
 from ...core import is_driven
-from ...core.driven import DriverContract, Role
+from ...core.conditional import DriverContract, Role
 from ...core.frozen import AbstractVar, OrderedMap, answer
 from ..surface.interface import Part
 from ..surface.interface_types import RolePlaces, Surface
@@ -30,18 +30,22 @@ class Driving(Part):
     role_places : AbstractVar[RolePlaces]
     '''Where a driver's data and reports go, a rule per role.'''
 
-    def assign(self, problem: Label, contract: DriverContract) -> AssignByRule:
+    def assign(self, problem: Label, contract: DriverContract, asks: Collection[type[Role]] = ()
+               ) -> AssignByRule:
         '''The problem driven by `contract`, each of its roles where `role_places` puts it,
-        read off the problem when the op is applied.'''
-        return AssignByRule(problem, contract, self.role_places)
+        read off the problem when the op is applied; `asks` the optional ones wired, a report
+        asked for (`Steps`) or a datum given (`Scales`).'''
+        return AssignByRule(problem, contract, self.role_places, tuple(asks))
 
     def drive(self, *implementations: Any,
-              contracts: tuple[DriverContract, ...] | None = None) -> Drive:
+              contracts: tuple[DriverContract, ...] | None = None,
+              asks: Collection[type[Role]] = ()) -> Drive:
         '''Every undriven problem driven by the first of `implementations` accepting it, under
-        the first of the contracts it implements, of `contracts` or else the surface's; a
-        problem driven already implemented by the first covering its contract.'''
+        the first of the contracts it implements, of `contracts` or else the surface's, each
+        role of `asks` wired where its contract offers it; a problem driven already
+        implemented by the first covering its contract.'''
         return Drive(implementations, self.contracts if contracts is None else contracts,
-                     self.role_places)
+                     self.role_places, tuple(asks))
 
 
 class Results(Mapping):
@@ -159,7 +163,7 @@ class Running(Part):
         found = [t for t in table if t.key is key and t.problem == at and t.unknown in (unknown, None)]
         if not found:
             why = ('which no driver answers' if not is_driven(node) else
-                   f'whose driver takes {", ".join(r.__name__ for r in node.driver.contract.takes)}')
+                   f'whose driver takes {", ".join(r.__name__ for r in node.driver.data)}')
             raise NotDriverData(at, key.__name__, why).raised
         if found[0].place not in graph.boundary_inputs:
             raise TakesNoValue(at, key.__name__, found[0].place).raised

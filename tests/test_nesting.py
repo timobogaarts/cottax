@@ -13,8 +13,8 @@ from jax.tree_util import GetAttrKey as G
 
 from cottax.core.maths.executable import Executable, check_nestings_share_a_cycle
 from cottax.relational import Min, Objective
-from cottax.core.driven import Assign
-from cottax.core.driven import DriverContract
+from cottax.core.conditional import Assign
+from cottax.core.conditional import DriverContract
 from cottax.core import ConditionalNode, FunctionalNode
 from cottax.core.plan import Delete, Insert, Nest, Plan, Unnest
 from cottax.core.realisation import implemented
@@ -96,7 +96,7 @@ def test_undetermining_one_end_is_refused_rather_than_dropped(nested):
     # The same answer `Delete` gives: refuse, and name `Unnest` -- never quietly void
     # what an earlier op recorded.
     with pytest.raises(ValueError, match='Unnest'):
-        Plan(nested) + Undetermine(n('mda'))
+        Plan(nested, keeps=Valid) + Undetermine(n('mda'))
 
 
 def test_the_nesting_is_a_forest_on_the_value_not_only_on_the_op(mdf):
@@ -113,9 +113,9 @@ def test_the_nesting_is_a_forest_on_the_value_not_only_on_the_op(mdf):
     with pytest.raises(ValueError, match='closes a loop'):
         Valid.prove(graph_of(mdf.definitions, three))
     with pytest.raises(ValueError, match='inside itself'):
-        Plan(mdf) + Nest(n('opt'), n('opt'))
+        Plan(mdf, keeps=Valid) + Nest(n('opt'), n('opt'))
     with pytest.raises(ValueError, match='closes a loop'):
-        Plan(mdf) + Nest(n('mda'), n('opt')) + Nest(n('opt'), n('mda'))
+        Plan(mdf, keeps=Valid) + Nest(n('mda'), n('opt')) + Nest(n('opt'), n('mda'))
 
 
 def test_a_nested_pair_shares_a_cycle_at_its_own_level():
@@ -184,7 +184,7 @@ def test_a_statement_that_determines_nothing_cannot_be_an_end(mdf):
     stated = root_find((v('y'),), ())
     g = graph_of(OrderedMap({**dict(mdf.definitions.items()), n('c'): stated}))
     with pytest.raises(ValueError, match='determines nothing'):
-        Plan(g) + Nest(n('c'), n('opt'))
+        Plan(g, keeps=Valid) + Nest(n('c'), n('opt'))
 
 
 # ---------------------------------------------------------------- the blocking reads it
@@ -220,8 +220,10 @@ def test_severing_a_nested_pair_is_carried_and_refused_as_executable(nested):
 # ---------------------------------------------------------------- rewrites over a pair
 
 def test_deleting_one_end_is_refused(nested):
-    with pytest.raises(ValueError, match='lose one end'):
-        Plan(nested) + Delete((n('opt'),))
+    # The result's: a pair naming a removed node is `Valid`'s to refuse (`Unbound`), where
+    # it is kept; the op itself leaves the pair, as a graph may be.
+    from cottax.core.maths.valid import Unbound
+    assert [type(v) for v in Valid.check(Delete((n('opt'),)).apply(nested))] == [Unbound]
     # Both ends together is fine: nothing is left dangling.
     assert (Plan(nested) + Delete((n('opt'), n('mda'),))).graph.within == OrderedMap()
 
@@ -279,10 +281,9 @@ def test_driving_and_nesting_are_independent_decisions(nested):
     class Solver(DriverContract):
         accepts = staticmethod(lambda node: True)
         takes   = ()
-        reports = ()
 
-    a = (Plan(nested) + Assign(n('mda'), Solver(), (), ())).graph
-    b = (Plan(mdf_of(nested)) + Assign(n('mda'), Solver(), (), ())
+    a = (Plan(nested) + Assign(n('mda'), Solver())).graph
+    b = (Plan(mdf_of(nested)) + Assign(n('mda'), Solver())
          + Nest(n('mda'), n('opt'))).graph
     assert a == b
     assert dict(a.within) == {n('mda'): n('opt')}

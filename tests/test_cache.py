@@ -152,12 +152,8 @@ def rewritten_plan():
 
 def test_every_primed_answer_is_what_the_query_would_have_computed():
     plan   = rewritten_plan()
-    plans  = []
-    walk   = plan
-    while walk is not None:
-        plans.append(walk)
-        walk = walk.trunk
-    graphs = [p.graph for p in plans]
+    plans  = [plan]
+    graphs = list(plan.graphs)
     for g in graphs:
         # not `topological_order`: the ring is cyclic until the last cut lands
         g.nodes, g.variables, g.boundary_outputs, g.boundary_inputs, Dependencies.of(g).is_acyclic
@@ -267,13 +263,13 @@ def test_a_pickle_carries_the_fields_and_no_memo():
 
 
 def test_a_plan_pickles_without_its_prefix_graphs():
-    '''`Plan` is `Frozen`: the primed `trunk` and `graph` are memos and stay behind, and
-    `graph` is rebuilt equal on the other side.'''
+    '''`Plan` is `Frozen`: the primed `graphs` is a memo and stays behind, and is rebuilt
+    equal on the other side.'''
     import pickle
     from cottax.core.plan import Delete, Plan
     plan = Plan(acyclic()) + Delete((N('obj'),))
-    assert 'graph' in plan.__dict__ and 'trunk' in plan.__dict__
+    assert 'graphs' in plan.__dict__
     back = pickle.loads(pickle.dumps(plan))
-    assert set(back.__dict__) == {'base', 'ops'}
+    assert set(back.__dict__) == {'base', 'ops', 'keeps'}
     assert back == plan and hash(back) == hash(plan)
     assert back.graph == plan.graph and N('obj') not in back.graph

@@ -6,8 +6,9 @@ from types import UnionType
 from typing import TYPE_CHECKING, Any, Self, Union, get_args, get_origin
 
 from ...core import Label, Mint, Place, PlaceToPlace
-from ...core.driven import DriverContract, PerProblem, PerUnknown, Role
-from ...core.driven import roles
+from ...core import Condition
+from ...core.conditional import DriverContract, Role
+from ...core.conditional import roles
 from ...core.frozen import Frozen, OrderedMap, answer, answer_for_class
 from .refusals import NoPlaceFor, NotANode, NotAPlace, StandsForSeveral
 
@@ -199,9 +200,11 @@ class Steps(Mint):
 class RolePlaces(Frozen):
     '''
     Where a driver's data and reports go, a rule per role (`entries`), found along the role's
-    ancestry, the most specific first: a `PerUnknown` role's applied to each unknown, a
-    `PerProblem` one's to the problem's name read as a place. A role with no entry is refused:
-    nothing is named after a role unless a rule says so. `a | b` joins two, `b`'s winning.
+    ancestry, the most specific first, applied to what each place stands for (`role.index`):
+    to an unknown itself, and to the problem's name read as a place for the problem as a whole
+    (`None`). A place standing for anything else has no default: pass its role's places to
+    `Assign`. A role with no entry is refused: nothing is named after a role unless a rule
+    says so. `a | b` joins two, `b`'s winning.
     '''
 
     entries : OrderedMap[type[Role], PlaceToPlace]
@@ -213,19 +216,20 @@ class RolePlaces(Frozen):
                 return self.entries[level]
         raise NoPlaceFor(role.__qualname__).raised
 
-    def __call__[N, V](self, at: N, unknowns: tuple[V, ...], driver: DriverContract
-                       ) -> tuple[tuple[tuple[V, ...], ...], tuple[tuple[V, ...], ...]]:
-        '''`driver`'s data and reports, for the problem at `at` determining `unknowns`.'''
+    def __call__[N, V](self, at: N, condition: Condition[V], contract: DriverContract,
+                       role: type[Role]) -> tuple[V, ...]:
+        '''`role`'s places, for the problem at `at` stating `condition` under `contract`: the
+        rule an `AssignByRule` records.'''
         from .interface import DerivedNames                 # the interface is built on this
-        def slot(role: type[Role]) -> tuple[V, ...]:
-            rule = self.rule(role)
-            if issubclass(role, PerUnknown):
-                return tuple(rule(u) for u in unknowns)
-            if issubclass(role, PerProblem):
-                return (rule(answer(DerivedNames, at).place_at(at)),)
-            raise TypeError(f'{role.__name__} is neither per unknown nor per problem: pass its '
-                            f'places to `Assign`')
-        return tuple(map(slot, driver.takes)), tuple(map(slot, driver.reports))
+        rule = self.rule(role)
+        def place(subject: object) -> V:
+            if subject is None:
+                return rule(answer(DerivedNames, at).place_at(at))
+            if subject in condition.owns_inside:
+                return rule(subject)
+            raise TypeError(f'{role.__name__} has a place standing for {subject!r}, neither an '
+                            f'unknown nor the problem: pass its places to `Assign`')
+        return tuple(map(place, role.index(condition, contract)))
 
     def __or__(self, other: 'RolePlaces') -> 'RolePlaces':
         return RolePlaces(self.entries | other.entries)

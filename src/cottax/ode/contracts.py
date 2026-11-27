@@ -1,11 +1,11 @@
 '''
 Driver contracts: the level `Integrator`, its final `Integration` (the condition's initial-value
-problem integrated; `trajectory` adds the `Times` saved at and reports each state's
-`Trajectory`), and `CONTRACTS`, the default.
+problem integrated; asked for each state's `Trajectory`, it takes the `Times` saved at), and
+`CONTRACTS`, the default.
 '''
 
 from ..core import Place
-from ..core.driven import DriverContract, PerProblem, PerUnknown, Role
+from ..core.conditional import DriverContract, PerProblem, PerUnknown
 from .ode_condition import is_ode
 
 
@@ -24,17 +24,10 @@ class Integrator[V: Place](DriverContract[V]):
 
 
 class Integration[V: Place](Integrator[V]):
-    '''The final state its answer; `trajectory` takes the `Times` and reports each state's
-    `Trajectory` at them: one sampling of the solution, the integrator's to give.'''
-    trajectory : bool
-
-    @property
-    def takes(self) -> tuple[type[Role], ...]:
-        return (Times,) if self.trajectory else ()
-    @property
-    def reports(self) -> tuple[type[Role], ...]:
-        return (Trajectory,) if self.trajectory else ()
+    '''The final state its answer; may report each state's `Trajectory`, and then takes the
+    `Times` it is saved at: one sampling of the solution, the integrator's to give.'''
+    takes, may_report, report_needs = (), (Trajectory,), {Trajectory: (Times,)}
 
 
-CONTRACTS = (Integration(trajectory=False),)
+CONTRACTS = (Integration(),)
 '''The default contracts: an implementation answers a problem by the first one it implements.'''

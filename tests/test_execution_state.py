@@ -19,11 +19,11 @@ from cottax.consumers.execution.refusals import ValuedTwice
 from cottax.core import FunctionalNode, Graph, answer_for_places
 from cottax.core.frozen.answer import Unanswered
 from cottax.core.answers import NothingToAsk
-from cottax.core.driven import driven
+from cottax.core.conditional import driven
 from cottax.core.realisation import implemented
 from cottax.relational import Eq, Relation, RelationalCondition
 from test_execution import (
-    CLOSE, F, Newton, Start, U, W, Word, X, call, definitions, exact_u, flat, nested, newton,
+    CLOSE, F, Budget, Newton, Start, Steps, U, W, Word, X, call, definitions, exact_u, flat, nested, newton,
 )
 
 
@@ -112,7 +112,8 @@ def test_a_start_shared_by_two_unknowns_is_valued_twice():
     v, r_v = W('v'), W('r_v')
     other  = implemented(
         driven(RelationalCondition((Relation(r_v, None, Eq),), (), (v,), ()), Newton(),
-               ((START,), (W('^budget.Other'),)), ((W('^steps.Other'),),)), newton)
+               OrderedMap({Start: (START,), Budget: (W('^budget.Other'),)}),
+               OrderedMap({Steps: (W('^steps.Other'),)})), newton)
     graph = Graph(
         definitions() | {W('DiscC'): call([v, X], [r_v], lambda v, x: v - x),
                          W('Other'): other}, OrderedMap())
@@ -175,7 +176,7 @@ def test_a_run_is_valued_run_and_written_back():
 # ---------------------------------------------------------------- where a problem takes a role
 
 def test_role_slots_pair_each_place_with_its_problem_and_unknown():
-    from cottax.core.driven import role_slots
+    from cottax.core.conditional import role_slots
     from test_execution import Budget, History
     graph = nested()
     assert role_slots(graph, Start) == ((START, CLOSE, U), (W('^start.x'), W('target'), X))

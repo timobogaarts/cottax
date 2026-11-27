@@ -5,12 +5,12 @@ from typing import Any
 
 from ...core import ConditionalNode, Label, Mint, Place, PlaceToPlace, Violation, minted
 from ...core.frozen import OrderedMap, choice, name_of
-from ...core.driven import driven
+from ...core.conditional import driven
 from ...consumers.declaration.interface import Declaring
 from ...consumers.declaration.interface_types import Keyword, Paired, PlaceWithValue, Solve, declares
 from ...consumers.surface.interface import Part
 from .. import mints
-from ..contracts import Integration
+from ..contracts import Integration, Times, Trajectory
 from ..ode_condition import Dt, OdeCondition
 
 
@@ -31,7 +31,7 @@ class Rate[N: Label, V: Place](Paired[N, V]):
     `^initial.x`) over the span (`span`, else `^span` of the first state), giving its time
     where `time` names a place, stepping on the times it bends at (`kinks`) and jumps at
     (`jumps`). Where a study names
-    a history (`record`, at `times`) the ODE is declared driven, by `Integration(trajectory=True)`,
+    a history (`record`, at `times`) the ODE is declared driven, by `Integration` asked a `Trajectory`,
     so a model reading a history is coupled to it from the declaration on.'''
 
     record  : OrderedMap[V, V]
@@ -80,8 +80,8 @@ class Rate[N: Label, V: Place](Paired[N, V]):
             return ConditionalNode(self.condition)
         histories = tuple(self.record.get(x) or minted(mints.Trajectory(), x)
                           for x in self.condition.owns_inside)
-        return driven(ConditionalNode(self.condition), Integration(trajectory=True), ((self.times.place,),),
-                      (histories,))
+        return driven(ConditionalNode(self.condition), Integration(),
+                      OrderedMap({Times: (self.times.place,)}), OrderedMap({Trajectory: histories}))
 
     @property
     def problem(self) -> N:

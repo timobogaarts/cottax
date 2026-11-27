@@ -309,8 +309,8 @@ def test_every_picture_draws_a_graph_a_plan_and_a_proved_graph_alike(sellar):
     '''A `Plan` is drawn as its graph, and a proved graph is the graph: a proof changes no
     picture, and an XDSM rings as `blocks=True` asks.'''
     closed = FixedPointCut((Cut(V('y2'), (N('d1'),), purposes.Copy()),), purposes.Solve()(N('y2')))
-    graph = closed(sellar)
-    proved = closed(sellar)
+    graph = closed.apply(sellar)
+    proved = closed.apply(sellar)
     Executable.prove(proved)
     handed = (graph, Plan(sellar) + closed, proved)
     for each in handed:

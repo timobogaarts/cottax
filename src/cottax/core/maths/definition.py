@@ -60,7 +60,8 @@ class NodeDefinition[V: Place](Frozen):
 
     @abstractmethod
     def relabel(self, renaming: Renaming[V]) -> 'NodeDefinition[V]':
-        """The same definition with its places renamed."""
+        """The same definition with its places renamed, and nothing else of it changed: what
+        it carries (`attributes`) included."""
 
 # ------------------------------- functions on a node
 

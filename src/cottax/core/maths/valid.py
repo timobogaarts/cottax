@@ -115,7 +115,8 @@ class Unbound(Violation):
     inner : Label
     outer : Label
     error    = KeyError
-    template = 'nesting {inner!r} in {outer!r}: an end is not a node of this graph'
+    template = ('nesting {inner!r} in {outer!r}: an end is not a node of this graph -- '
+                'a nesting is a decision the plan recorded, so `Unnest` it before removing an end')
 
 
 class EndOwnsNothingInside(Violation):

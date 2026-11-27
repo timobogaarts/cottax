@@ -22,8 +22,8 @@ from cottax.assemblies.jax import flat
 from cottax.consumers.execution import Runnable, run
 from cottax.consumers.execution.interface_types import Posed
 from cottax.core import FunctionalNode
-from cottax.core.driven import driven, Start, Steps, role_slots
-from cottax.core.driven import PerProblem, Role
+from cottax.core.conditional import driven, Start, Steps, role_slots
+from cottax.core.conditional import PerProblem, Role
 from cottax.core.frozen import OrderedMap
 from cottax.core.realisation import implemented
 from cottax.pytree.path import NodePath, VarPath
@@ -58,8 +58,8 @@ def call(reads, owns, fn) -> 'FunctionalNode':
     return implemented(FunctionalNode(tuple(V(r) for r in reads), tuple(V(o) for o in owns)), fn)
 
 
-def optimise(objective, design, relations, implementation, bounded=False, steps=False,
-             contract=None, reports=None) -> 'ConditionalNode':
+def optimise(objective, design, relations, implementation, bounded=False, steps=False, contract=None,
+             reports=None) -> 'ConditionalNode':
     unknowns   = tuple(V(d) for d in design)
     parameters = tuple(b(u) for u in unknowns for b in (LOWER, UPPER)) if bounded else ()
     bounds     = tuple(r for u in unknowns for r in (Relation(LOWER(u), u, Le),
@@ -67,9 +67,9 @@ def optimise(objective, design, relations, implementation, bounded=False, steps=
     condition  = RelationalCondition(tuple(relations) + bounds, (Objective(V(objective), Min),),
                                      unknowns, parameters)
     return implemented(
-        driven(condition, contract or ConstrainedMinimisation(steps=steps),
-               (tuple(STARTS(u) for u in unknowns),),
-               reports if reports is not None else (((V('n'),),) if steps else ())),
+        driven(condition, contract or ConstrainedMinimisation(),
+               OrderedMap({Start: tuple(STARTS(u) for u in unknowns)}),
+               reports if reports is not None else OrderedMap({Steps: (V('n'),)} if steps else {})),
         implementation)
 
 
@@ -143,7 +143,7 @@ def test_it_is_read_in_the_scaling_and_answers_in_the_models_units():
 
     opt = flat.optimise(minimise='f', design=('x',))
     ran = cx.absolute.declare(model, {'OPT': opt}) \
-        + flat.drive(GradientDescent(rate=0.125), contracts=cx.SCALED)
+        + flat.drive(GradientDescent(rate=0.125), asks=(cx.Scales,))
     out = flat.run(ran, {cx.Start: {'x': 0.0}, cx.Scales: {'x': flat.scaling(unknowns={'x': 2.0})}})
     assert float(out['x']) == pytest.approx(3.0, abs=1e-12)
 
@@ -165,10 +165,8 @@ class Verdict(PerProblem):
 class Judged(ConstrainedMinimiser):
     '''Asks `Start`, and reports `Verdict` and `Steps`.'''
 
-    @property
-    def takes(self) -> tuple[type[Role], ...]:   return (Start,)
-    @property
-    def reports(self) -> tuple[type[Role], ...]: return (Verdict, Steps)
+    takes      = (Start,)
+    may_report = (Verdict, Steps)
 
 
 class Judging(HostMinimiser[Judged]):
@@ -189,14 +187,14 @@ def test_a_provided_role_it_does_not_report_is_not_asked_for_in_vain():
             return problem.y0, {Steps: 0}
 
     nodes = bowl() | {N('opt'): optimise('f', ['x'], (), Claims(), contract=Judged(),
-                                         reports=((V('ok'),), (V('n'),)))}
+                                         reports=OrderedMap({Verdict: (V('ok'),), Steps: (V('n'),)}))}
     with pytest.raises(KeyError):
         solve(nodes, {STARTS(V('x')): 0.0})
 
 
 def test_each_role_asked_comes_back_in_its_dtype_eager_and_traced():
     nodes = bowl() | {N('opt'): optimise('f', ['x'], (), Judging(), contract=Judged(),
-                                         reports=((V('ok'),), (V('n'),)))}
+                                         reports=OrderedMap({Verdict: (V('ok'),), Steps: (V('n'),)}))}
     pick = lambda o: (o[V('ok')], o[V('n')])
     for go in (lambda g, v: pick(traced_run(g, v)),
                eqx.filter_jit(lambda g, v: pick(traced_run(g, v)))):
@@ -398,8 +396,9 @@ def test_unknowns_under_a_jit_is_in_the_models_units_and_retraces_for_no_scale()
         return (x - 3.0) ** 2
 
     condition = RelationalCondition((), (Objective(V('f'), Min),), (V('x'),), ())
-    implementation = implemented(driven(condition, ConstrainedMinimisation(steps=False, scaled=True),
-                                              ((STARTS(V('x')),), (V('s'),)), ()), Asks(ask=ask))
+    implementation = implemented(driven(condition, ConstrainedMinimisation(),
+                                              OrderedMap({Start: (STARTS(V('x')),), cx.Scales: (V('s'),)})),
+                                 Asks(ask=ask))
     go = eqx.filter_jit(traced_run)
     nodes = {N('m'): call(['x'], ['f'], model), N('opt'): implementation}
     after = []
@@ -603,7 +602,7 @@ def idf(driver, M):
 
     opt = flat.optimise(minimise='f', design=('z',), subject_to=c)
     return (cx.absolute.declare(d1, d2, o, c, {'OPT': opt}) + flat.idf('OPT')
-            + flat.drive(driver, cx.Picard(), cx.Newton(), contracts=cx.SCALED))
+            + flat.drive(driver, cx.Picard(), cx.Newton(), asks=(cx.Scales,)))
 
 
 def idf_scaling(ran, M):

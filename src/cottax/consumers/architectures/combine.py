@@ -4,16 +4,25 @@ answers (`ModelReading.join`). An architecture's fold, and a study's by hand; no
 since what joins two conditions is said by the language that states them.
 '''
 
-from collections.abc import Iterator
+from collections.abc import Collection, Iterator
 from functools import reduce
 
 from ...core import (
     ConditionalNode, Label, Graph, Place, Rebind, Rebinding, Violation, is_driven, kind_of,
 )
 from ...core.frozen import OrderedMap, answer_for_class
-from ...core.plan.primitive import NameTaken, stranded
+from ...core.plan.edit import NameTaken
 from .interface import ModelReading
-from .refusals import CarriesAttributes, FoldsDriven, NodeTwice, NotAddable, NotOfKind, NothingToCombine
+from .refusals import (
+    CarriesAttributes, FoldsDriven, NodeTwice, NotAddable, NotOfKind, NothingToCombine, Stranded,
+)
+
+
+def stranded[N: Label](g: Graph[N, Place], removed: Collection[N]) -> Iterator[Violation]:
+    '''A nesting pair losing exactly one end to `removed`. A nesting is a decision the plan
+    recorded, so it is not dropped silently: `Unnest` first. Losing both ends is fine.'''
+    if broken := [(i, o) for i, o in g.within.items() if (i in removed) != (o in removed)]:
+        yield Stranded(tuple(i for i, _ in broken), tuple(o for _, o in broken))
 
 
 def join_of(kind: type):

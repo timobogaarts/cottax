@@ -11,7 +11,7 @@ from typing import Self
 from dataclasses import replace
 from functools import cached_property
 
-from ..frozen import Frozen, OrderedMap, remembered
+from ..frozen import Frozen, OrderedMap, Violation, first, remembered
 from .definition import NodeDefinition
 from .places import Label, Place
 
@@ -84,7 +84,7 @@ class Graph[N: Label, V: Place](Frozen):
         try:
             return self.definitions[name]
         except KeyError:
-            raise KeyError(f'not a node of this graph: {name!r}') from None
+            first((NotBound(name),))
 
     __iter__ = None
     '''Not iterable: `nodes` is the sequence and `definitions` the mapping.'''
@@ -141,3 +141,12 @@ class View[N: Label, V: Place](Frozen):
 def _view(graph: Graph, cls: type[View]) -> View:
     '''One view of each kind per graph: the only place a view is constructed.'''
     return cls(graph)
+
+
+# ----------------------------------------------------------------- violation finals
+
+class NotBound(Violation):
+    '''A name looked up, removed or redefined that the graph does not bind.'''
+    name : Label
+    error    = KeyError
+    template = 'not a node of this graph: {name!r}'

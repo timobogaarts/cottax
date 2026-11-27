@@ -25,9 +25,9 @@ from cottax.core import (
 )
 from cottax.consumers.execution.valued import InputMissing, NotAPlace, OwnedGiven
 from cottax.core.frozen import OrderedMap
-from cottax.core.driven import driven as with_driver, Driven, DrivenNodes
+from cottax.core.conditional import driven as with_driver, Driven, DrivenNodes
 from cottax.core import is_driven
-from cottax.core.driven import DriverContract, PerProblem, PerUnknown, Role
+from cottax.core.conditional import DriverContract, PerProblem, PerUnknown, Role
 from cottax.consumers.execution import Runnable, run
 from cottax.consumers.execution.run import RunnableNodes
 from cottax.consumers.execution.interface_types import ConditionMap, Context, Posed
@@ -78,18 +78,18 @@ class History(PerProblem):
 
 
 class Newton(DriverContract):
-    '''The contract: what it accepts, and its places. The history is reported on request,
-    so `reports` is a field.'''
-    accepts = staticmethod(is_root_find)
-    takes   = (Start, Budget)
-    reports : tuple[type[Role], ...] = (Steps,)
+    '''The contract: what it accepts, and its places. The steps and the history are reported
+    on request: asked for by placing them.'''
+    accepts    = staticmethod(is_root_find)
+    takes      = (Start, Budget)
+    may_report = (Steps, History)
 
 
 class Bisection(DriverContract):
     '''Another contract, answered by nothing here.'''
-    accepts = staticmethod(is_root_find)
-    takes   = (Start, Budget)
-    reports = (Steps,)
+    accepts    = staticmethod(is_root_find)
+    takes      = (Start, Budget)
+    may_report = (Steps,)
 
 
 class ScalarNewton(DriverImplementation[Newton]):
@@ -148,16 +148,17 @@ def call(reads, owns, fn) -> 'FunctionalNode':
     return implemented(FunctionalNode(tuple(reads), tuple(owns)), fn)
 
 
-def places(problem: Word, unknown: Word, driver: DriverContract) -> tuple:
-    '''Where the driver's data and reports sit: `Assign`'s last two fields, a report at
-    its role's namespace.'''
-    return (((W(f'^start.{unknown}'),), (W(f'^budget.{problem}'),)),
-            tuple((W(f'^{role.__name__.lower()}.{problem}'),) for role in driver.reports))
+def places(problem: Word, unknown: Word, asks=(Steps,)) -> tuple:
+    '''Where the driver's data and the reports `asks` names sit: `Assign`'s last two fields,
+    a report at its role's namespace.'''
+    return (OrderedMap({Start: (W(f'^start.{unknown}'),), Budget: (W(f'^budget.{problem}'),)}),
+            OrderedMap({role: (W(f'^{role.__name__.lower()}.{problem}'),) for role in asks}))
 
 
-def driven(problem: Word, condition, implementation=newton, driver=Newton()) -> 'ConditionalNode':
+def driven(problem: Word, condition, implementation=newton, driver=Newton(), asks=(Steps,)
+           ) -> 'ConditionalNode':
     (unknown,) = condition.owns_inside
-    return implemented(with_driver(condition, driver, *places(problem, unknown, driver)),
+    return implemented(with_driver(condition, driver, *places(problem, unknown, asks)),
                              implementation)
 
 
@@ -217,7 +218,7 @@ def test_the_data_arrives_one_tuple_per_role_and_the_conditions_as_values():
     run(GraphWithValues(graph, OrderedMap({X: 1.0, W('^start.u'): 2.0, W('^budget.DiscA.close'): 7})))
     posed, context, data = spy.seen[0]
     conditions = posed.conditions
-    assert posed.condition == (graph[CLOSE]).condition and posed.reports == Newton().reports
+    assert posed.condition == (graph[CLOSE]).condition and posed.reports == (Steps,)
     assert not is_driven(posed.condition)   # what the values mean, nothing of the graph
     assert data == {Start: (2.0,), Budget: (7,)}
     assert isinstance(conditions, InteriorConditionMap) and isinstance(conditions, ConditionMap)
@@ -356,7 +357,7 @@ def test_a_driven_node_runs_by_an_implementation_of_its_own_driver():
     for node, refused in ((driven(CLOSE, condition, lambda d, c, x: None), NotADriverImplementation),
                           (driven(CLOSE, condition, newton, Bisection()), ImplementsAnother),
                           (driven(CLOSE, condition, Tolerant()), DataMissing),
-                          (driven(CLOSE, condition, Returns(print), Newton(reports=(Steps, History))),
+                          (driven(CLOSE, condition, Returns(print), asks=(Steps, History)),
                            ReportUnavailable)):
         changed = definitions() | {CLOSE: node}
         assert kinds(Graph(changed, OrderedMap())) == [refused]
@@ -384,8 +385,7 @@ def test_the_most_specific_contract_is_chosen_whatever_order_the_map_is_written_
 
 def test_a_report_the_driver_asks_for_lands_and_one_it_does_not_is_not_made():
     condition = (definitions()[CLOSE]).condition
-    history   = Newton(reports=(Steps, History))
-    out = ran(flat({CLOSE: driven(CLOSE, condition, newton, history)}))
+    out = ran(flat({CLOSE: driven(CLOSE, condition, newton, asks=(Steps, History))}))
     assert len(out[W('^history.DiscA.close')]) > out[W('^steps.DiscA.close')] > 0
     assert W('^history.DiscA.close') not in ran(flat())
 

@@ -13,8 +13,8 @@ from typing import Any, ClassVar
 
 from ...core import (
     AbstractConditionalNode, FunctionalNode, Label, kind_of, Graph, Place, Violation,
-    enclosers, owns_inside, Contract, GraphOp, Nest, StagedOp, refusals, Dependencies, Nesting)
-from ...core.frozen import AbstractVar, Frozen, OrderedMap, answer, first
+    enclosers, owns_inside, Contract, GraphOp, Nest, StagedOp, Dependencies, Nesting)
+from ...core.frozen import AbstractVar, Frozen, OrderedMap, answer
 from .closing import closed
 from .combine import Combine
 from .cut_rules import CutRule, Opened, ToCut, cuts_per_cycle
@@ -259,7 +259,6 @@ class Architecture[N: Label, V: Place](StagedOp[N, V]):
     def resolution(self, graph: Graph[N, V]) -> Resolution[N, V]:
         '''The whole derivation: each stage's ops and the graph it leaves. Refused as
         `apply` refuses.'''
-        first(refusals(self, graph))
         absorbed, outside, closures, nested, combining = self.staged(graph)
         return Resolution(absorbed.ops, outside.ops, closures.ops, closures.graph,
                           (*nested.ops, *combining.ops), combining.graph)

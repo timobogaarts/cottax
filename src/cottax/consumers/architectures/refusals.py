@@ -5,7 +5,7 @@ already nested; and two closures bound at one name. Why a `Combine` is refused, 
 cut rule is. Why a problem is no implicit model is its language's.
 '''
 
-from ...core import Violation
+from ...core import Label, Violation
 
 
 class TopUnbound(Violation):
@@ -52,6 +52,14 @@ class ClosuresCollide(Violation):
     error    = ValueError
     template = ('two closures bound at {names!r}: the `At` names two groups alike -- '
                 'one closure per cycle under `AtFirstMember`: cut it as one group, or write an `At` naming them apart')
+
+
+class Stranded(Violation):
+    inner : tuple[Label, ...]
+    outer : tuple[Label, ...]
+    error    = ValueError
+    template = ('{inner} in {outer} would lose one end and keep the other -- `Unnest` it first, '
+                 'so a plan never quietly voids what an earlier op recorded')
 
 
 class NothingToCombine(Violation):

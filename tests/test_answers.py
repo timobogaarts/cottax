@@ -26,8 +26,8 @@ from cottax.consumers.architectures.cut_rules import GaussSeidel
 from cottax.core.frozen import OrderedMap, answer, answers, choice, violations
 from cottax.core.maths.definition import relabelled
 from cottax.core.plan import Plan
-from cottax.core.driven import Start
-from cottax.core.driven import DriverContract
+from cottax.core.conditional import Start
+from cottax.core.conditional import DriverContract
 from cottax.consumers.architectures import MDA
 from cottax.consumers.architectures.interface import Closing, ModelReading
 from cottax.consumers.execution import Runnable, Drive, GraphWithValues, run
@@ -218,7 +218,6 @@ class Secant(DriverContract):
     '''A contract of the toy's: any problem of one scalar unknown, from a start.'''
     accepts = staticmethod(lambda condition: bool(condition.owns_inside))
     takes   = (Start,)
-    reports = ()
 
 
 @choice(DriverImplementation)

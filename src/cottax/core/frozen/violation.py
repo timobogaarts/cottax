@@ -39,10 +39,12 @@ class Violation(Frozen):
 
 
 def first(violations: Iterable[Violation]) -> None:
-    '''Raise the first violation, if any -- the boundary between rules-as-data and the
-    exceptions a constructor owes its caller.'''
-    for violation in violations:
-        raise violation.raised
+    '''Raise the first violation, if any, carrying them all as `violations` -- the boundary
+    between rules-as-data and the exceptions a constructor owes its caller.'''
+    if found := tuple(violations):
+        exception = found[0].raised
+        exception.violations = found
+        raise exception
 
 
 def checked[F: Callable](*checks: Callable[..., Iterable[Violation]]) -> Callable[[F], F]:

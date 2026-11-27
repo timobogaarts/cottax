@@ -1,8 +1,8 @@
 '''
-An ODE's trajectory, a report of its contract: `Integration(trajectory=True)` takes the
-`Times` saved at and reports each state's `Trajectory`. Asked for by the declaration
-(`rate(..., record=, times=)`, the ODE declared driven, so a model reading a history is
-coupled to it from the start) or by the contract handed to `Drive`. Declared through a
+An ODE's trajectory, a report `Integration` may make: asked for, it reports each state's
+`Trajectory` and takes the `Times` saved at. Asked for by the declaration (`rate(...,
+record=, times=)`, the ODE declared driven, so a model reading a history is coupled to it
+from the start) or by the roles `Drive` is asked to wire. Declared through a
 surface joining the vocabularies, as `tests/test_ode.py` is; run with `-s` for the numbers.
 '''
 
@@ -25,8 +25,9 @@ from cottax.core import ConditionalNode, Executable
 from cottax.consumers.architectures.cut_rules import GaussSeidel
 from cottax.consumers.architectures import Combine
 from cottax.core.frozen import OrderedMap, answer, choice, violations
-from cottax.core.plan import Plan, refusals
-from cottax.core.driven import Assign, driven as with_driver, Driven, Start
+from cottax.core.plan import Plan
+from graphs import refusals
+from cottax.core.conditional import Assign, driven as with_driver, Driven, Start
 from cottax.core.realisation import Implement
 from cottax.consumers.architectures import IDF, MDF, SAND, AtFirstMember
 from cottax.consumers.architectures.refusals import NotCombinable
@@ -61,7 +62,7 @@ def x64():
 s = cx.flat
 '''The shipped surface over a plain dict, relational's and the ODE's parts among its own.'''
 
-RECORDING = Integration(trajectory=True)
+RECORDING = Integration()
 
 
 def diffrax_run(**settings):
@@ -71,8 +72,8 @@ def diffrax_run(**settings):
     return Diffrax(**{'rtol': 1e-10, 'atol': 1e-10, **settings})
 
 
-def drive(*implementations, contracts=ODE_CONTRACTS) -> Drive:
-    return Drive(implementations, (*RELATIONAL_CONTRACTS, *contracts), s.role_places)
+def drive(*implementations, contracts=ODE_CONTRACTS, asks=()) -> Drive:
+    return Drive(implementations, (*RELATIONAL_CONTRACTS, *contracts), s.role_places, asks)
 
 
 def problem(at: str) -> NodePath:
@@ -133,9 +134,10 @@ def test_a_history_declares_the_ode_driven_its_initial_values_and_span_on_the_co
                               span='span')).graph[problem('oscillator')]
     assert ode.driver.contract == RECORDING and ode.condition == undriven.condition
     assert ode.condition.reads_outside == (s.place('x0'), s.place('v0'), s.place('span'))
-    assert (ode.driver.contract.takes, ode.driver.contract.reports) == ((Times,), (Trajectory,))
-    assert ode.driver.data == ((s.place('times'),),)
-    assert ode.driver.reports == ((s.place('xs'), s.place(cx.trajectory('v'))),)
+    assert (RECORDING.takes, RECORDING.may_report, RECORDING.required((Trajectory,))) == (
+        (), (Trajectory,), (Times,))
+    assert ode.driver.data == OrderedMap({Times: (s.place('times'),)})
+    assert ode.driver.reports == OrderedMap({Trajectory: (s.place('xs'), s.place(cx.trajectory('v')))})
     assert declare(s.rate(bare.fn, 'x', span='span')).graph[problem('bare')] == ConditionalNode(
         OdeCondition((Dt(s.place('x'), s.place(cx.rate('x')), s.place(cx.initial('x'))),),
                      s.place('span')))
@@ -151,7 +153,7 @@ def test_a_renamed_ode_keeps_its_driver_and_what_it_carries():
     ode   = dataclasses.replace(declare(oscillator).graph[problem('oscillator')],
                             attributes=OrderedMap({Note: 'n'}))
     moved = ode.relabel({s.place('times'): s.place('ts'), s.place('x0'): s.place('x_init')})
-    assert moved.driver.data == ((s.place('ts'),),) and moved.attributes == ode.attributes
+    assert moved.driver.data == OrderedMap({Times: (s.place('ts'),)}) and moved.attributes == ode.attributes
     assert moved.condition.reads_outside == (s.place('x_init'), s.place('v0'), s.place('span'))
     assert moved.reads_outside == moved.condition.reads_outside + (s.place('ts'),)
 
@@ -164,7 +166,7 @@ def test_a_value_written_for_a_place_of_the_driver_is_given_zero_too():
                              s.place(cx.initial('x'))]
     assert d.given[s.place(cx.initial('x'))] == 0.0
     ode = d.graph[problem('bare')]
-    assert ode.driver.data == ((s.place(cx.times('x')),),)
+    assert ode.driver.data == OrderedMap({Times: (s.place(cx.times('x')),)})
     assert ode.condition.reads_outside == (s.place(cx.initial('x')), s.place(cx.span('x')))
 
 
@@ -308,14 +310,14 @@ def area_of_bare(xs, ts):
     return jnp.trapezoid(xs, ts)
 
 
-def test_6_the_flagged_contract_handed_to_drive_or_assigned_by_hand():
+def test_6_the_trajectory_asked_of_drive_or_assigned_by_hand():
     ts = jnp.linspace(0.0, 2.0, 201)
     inputs = OrderedMap({s.place('k'): 0.5, s.place(cx.initial('x')): 1.0,
                          s.place(cx.span('x')): (0.0, 2.0), per_problem(cx.times, 'bare'): ts})
-    by_drive = driven(bare, area_of_bare, implementation=diffrax_run(), contracts=(RECORDING,))
+    by_drive = driven(bare, area_of_bare, implementation=diffrax_run(), asks=(Trajectory,))
     at, g = problem('bare'), declare(bare, area_of_bare).graph
-    by_hand = (Plan(g) + Assign(at, RECORDING, *s.role_places(
-        at, g[at].owns_inside, RECORDING)) + Implement(OrderedMap({at: diffrax_run()}))).graph
+    by_hand = (Plan(g) + s.assign(at, RECORDING, asks=(Trajectory,))
+               + Implement(OrderedMap({at: diffrax_run()}))).graph
     Runnable.prove(by_hand)
     assert by_drive == by_hand
     out = run(GraphWithValues(by_drive, inputs))
@@ -427,7 +429,7 @@ def test_9_two_odes_recording_alike_join_as_one_driven_problem():
     join, driven by that contract, is one integration recording both. A fold is of
     conditions, so the drivers come off first and the fold is driven after: at the one
     times both take, recording each state where it was recorded.'''
-    from cottax.core.driven import Undrive
+    from cottax.core.conditional import Undrive
     at, other = problem('position'), problem('velocity')
     declared = declare(position, velocity).graph
     one, two = declared[at].driver, declared[other].driver
@@ -435,9 +437,9 @@ def test_9_two_odes_recording_alike_join_as_one_driven_problem():
     g = (Plan(declared) + Undrive(at) + Undrive(other)
          + Combine(at, (at, other), OdeCondition)
          + Assign(at, one.contract, one.data,
-                  tuple(a + b for a, b in zip(one.reports, two.reports)))).graph
-    assert g[at].driver.data == ((s.place('times'),),)
-    assert g[at].driver.reports == ((s.place('xs'), s.place('vs')),)
+                  OrderedMap({role: one.reports[role] + two.reports[role] for role in one.reports}))).graph
+    assert g[at].driver.data == OrderedMap({Times: (s.place('times'),)})
+    assert g[at].driver.reports == OrderedMap({Trajectory: (s.place('xs'), s.place('vs'))})
     ts = jnp.linspace(0.0, 1.5, 7)
     out = run(GraphWithValues((Plan(g) + drive(diffrax_run())).graph, values(
         w=2.0, x0=1.0, v0=0.0, span=(0.0, 1.5), times=ts)))
@@ -477,7 +479,7 @@ def test_11_the_declared_driven_ode_is_written_to_json_and_read_back():
     data = write_json(g)
     written = data['nodes'][1]['definition']
     print(f'\n[9] contract written {written["contract"]}')
-    assert written['kind'] == 'driven' and written['contract']['fields'] == {'trajectory': True}
+    assert written['kind'] == 'driven' and [r['role'] for r in written['reports']] == ['Trajectory']
     assert read_json(data) == g
 
 

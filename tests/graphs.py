@@ -1,4 +1,4 @@
-'''The graph constructors the tests share.'''
+'''The graph constructors the tests share, and `refusals`.'''
 
 from typing import Any
 
@@ -69,3 +69,15 @@ def graph_from_pytree(pytree: Any) -> Graph:
     return graph_of((NodePath(keys), leaf)
                     for keys, leaf in tree_leaves_with_path(pytree, is_leaf=is_node)
                     if is_node(leaf))
+
+
+def refusals(op, graph) -> tuple:
+    '''Why `op` does not apply to `graph`, as data: the refusal's `violations`, empty when
+    it applies.'''
+    try:
+        op.apply(graph)
+    except Exception as exception:
+        if not hasattr(exception, 'violations'):
+            raise
+        return exception.violations
+    return ()

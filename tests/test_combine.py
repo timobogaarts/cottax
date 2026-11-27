@@ -12,6 +12,7 @@ import dataclasses
 from dataclasses import dataclass
 
 import pytest
+from graphs import refusals
 
 from cottax.consumers.architectures import Combine
 from cottax.consumers.architectures.interface import ModelReading
@@ -19,11 +20,14 @@ from cottax.consumers.architectures.refusals import (
     CarriesAttributes, FoldsDriven, NodeTwice, NotAddable, NotOfKind, NothingToCombine,
 )
 from cottax.core import (
-    Attachment, Condition, ConditionalNode, Delete, Executable,
-    Graph, NodeDefinition, refusals, relabelled, violations,
+    Condition, ConditionalNode, Delete, Executable,
+    Graph, NodeDefinition, violations,
 )
+from cottax.core.conditional import Driver, DriverContract
 from cottax.core.frozen import OrderedMap, answers
-from cottax.core.plan.primitive import NameTaken, Stranded
+from cottax.core.maths.definition import ReadsOwn
+from cottax.core.plan.edit import NameTaken
+from cottax.consumers.architectures.refusals import Stranded
 
 
 # ---------------------------------------------------------------- a toy place and kind
@@ -83,12 +87,10 @@ class UnjoinedReading(ModelReading):
     def combines_as(self, condition):       return None
 
 
-class Ports(Attachment):
-    '''An attachment: places in and out, and no rule of its own.'''
-    reads : tuple = ()
-    owns  : tuple = ()
-    def relabel(self, renaming):
-        return Ports(relabelled(self.reads, renaming), relabelled(self.owns, renaming))
+class Anything(DriverContract):
+    '''A contract answering any condition, taking and reporting nothing.'''
+    accepts = staticmethod(lambda condition: True)
+    takes   = ()
 
 
 class Note:
@@ -153,7 +155,7 @@ def test_a_fold_joins_conditions_and_neither_what_they_carry_nor_what_drives_the
     noted = G({a: dataclasses.replace(states(['y'], ['u']), attributes=OrderedMap({Note: 'n'})),
                b: states(['z'], ['v'])})
     assert [type(v) for v in refusals(Combine(a, (a, b), States), noted)] == [CarriesAttributes]
-    driven = G({a: dataclasses.replace(states(['y'], ['u']), driver=Ports()),
+    driven = G({a: dataclasses.replace(states(['y'], ['u']), driver=Driver(Anything())),
                 b: states(['z'], ['v'])})
     assert list(refusals(Combine(a, (a, b), States), driven)) == [FoldsDriven((a,))]
 
@@ -175,4 +177,4 @@ def test_every_refusal_of_a_fold_has_wording():
     assert kinds(refusals(Combine(b, (a, t), States), g)) == [NameTaken]
     cyc = G({a: states(['y'], ['x']), b: toy(['x'], ['y']), c: states(['x'], ['z'])}, {a: c})
     assert kinds(refusals(Combine(t, (a, b), States), cyc)) == [NotOfKind, Stranded]
-    assert kinds(refusals(Combine(t, (c, a), States), cyc)) == []
+    assert kinds(refusals(Combine(t, (c, a), States), cyc)) == [ReadsOwn]   # the join's own refusal

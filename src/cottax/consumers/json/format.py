@@ -11,7 +11,7 @@ from ...core import (
 )
 from ...core.frozen import Frozen, OrderedMap, answer, answered, answers, checked, dotted, violations
 from ...core import Condition, ConditionalNode, is_driven, kind_of
-from ...core.driven import Driver, check_driver_fits
+from ...core.conditional import Driver
 from ...core.realisation import Implementation, check_implementation_fits, implementation_of, implemented
 
 
@@ -170,15 +170,13 @@ class NodeWriter[N: Label, V: Place](Frozen):
         return {'kind': spelling.kind, **spelling.write(subject, self)}
 
     def driver(self, node: NodeDefinition[V]) -> dict:
-        '''A driven node: the condition without its driver, then the driver.'''
+        '''A driven node: the condition without its driver, then the driver, each side a list
+        of roles by name with their places.'''
         driver = node.driver
-        def slots(roles: tuple[type, ...], slotted: tuple[tuple[V, ...], ...]) -> list:
-            return [{'role': role.__qualname__, 'places': self.places(ps)}
-                    for role, ps in zip(roles, slotted)]
+        side = lambda by: [{'role': r.__qualname__, 'places': self.places(ps)} for r, ps in by.items()]
         return {'condition': self.node(dataclasses.replace(node, driver=None)),
                 'contract': self.value(driver.contract),
-                'data': slots(driver.contract.takes, driver.data),
-                'reports': slots(driver.contract.reports, driver.reports)}
+                'data': side(driver.data), 'reports': side(driver.reports)}
 
     def implementation(self, obj: object) -> dict:
         '''By name, or a dataclass as a value.'''
@@ -222,22 +220,23 @@ class NodeReader[N: Label, V: Place](Frozen):
             first(check_implementation_fits.node(self.name, node))   # a file is refused as it is read
             return node
         if data['kind'] == DRIVEN:
-            node = self.driven(data)
-            first(check_driver_fits.node(self.name, node))
-            return node
+            return self.driven(data)     # a node whose driver does not fit is refused as built
         if (spelling := by_word(Spelling, 'kind').get(data['kind'])) is None:
             raise UnknownKind(self.name, data['kind']).raised
         read = spelling.read(data, self)
         return ConditionalNode(read) if isinstance(read, Condition) else read
 
     def driven(self, data: dict) -> NodeDefinition[V]:
+        '''Each side's roles found by name among those the contract offers on it; a name it
+        does not offer is the file disagreeing with its contract.'''
         contract = self.value(data['contract'])
-        for which, roles in (('data', contract.takes), ('reports', contract.reports)):
-            if [s['role'] for s in data[which]] != [role.__qualname__ for role in roles]:
+        def side(which: str, offered: tuple[type, ...]) -> OrderedMap:
+            by_name = {r.__qualname__: r for r in offered}
+            if any(s['role'] not in by_name for s in data[which]):
                 raise Inconsistent(self.name, which).raised
+            return OrderedMap((by_name[s['role']], self.places(s['places'])) for s in data[which])
         return dataclasses.replace(self.node(data['condition']), driver=Driver(
-            contract, tuple(self.places(s['places']) for s in data['data']),
-            tuple(self.places(s['places']) for s in data['reports'])))
+            contract, side('data', contract.may_be_given), side('reports', tuple(contract.may_report))))
 
     def implementation(self, data: dict) -> object:
         return self.resolve(data['ref']) if 'ref' in data else self.value(data)

@@ -15,7 +15,7 @@ import jax.numpy as jnp
 import pytest
 
 from cottax.core.realisation import Implementation, implementation_of, implemented
-from cottax.core.driven import Start
+from cottax.core.conditional import Start
 from cottax.core.frozen import OrderedMap, violations
 from cottax.core.maths.steps import Enclosed
 from cottax.consumers.execution.interface_types import Posed
@@ -98,7 +98,7 @@ def test_what_a_solver_is_posed_hashes_at_every_depth():
         JitKeyNodes.prove(step.interior)
         node = holder[step.encloser]
         conditions = InteriorConditionMap.posing(node, step.interior.graph)
-        hash(Posed(node.condition, node.driver.contract.reports, conditions,
+        hash(Posed(node.condition, tuple(node.driver.reports), conditions,
                    conditions.context_places))
 
 

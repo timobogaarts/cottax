@@ -14,7 +14,7 @@ import cottax.assemblies.jax as cx
 from cottax.core import conditions
 from cottax.core.frozen import OrderedMap
 from cottax.core.plan import Plan
-from cottax.core.driven import DriverContract
+from cottax.core.conditional import DriverContract
 from cottax.relational.contracts import CONTRACTS, RootFinding
 from cottax.consumers.execution import Runnable, run
 from cottax.consumers.execution.interface import DriverImplementation
@@ -79,7 +79,6 @@ class SelfStarting(DriverContract):
     '''A root find taking no data: it starts from zeros.'''
     accepts = staticmethod(is_root_find)
     takes   = ()
-    reports = ()
 
 class Relax(DriverImplementation[SelfStarting]):
     '''`u <- u + r`, each residual against zero.'''
@@ -111,8 +110,8 @@ def test_a_closure_is_assigned_where_it_binds(sellar):
     '''What a caller has in hand is the op, not the name it minted out of nothing.'''
     plan = Plan(sellar) + cx.absolute.fixed_point_cut(v('y2'), [n('disc1')])
     assert plan.ops[-1].at == cx.absolute.node(cx.closure(N['y2']))
-    driven = plan + cx.absolute.assign(plan.ops[-1].at, RootFinding(steps=False))
-    assert driven.graph[plan.ops[-1].at].driver.contract == RootFinding(steps=False)
+    driven = plan + cx.absolute.assign(plan.ops[-1].at, RootFinding())
+    assert driven.graph[plan.ops[-1].at].driver.contract == RootFinding()
 
 
 # ---------------------------------------------------------------- a design over models
@@ -140,7 +139,6 @@ def test_the_optimise_pairs_with_the_models_that_compute_its_conditions():
 class Holding(DriverContract):
     accepts = staticmethod(lambda node: isinstance(node, Raw))
     takes   = ()
-    reports = ()
 
 
 class Hold(DriverImplementation[Holding]):

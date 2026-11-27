@@ -15,9 +15,9 @@ from jax.tree_util import DictKey
 
 from cottax.core import FunctionalNode
 from cottax.core.frozen import OrderedMap
-from cottax.core.driven import driven
+from cottax.core.conditional import driven
 from cottax.relational.contracts import RootFinding
-from cottax.core.driven import Start
+from cottax.core.conditional import Start
 import cottax.assemblies.jax as cx
 from cottax.consumers.execution import Runnable
 from cottax.consumers.execution.refusals import ForeignPlace, Unvalued, ValuedTwice
@@ -55,8 +55,7 @@ def square(start=START(V('u'))) -> Runnable:
     graph = graph_of({
         N('res'): implemented(FunctionalNode((V('u'), V('z')), (V('r'),)),
                                       lambda u, z: u * u - z),
-        N('h')  : implemented(driven(condition, RootFinding(steps=False),
-                                           ((start,),), ()),
+        N('h')  : implemented(driven(condition, RootFinding(), OrderedMap({Start: (start,)})),
                                     Newton(rtol=1e-10, atol=1e-10)),
     })
     Runnable.prove(graph)
@@ -134,12 +133,14 @@ def test_a_start_given_by_name_and_read_from_the_tree_is_given_twice():
         START(V('u')), ("values[Start][VarPath(['u'])]", "read_from[Start] at VarPath(['u'])"))
 
 
-def test_a_per_problem_role_or_one_no_driver_takes_is_refused_from_a_structure():
-    from cottax.consumers.execution.refusals import NoneTakes, NoSlotFor
-    from cottax.core.driven import Steps
-    with pytest.raises(TypeError) as refused:
+def test_a_role_no_driver_takes_is_refused_from_a_structure():
+    '''A report is no datum, and a role nothing here has is none either: neither is read from
+    a structure. (A per-problem datum is refused as `NoSlotFor`: `test_ode_trajectory`.)'''
+    from cottax.consumers.execution.refusals import NoneTakes
+    from cottax.core.conditional import Steps
+    with pytest.raises(KeyError) as refused:
         cx.flat.valued(square(), read_from={Steps: {}})
-    assert refused.value.violation == NoSlotFor('Steps')
+    assert refused.value.violation == NoneTakes('Steps')
     with pytest.raises(KeyError) as refused:
         cx.flat.valued(square(), read_from={cx.Trajectory: {}})
     assert refused.value.violation == NoneTakes('Trajectory')

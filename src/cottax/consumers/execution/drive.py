@@ -5,9 +5,9 @@ from collections.abc import Callable
 
 from ...core import Graph, ComposedOp, GraphOp
 from ...core.frozen import OrderedMap
-from ...core.driven import Assign
+from ...core.conditional import Assign, AssignByRule
 from ...core import conditions, is_driven, kind_of
-from ...core.driven import DriverContract
+from ...core.conditional import DriverContract, Role
 from ...core.realisation import Implement, is_implemented
 from .interface import DriverImplementation
 from .refusals import NoDefaultContract, NoneAccepts, NoneImplements
@@ -16,14 +16,16 @@ from .refusals import NoDefaultContract, NoneAccepts, NoneImplements
 class Drive(ComposedOp):
     '''Every problem no driver answers yet, driven by the first implementation whose
     contract accepts its shape, under the first of `contracts` it implements, at the places
-    `places(at, unknowns, contract)` gives (its data and its reports, as `Assign` takes
-    them), and implemented by it. A problem already driven and not implemented is implemented
+    the rule `places` gives each role (as `AssignByRule` takes it), each role of `asks` wired
+    where that contract offers it, and implemented by it. The places are recorded: an
+    `Assign` each. A problem already driven and not implemented is implemented
     by the first implementation whose `implements` covers its contract; one already
     implemented is left alone.'''
 
     implementations : tuple[DriverImplementation, ...]
     contracts       : tuple[DriverContract, ...]
-    places          : Callable[[object, tuple, DriverContract], tuple[tuple, tuple]]
+    places          : Callable[..., tuple]
+    asks            : tuple[type[Role], ...] = ()
 
     def composed(self, graph: Graph) -> tuple[GraphOp, ...]:
         undriven = {p for p in conditions(graph.definitions) if not is_driven(graph[p])}
@@ -32,8 +34,11 @@ class Drive(ComposedOp):
                             for p in conditions(graph.definitions)
                             if not is_implemented(node := graph[p]))
         def assigned(p, implementation: DriverImplementation) -> Assign:
-            driver = self.contract_for(implementation)
-            return Assign(p, driver, *self.places(p, graph[p].owns_inside, driver))
+            contract = self.contract_for(implementation)
+            offered = (*contract.may_report, *contract.may_be_given)
+            asks = tuple(r for r in self.asks if r in offered)
+            (assign,) = AssignByRule(p, contract, self.places, asks).composed(graph)
+            return assign
         return (*(assigned(p, i) for p, i in picked.items() if p in undriven),
                 *((Implement(picked),) if picked else ()))
 

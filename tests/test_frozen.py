@@ -13,7 +13,7 @@ from abc import abstractmethod
 import pytest
 
 from cottax.core import Violation, violations
-from cottax.core.driven import DriverContract
+from cottax.core.conditional import DriverContract
 from typing import ClassVar
 
 from cottax.core.frozen import AbstractClassVar, AbstractVar, Frozen, OrderedMap, PerLevel, checked
@@ -412,7 +412,6 @@ def test_a_per_level_name_accumulates_and_is_no_field():
         steps = ('b',)
     assert [f.name for f in dataclasses.fields(Final)] == []
     assert list(Final.per_level('steps')) == ['a', 'b']
-    assert list(Final.per_level('steps', derived_first=True)) == ['b', 'a']
 
 
 def test_only_a_name_declared_per_level_is_accumulated():

@@ -7,7 +7,7 @@ the backend's proof, a level under this.
 from collections.abc import Iterator
 
 from ...core import Label, NodeDefinition, Place, Rules, Violation, per_node_check
-from ..driven import Driven
+from ..conditional import Driven
 from .implemented import check_implementation_fits, is_implemented
 
 

@@ -15,11 +15,11 @@ from typing import Any, NamedTuple
 import pytest
 from jax.tree_util import GetAttrKey, SequenceKey
 
-from cottax.core import Graph, Rename, Valid, ValidNesting, Dependencies
+from cottax.core import Graph, Plan, Rename, Valid, ValidNesting, Dependencies
 from proofs import recalled
-from cottax.core.plan import ComposedOp, GraphOp, Nest, Primitive, Rebind, StagedOp, Unnest
+from cottax.core.plan import Composite, GraphOp, PrimitiveOp, Nest, StagedOp, Unnest
 from cottax.consumers.architectures import Combine
-from cottax.core.plan import Delete, Insert, Redefine
+from cottax.core.plan import Delete, Insert
 from cottax.relational import Eq, Relation, RelationalCondition
 from cottax.core.plan import Cut
 from cottax.pytree.path import NodePath, VarPath
@@ -146,7 +146,7 @@ class Case(NamedTuple):
 
 
 def op_case(id: str, graph: Graph, op: Any, expected: Graph) -> Case:
-    return Case(id, graph, op(graph), expected)
+    return Case(id, graph, op.apply(graph), expected)
 
 
 def sub_case(id: str, graph: Graph, keep, expected: Graph) -> Case:
@@ -442,12 +442,12 @@ def test_a_definition_the_op_did_not_touch_is_the_same_object(case):
 
 def test_a_rewire_refuses_a_node_that_is_not_there():
     with pytest.raises(KeyError, match='not a node of this graph'):
-        Cut(B, (N('nope'),), HAT)(chain())
+        Cut(B, (N('nope'),), HAT).apply(chain())
 
 
 def test_a_rename_refuses_a_place_the_node_does_not_carry():
     with pytest.raises(KeyError, match='neither reads nor owns'):
-        Rename(N('a'), ((B, W),))(chain())
+        Rename(N('a'), ((B, W),)).apply(chain())
 
 
 # ------------------------------------------- the four refusals, reached through an op
@@ -456,7 +456,7 @@ def test_a_rewire_that_would_give_a_variable_two_producers_is_refused():
     '''Duplicate owner. `Rewire` has no check of its own for this, so the refusal is the
     constructor's.'''
     with pytest.raises(ValueError, match='owned by both'):
-        Rename(N('b'), ((B, Y),))(chain())
+        Plan(chain(), keeps=Valid) + Rename(N('b'), ((B, Y),))
 
 
 def test_an_insert_owning_something_enclosing_an_existing_output_is_refused():
@@ -467,7 +467,7 @@ def test_an_insert_owning_something_enclosing_an_existing_output_is_refused():
         N('b'): call([V('s', 'u')], [Y]),
     }))
     with pytest.raises(ValueError, match='lies inside'):
-        Insert(OrderedMap({N('c'): source(V('s'))}))(base)
+        Plan(base, keeps=Valid) + Insert(OrderedMap({N('c'): source(V('s'))}))
 
 
 def test_an_insert_reading_inside_an_existing_output_is_refused():
@@ -477,7 +477,7 @@ def test_an_insert_reading_inside_an_existing_output_is_refused():
         N('b'): call([V('s')], [Y]),
     }))
     with pytest.raises(ValueError, match='would silently be a boundary input'):
-        Insert(OrderedMap({N('c'): call([V('s', 'u')], [W])}))(base)
+        Plan(base, keeps=Valid) + Insert(OrderedMap({N('c'): call([V('s', 'u')], [W])}))
 
 
 def test_a_rewire_reading_inside_an_existing_output_is_refused():
@@ -487,14 +487,14 @@ def test_a_rewire_reading_inside_an_existing_output_is_refused():
         N('b'): call([V('s')], [Y]),
     }))
     with pytest.raises(ValueError, match='would silently be a boundary input'):
-        Rename(N('b'), ((V('s'), V('s', 'u')),))(base)
+        Plan(base, keeps=Valid) + Rename(N('b'), ((V('s'), V('s', 'u')),))
 
 
 def test_an_insert_owning_inside_an_existing_read_is_refused():
     '''The mirror: `.b` reads `.s` wholesale, so it would silently miss `.s.u`.'''
     base = graph_of(OrderedMap({N('b'): call([V('s')], [Y])}))
     with pytest.raises(ValueError, match='would silently miss this output'):
-        Insert(OrderedMap({N('c'): source(V('s', 'u'))}))(base)
+        Plan(base, keeps=Valid) + Insert(OrderedMap({N('c'): source(V('s', 'u'))}))
 
 
 def test_an_insert_reading_around_an_existing_output_is_refused():
@@ -506,7 +506,7 @@ def test_an_insert_reading_around_an_existing_output_is_refused():
         N('b'): call([V('s', 'u')], [Y]),
     }))
     with pytest.raises(ValueError, match='would silently miss this output'):
-        Insert(OrderedMap({N('c'): call([V('s')], [W])}))(base)
+        Plan(base, keeps=Valid) + Insert(OrderedMap({N('c'): call([V('s')], [W])}))
 
 
 def test_a_rewire_reading_around_an_existing_output_is_refused():
@@ -516,7 +516,7 @@ def test_a_rewire_reading_around_an_existing_output_is_refused():
         N('b'): call([V('s', 'u')], [Y]),
     }))
     with pytest.raises(ValueError, match='would silently miss this output'):
-        Rename(N('b'), ((V('s', 'u'), V('s')),))(base)
+        Plan(base, keeps=Valid) + Rename(N('b'), ((V('s', 'u'), V('s')),))
 
 
 def test_a_rewire_owning_inside_an_existing_read_is_refused():
@@ -525,14 +525,14 @@ def test_a_rewire_owning_inside_an_existing_read_is_refused():
         N('b'): call([V('s')], [Y]),
     }))
     with pytest.raises(ValueError, match='would silently miss this output'):
-        Rename(N('a'), ((V('s'), V('s', 'u')),))(base)
+        Plan(base, keeps=Valid) + Rename(N('a'), ((V('s'), V('s', 'u')),))
 
 
 # ---------------------------------------------------------------- the induction
 
 '''
-`apply` keeps `Valid`: every result is proved it, once, so a rule it holds, which no op
-can name, is asked of every result.
+A plan keeping `Valid` proves every result it, once, so a rule it holds, which no op can
+name, is asked of every result.
 '''
 
 def _probe_asked_during(action, graph) -> int:
@@ -552,10 +552,10 @@ def _probe_asked_during(action, graph) -> int:
 
 
 EDITS = [
-    pytest.param(lambda g: Insert(OrderedMap({N('d'): call([Y], [W])})).apply(g),
+    pytest.param(lambda g: Plan(g, keeps=Valid) + Insert(OrderedMap({N('d'): call([Y], [W])})),
                  id='insert'),
-    pytest.param(lambda g: Delete((N('c'),)).apply(g),        id='delete'),
-    pytest.param(lambda g: Cut(B, (N('c'),), HAT).apply(g),       id='rewire'),
+    pytest.param(lambda g: Plan(g, keeps=Valid) + Delete((N('c'),)),        id='delete'),
+    pytest.param(lambda g: Plan(g, keeps=Valid) + Cut(B, (N('c'),), HAT),   id='rewire'),
 ]
 
 
@@ -565,31 +565,23 @@ def test_a_rule_a_final_adds_is_asked_of_every_result(edit):
     assert _probe_asked_during(lambda: edit(graph), graph) == 1
 
 
-PRIMITIVES = (Rebind, Nest, Unnest)
-'''The ops that build a graph: the binding primitive and the two
-nesting ones. `Insert`, `Delete`, `Redefine` and `Combine` derive from `Rebind`.'''
-
-
-def test_every_op_is_a_primitive_or_composes_them():
-    """An op builds a graph (a `Primitive`: the three above) or composes ops
-    (`ComposedOp`, `StagedOp`); nothing else subclasses `GraphOp`."""
+def test_every_op_is_a_leaf_or_a_composite():
+    """An op is one edit (`PrimitiveOp`) or ops in turn (`Composite`); nothing else subclasses
+    `GraphOp` but an op writing its stages as plain code over `in_turn` (until phase 2 ports
+    the architectures, the legacy `StagedOp`)."""
     import importlib, pkgutil, cottax
     for info in pkgutil.walk_packages(cottax.__path__, 'cottax.'):
         importlib.import_module(info.name)
     ours = lambda cls: {c for c in cls.__subclasses__() if c.__module__.startswith('cottax.')}
-    assert ours(GraphOp) == {Primitive, ComposedOp, StagedOp}
-    assert ours(Primitive) == set(PRIMITIVES)
-    assert ours(Rebind) == {Insert, Delete, Redefine, Combine}
+    assert ours(GraphOp) == {PrimitiveOp, Composite, StagedOp}
 
 
-def test_an_op_keeps_the_graph_well_formed_and_says_so_where_it_breaks_it():
-    '''`apply` proves what it keeps of the graph and of the result: a second producer of a
-    place is refused by the op that binds it, not by whatever next reads an edge.
-    `keeps=None` keeps nothing, as an op inside a composed one does.'''
+def test_a_plan_keeps_the_graph_well_formed_and_says_so_where_it_breaks_it():
+    '''A plan keeping `Valid` proves every result: a second producer of a place is refused
+    at the op that binds it, not by whatever next reads an edge.
+    '''
     twice = Insert(OrderedMap({N('d'): source(Y)}))
     with pytest.raises(ValueError, match='owned by both'):
-        twice.apply(chain())
-    kept = Insert(OrderedMap({N('d'): call([Y], [W])})).apply(chain())
+        Plan(chain(), keeps=Valid) + twice
+    kept = (Plan(chain(), keeps=Valid) + Insert(OrderedMap({N('d'): call([Y], [W])}))).graph
     assert recalled(kept, Valid)
-    loose = twice.apply(chain(), keeps=None)
-    assert not recalled(loose, Valid) and N('d') in loose

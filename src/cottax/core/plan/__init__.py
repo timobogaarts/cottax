@@ -1,12 +1,13 @@
 '''
-Edits, over a `Graph`: `algebra.py` is what an edit is as a record -- `GraphOp`,
-`ComposedOp`, `StagedOp`, `Plan`; `primitive.py` the primitives, each
-building a checked graph -- `Rebind` and its finals, `Nest`, `Unnest`; and `ops.py` the ops on `Redefine`,
-every edit of what a node reads and owns. Nothing below reads a plan.
+Edits, over a `Graph`: `edit.py` is `Edit`, the one builder of a graph, refusing where it does
+not fit; `op.py` what an op is --
+`GraphOp` (`apply`, `edits`), `PrimitiveOp`, `Composite`, `in_turn`; `plan.py` `Plan`;
+`primitive_ops.py` the ops that are one edit, and `contracted`. `legacy.py` is temporary. Nothing below reads a plan.
 '''
 
-from .algebra import ComposedOp, GraphOp, Plan, Stage, StagedOp, refusals
-from .primitive import (
-    Primitive, Rebind, Rebinding, Delete, Insert, Nest, Redefine, Unnest,
-)
-from .ops import Contract, Cut, RemoveAttribute, Rename, Replace, Rewire, SetAttribute
+from .edit import Edit
+from .op import Composite, GraphOp, PrimitiveOp, in_turn
+from .plan import Plan
+from .primitive_ops import (Cut, Delete, Insert, Nest, RemoveAttribute, Rename, Replace,
+                            SetAttribute, Unnest, contracted, contraction)
+from .legacy import ComposedOp, Contract, Rebind, Rebinding, Redefine, Stage, StagedOp

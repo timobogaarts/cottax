@@ -1,13 +1,8 @@
 '''
-A purpose a name is derived for: a `Mint` is a value, its class the purpose, and calling it on
-a name gives the derived name (`Copy()(y)` is `^copy.y`), so it is the `PlaceToPlace` an op is
-handed. How a class of names wears one is its `Minting`, registered by the place.
-
-An interface of core's, not maths: nothing in the maths, the plan or the condition node asks
-it anything (`Cut` is handed a `PlaceToPlace`, whatever it is). The places answer it
-(`pytree/mint.py`), the features name purposes of their own, and the consumers read it.
+Minting new names from existing ones is in some cases required (i.e. a `Cut`). How to do this can differ 
+per Place type (append/prepend/etc). The interface to this is here: a Mint declares what it is (i.e. a Copy/trajectory/etc) and 
+a Place type how it takes such a Mint and the original name and creates a new one.
 '''
-
 import dataclasses
 from abc import abstractmethod
 from typing import Any
@@ -17,8 +12,10 @@ from .maths.places import Label, Place
 
 
 class Mint(Frozen):
-    '''A purpose, by its class: what a name is derived for. Its spelling (`^copy`) labels a
-    derived name; nothing finds a purpose by it.'''
+    '''A purpose.
+    
+    When a Place/Label type has registered a Minting answer, it can be called to convert a Place to a Place.
+    '''
 
     def __new__(cls, *_: Any, **__: Any) -> 'Mint':
         if cls is Mint:
@@ -27,7 +24,7 @@ class Mint(Frozen):
         return super().__new__(cls)
 
     def __call__[P](self, name: P) -> P:
-        '''`name` in this purpose's namespace: the derived name.'''
+        '''`name` in this purpose's namespace: the derived name (dispatch by Answer)'''
         return minted(self, name)
 
     def __hash__(self) -> int:

@@ -2,13 +2,13 @@
 Driver contracts:
 
 1. Generic levels: `RootFinder`, `FixedPointIterator`, `Minimiser`, `ConstrainedMinimiser`.
-2. Finals over these levels with steps: `RootFinding`, `FixedPointIteration`, `Minimisation`, `ConstrainedMinimisation`.
-3. `CONTRACTS`, the defaults: one of each final, without steps.
+2. Finals over these levels: `RootFinding`, `FixedPointIteration`, `Minimisation`, `ConstrainedMinimisation`,
+   each from a `Start`, each able to report `Steps` -- asked for by placing it.
+3. `CONTRACTS`, the defaults: one of each final.
 '''
 
 from ..core import Place
-from ..core.driven import Start, Steps
-from ..core.driven import DriverContract, PerProblem, Role
+from ..core.conditional import DriverContract, PerProblem, Start, Steps
 from .classification import is_equalities, is_fixed_point, is_optimise, is_unconstrained_optimise
 
 
@@ -49,47 +49,26 @@ class ConstrainedMinimiser[V: Place](DriverContract[V]):
 # ---------------------------------------------------------------- the generic finals
 
 class RootFinding[V: Place](RootFinder[V]):
-    '''From a `Start`; `steps` reports `Steps`.'''
-    steps : bool
-
-    @property
-    def takes(self) -> tuple[type[Role], ...]:   return (Start,)
-    @property
-    def reports(self) -> tuple[type[Role], ...]: return (Steps,) if self.steps else ()
+    '''From a `Start`; may report `Steps`.'''
+    takes, may_report = (Start,), (Steps,)
 
 
 class FixedPointIteration[V: Place](FixedPointIterator[V]):
-    '''From a `Start`; `steps` reports `Steps`.'''
-    steps : bool
-
-    @property
-    def takes(self) -> tuple[type[Role], ...]:   return (Start,)
-    @property
-    def reports(self) -> tuple[type[Role], ...]: return (Steps,) if self.steps else ()
+    '''From a `Start`; may report `Steps`.'''
+    takes, may_report = (Start,), (Steps,)
 
 
 class Minimisation[V: Place](Minimiser[V]):
-    '''From a `Start`; `steps` reports `Steps`.'''
-    steps : bool
+    '''From a `Start`; may report `Steps`.'''
+    takes, may_report = (Start,), (Steps,)
 
-    @property
-    def takes(self) -> tuple[type[Role], ...]:   return (Start,)
-    @property
-    def reports(self) -> tuple[type[Role], ...]: return (Steps,) if self.steps else ()
 
 class ConstrainedMinimisation[V: Place](ConstrainedMinimiser[V]):
-    '''From a `Start`; `steps` reports `Steps`; `scaled` takes `Scales` too. Its bounds are
+    '''From a `Start`, scaled where given `Scales`; may report `Steps`. Its bounds are
     relations of the problem over parameters, not data of the driver: they change the answer.
     Scales are the driver's data: they do not.'''
-    steps   : bool
-    scaled  : bool = False
-
-    @property
-    def takes(self) -> tuple[type[Role], ...]:   return (Start, Scales) if self.scaled else (Start,)
-    @property
-    def reports(self) -> tuple[type[Role], ...]: return (Steps,) if self.steps else ()
+    takes, may_take, may_report = (Start,), (Scales,), (Steps,)
 
 
-CONTRACTS = (RootFinding(steps=False), FixedPointIteration(steps=False),
-             Minimisation(steps=False), ConstrainedMinimisation(steps=False))
+CONTRACTS = (RootFinding(), FixedPointIteration(), Minimisation(), ConstrainedMinimisation())
 '''The default contracts: an implementation answers a problem by the first one it implements.'''

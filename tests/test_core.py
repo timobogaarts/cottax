@@ -17,6 +17,7 @@ import random
 from dataclasses import dataclass
 
 import pytest
+from graphs import refusals
 from jax.tree_util import GetAttrKey, SequenceKey
 
 from cottax.core.maths.places import comparable, is_prefix, overlaps
@@ -25,22 +26,22 @@ from cottax.core.maths.valid import (
 )
 from cottax.core import (
     Graph, Condition, ConditionalNode, Cut, FunctionalNode,
-    Rename, Replace, SetOwnsInside, refusals,
+    Rename, Replace, SetOwnsInside,
     RemoveAttribute, SetAttribute,
     Violation, NodeDefinition, Insert, Delete,
     violations, comparables_in, first,
     answer_for_labels, answer_for_places, Valid,
 )
-from cottax.core.plan.primitive import (
-    Nest, Unnest, check_delete_keeps_nesting_whole, check_nesting, check_unnesting,
-)
+from cottax.core.plan import Edit
+from cottax.core.plan.primitive_ops import Nest, Unnest
 from cottax.core.refusal_kinds import DoesNotRead, ReadOnBothSides
 from cottax.core.maths.executable import Executable
 from cottax.core.frozen import Answer, OrderedMap, answers
 from cottax.core.maths.valid import EndOwnsNothingInside, Unbound
-from cottax.core.plan.ops import BoxOwnsNothing, check_blocks_own_something
+from cottax.core.plan.primitive_ops import BoxOwnsNothing, blocks_own_something
 from cottax.pytree.path import VarPath
-from cottax.core import Attachment, Mint, Minting, relabelled
+from cottax.core import Mint, Minting
+from cottax.core.conditional import Driver, DriverContract, PerProblem
 from cottax.consumers.execution import GraphWithValues
 import purposes
 
@@ -122,13 +123,21 @@ class Driven(Condition):
     def relabel(self, renaming): return self
 
 
-class Ports(Attachment):
-    '''An attachment as the maths sees it: places in and out, and no rule of its own --
-    what a driver is (a contract, its roles) is `driven/`'s, and the rules never ask.'''
-    reads : tuple = ()
-    owns  : tuple = ()
-    def relabel(self, renaming):
-        return Ports(relabelled(self.reads, renaming), relabelled(self.owns, renaming))
+class Taken(PerProblem):
+    '''A datum a driver may be given: one place, read outside the node's cycle.'''
+
+
+class Anything(DriverContract):
+    '''A contract answering any condition, taking `Taken` where it is given: a node's place
+    rules are asked before whether its driver fits.'''
+    accepts  = staticmethod(lambda condition: True)
+    takes    = ()
+    may_take = (Taken,)
+
+
+def ported(reads=()):
+    '''A driver taking `reads`, its places read outside the node's cycle.'''
+    return Driver(Anything(), OrderedMap({Taken: tuple(reads)}) if reads else OrderedMap())
 
 
 class Note:
@@ -142,15 +151,6 @@ class Shaped:
 class SetNote(SetAttribute):        kind = Note
 class DropNote(RemoveAttribute):    kind = Note
 class SetShaped(SetAttribute):      kind = Shaped
-
-
-class Forgets(NodeDefinition):
-    '''A kind whose `relabel` builds a fresh node, and so says nothing of what it carried.'''
-    reads : tuple = ()
-    owns  : tuple = ()
-    def relabel(self, renaming):
-        return Forgets(tuple(renaming.get(v, v) for v in self.reads),
-                       tuple(renaming.get(v, v) for v in self.owns))
 
 
 def body(reads, owns):          return declared(reads, owns)   # a body is no edge: the abstract sees a function
@@ -168,10 +168,10 @@ def G(definitions, within=None):
 
 
 def proof(graph, op, define):
-    '''Why `op` of `define` does not apply to `graph`, and the rules of the bindings that
-    would result, as data.'''
-    return list(refusals(op(OrderedMap(define)), graph)) + \
-           list(Valid.check(Graph(OrderedMap(graph.definitions | define))))
+    '''Why `op` of `define` does not apply to `graph`, or what `Valid` refuses of the graph
+    it leaves, as data -- the rules of the bindings that would result among them.'''
+    edit = op(OrderedMap(define))
+    return list(refusals(edit, graph)) or list(Valid.check(edit.apply(graph)))
 
 
 def on_insert(new, standing=None):
@@ -253,7 +253,7 @@ def test_a_read_inside_is_apart_from_every_read_outside_in_the_prefix_order(insi
     refused = [ReadOnBothSides(places(inside), places(outside))]
     assert list(violations(Driven, condition(inside, ['u']), (places(outside),))) == refused
     assert list(violations(ConditionalNode, condition(inside, ['u']),
-                           driver=Ports(places(outside)))) == refused
+                           driver=ported(places(outside)))) == refused
 
 
 def test_reads_apart_in_the_prefix_order_may_be_on_either_side():
@@ -295,7 +295,7 @@ def test_a_nesting_with_a_bad_end_is_listed_not_raised():
 def test_a_contraction_refuses_a_block_owning_nothing():
     a, b = Word('a'), Word('b')
     g = G({a: states(['x'], []), b: states(['y'], [])})
-    assert list(check_blocks_own_something(Contract(((a, b),)), g)) == [BoxOwnsNothing((a, b))]
+    assert list(blocks_own_something(g, ((a, b),))) == [BoxOwnsNothing((a, b))]
     with pytest.raises(ValueError, match='owns nothing'):
         Contract(((a, b),)).apply(g)
 
@@ -345,14 +345,10 @@ def test_an_attribute_is_set_and_taken_off_and_is_in_equality():
     assert [type(v).__name__ for v in refusals(DropNote((a,)), g)] == ['AttributeNotSet']
 
 
-def test_what_a_node_carries_is_carried_through_an_edit_by_the_op_and_not_the_kind():
-    """`Forgets.relabel` builds a fresh node and says nothing of attributes: `Redefine` puts
-    back what the node carried. `Replace` hands a definition over, attributes and all."""
+def test_a_replaced_definition_is_handed_over_attributes_and_all():
+    """`Replace` hands a definition over, attributes and all: what the old one carried goes."""
     a = Word('a')
-    g = G({a: dataclasses.replace(Forgets(places(['p']), places(['q'])), attributes=OrderedMap({Note: 'n'}))})
-    assert g[a].relabel({Word('p'): Word('r')}).attributes == OrderedMap()      # the kind forgets
-    renamed = Rename(a, ((Word('p'), Word('r')),)).apply(g)
-    assert renamed[a].reads == places(['r']) and renamed[a].attributes == g[a].attributes
+    g = G({a: dataclasses.replace(toy(['p'], ['q']), attributes=OrderedMap({Note: 'n'}))})
     replaced = Replace(a, toy(['p', 's'], ['q'])).apply(g)
     assert replaced[a].reads == places(['p', 's']) and replaced[a].attributes == OrderedMap()
 
@@ -386,7 +382,7 @@ def test_every_case_a_rule_can_name_has_wording():
     a, b, t = Word('a'), Word('b'), Word('t')
     seen(proof(G({a: toy([], ['x'])}), Insert, {a: toy([], ['y'])}))       # name taken
     seen(refusals(Delete((b,)), G({a: toy([], ['x'])})))                  # not bound
-    seen(check_unnesting(Unnest(a), G({a: states([], ['x'])})))                     # not nested
+    seen(refusals(Unnest(a), G({a: states([], ['x'])})))                            # not nested
     seen(proof(G({}), Insert, {a: toy([], ['s']), b: toy([], ['s'])}))
     seen(proof(G({}), Insert, {a: toy([], ['s']), b: toy([], ['s.u'])}))
     seen(proof(G({a: toy([], ['s'])}), Insert,   {b: toy([], ['s.u'])}))
@@ -415,7 +411,7 @@ def test_every_case_a_rule_can_name_has_wording():
     onto = lambda w: Word('y')
     g = G({a: states(['y'], ['u']), b: toy([], ['x'])})
     seen(refusals(SetOwnsInside(a, ()), G({a: driven(['y'], ['u'])})))  # a driven node derives it: not a choice
-    attached = dataclasses.replace(states(['y'], ['u']), driver=Ports())
+    attached = dataclasses.replace(states(['y'], ['u']), driver=ported())
     seen(refusals(SetOwnsInside(a, ()), G({a: attached})))                   # it carries a driver
     seen(refusals(Rename(b, ((Word('nope'), Word('q')),)), g))          # a place it has not got
     seen(refusals(Cut(Word('free'), (b,), hat), g))                     # nothing produces it
@@ -429,14 +425,13 @@ def test_every_case_a_rule_can_name_has_wording():
     cyc = {a: states(['y'], ['x']), b: states(['x'], ['y']), t: toy(['x'], ['w'])}
     with pytest.raises(KeyError, match='not a node of this graph'):     # `check_nesting_ends_bound`
         Valid.prove(G({a: states([], ['x'])}, {a: b}))
-    seen(check_delete_keeps_nesting_whole(Delete((a,)), G(cyc, {a: b})))  # one end lost
     seen(Valid.check(Graph(G({a: states([], ['x'])}).definitions, OrderedMap({a: b}))))   # unbound
     seen(Valid.check(Graph(G(cyc).definitions, OrderedMap({a: t}))))            # t not a problem
-    seen(check_nesting(Nest(a, b), G(cyc, {a: b})))                             # already
+    seen(refusals(Nest(a, b), G(cyc, {a: b})))                                  # already
     seen(Valid.check(Graph(G(cyc).definitions, OrderedMap({a: a}))))            # inside itself
-    seen(check_nesting(Nest(a, b), G(cyc, {b: a})))                             # loop
+    seen(Valid.check(Nest(a, b).apply(G(cyc, {b: a}))))                         # loop, on the result
     seen(Executable.check(G({a: states([], ['x']), b: states([], ['y'])}, {a: b})))   # unreachable
-    seen(check_blocks_own_something(Contract(((a, b),)), G({a: states(['x'], []), b: states(['y'], [])})))  # a box owning nothing
+    seen(blocks_own_something(G({a: states(['x'], []), b: states(['y'], [])}), ((a, b),)))  # a box owning nothing
     seen(violations(Contract, ((a,), (a, b))))  # a short block, a node twice
     S = G
     seen(Executable.check(S({a: body(['u'], ['x']), b: body(['x'], ['u'])})))     # coupled, no problem
@@ -454,13 +449,17 @@ def test_every_case_a_rule_can_name_has_wording():
     seen(Executable.check(S({a: body(['u', 'w'], ['x']), b: body(['x'], ['u']),
                                  t: driven(['x'], ['w'])})))                              # a-b still cyclic inside t
     seen(violations(answer_for_labels, Said, G({})))                                          # no node to ask
+    with pytest.raises(ValueError) as twice:                            # an edit naming one node twice
+        Edit(remove=frozenset({a}), insert=OrderedMap({a: toy([], ['x'])})).applied(G({a: toy([], ['x'])}))
+    seen(twice.value.violations)
     seen(violations(GraphWithValues, G({a: body(['k'], ['x'])}),
                     OrderedMap({Word('x'): 1.0, Word('z'): 2.0})))      # k missing, x owned, z none
 
     def finals(cls):
         return {s for c in cls.__subclasses__() for s in ({c} | finals(c))
                 if not s.__module__.startswith((              # those finals' cases are their own tests'
-                    'cottax.relational', 'cottax.ode', 'cottax.core.driven', 'cottax.core.realisation', 'cottax.consumers.execution',
+                    'cottax.relational', 'cottax.ode', 'cottax.core.conditional.driver', 'cottax.core.conditional.assign',
+                    'cottax.core.conditional.proof', 'cottax.core.realisation', 'cottax.consumers.execution',
                     'cottax.consumers.json', 'cottax.consumers.pickle', 'cottax.consumers.visualization',
                     'cottax.consumers.declaration', 'cottax.consumers.surface', 'cottax.consumers.architectures',
                     'cottax.assemblies.jax',

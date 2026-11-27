@@ -47,7 +47,7 @@ def sellar():
 
 @pytest.fixture
 def closed(sellar):
-    cut = Cut(V('y2'), (N('d', 'one'),), HAT)(sellar)
+    cut = Cut(V('y2'), (N('d', 'one'),), HAT).apply(sellar)
     fp = RelationalCondition((Relation(HAT(V('y2')), V('y2'), Eq),), (), (HAT(V('y2')),), ())
     return graph_of(OrderedMap({**cut.definitions, N('fp'): fp}))
 

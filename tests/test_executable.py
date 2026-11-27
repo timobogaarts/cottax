@@ -14,8 +14,8 @@ from jax.tree_util import GetAttrKey
 from cottax.core import maths as core
 from cottax.relational import Min, Objective
 from cottax.core.maths.executable import Executable
-from cottax.core.driven import Assign
-from cottax.core.driven import DriverContract
+from cottax.core.conditional import Assign
+from cottax.core.conditional import DriverContract
 from cottax.consumers.execution import Runnable, run
 from cottax.consumers.execution.interface import DriverImplementation
 from cottax.core.realisation import Implement, ImplementDrivers, implemented, is_implemented
@@ -199,7 +199,6 @@ class SelfStarting(DriverContract):
     below needs nothing supplied.'''
     accepts = staticmethod(is_root_find)
     takes   = ()
-    reports = ()
 
 
 class Subtract(DriverImplementation[SelfStarting]):
@@ -217,7 +216,7 @@ class Subtract(DriverImplementation[SelfStarting]):
 
 def solving(problem, contract=SelfStarting()) -> Assign:
     '''`contract` on `problem`, taking no data and reporting nothing.'''
-    return Assign(problem, contract, (), ())
+    return Assign(problem, contract)
 
 
 def driven(graph, *ops, implementations=OrderedMap({SelfStarting: Subtract()})) -> Graph:
@@ -277,7 +276,6 @@ def test_a_driver_may_answer_a_whole_family(two_problems):
     class Any_(DriverContract):
         accepts = staticmethod(lambda node: True)
         takes   = ()
-        reports = ()
 
     class AnySubtract(DriverImplementation[Any_]):
         needs    = frozenset()
@@ -533,7 +531,7 @@ def test_a_condition_produced_off_the_cycle_is_a_constant():
         N('c'): call([], ['x']),
     }))
     with pytest.raises(ValueError, match="a constant is not a condition"):
-        Executable.prove(Assign(N('p'), SelfStarting(), (), ())(g))
+        Executable.prove(Assign(N('p'), SelfStarting()).apply(g))
 
 
 def test_a_parameter_is_a_read_held_fixed_off_the_cycle():
@@ -546,9 +544,9 @@ def test_a_parameter_is_a_read_held_fixed_off_the_cycle():
                                         (V('x'),)),
             N('c'): call(limit_from, ['x']),
         }))
-    Executable.prove(Assign(N('p'), SelfStarting(), (), ())(with_limit([])))
+    Executable.prove(Assign(N('p'), SelfStarting()).apply(with_limit([])))
     with pytest.raises(ValueError, match='produced inside the block it encloses'):
-        Executable.prove(Assign(N('p'), SelfStarting(), (), ())(with_limit(['u'])))
+        Executable.prove(Assign(N('p'), SelfStarting()).apply(with_limit(['u'])))
 
 
 # ---------------------------------------------------------------- the proof a run takes

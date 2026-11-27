@@ -30,8 +30,9 @@ def stores_owns_inside(node: object) -> bool:
 
 def check_owns_inside_is_stored(op: 'SetOwnsInside', graph: Graph) -> Iterator[Violation]:
     """The node's condition stores `owns_inside` and the node carries no driver: a condition
-    that derives it -- from its states -- has no choice to set, and a driver's slots are laid
-    out per unknown."""
+    that derives it -- from its states -- has no choice to set, and a driver's places pair
+    with the unknowns by position, so a changed set has them placed again (a reorder too,
+    which no count would notice: `Condition.owns_inside`)."""
     if not stores_owns_inside(node := graph[op.node]):
         yield OwnsInsideNotAChoice(op.node, type(kind_of(node)).__name__)
     elif is_driven(node):
@@ -74,5 +75,5 @@ class OwnsInsideNotAChoice(Violation):
 class OwnsInsideDriven(Violation):
     node : Label
     error    = TypeError
-    template = ('{node!r} carries a driver, whose places are laid out per unknown -- '
-                '`Undrive` it first')
+    template = ('{node!r} carries a driver, whose places pair with its unknowns by position: '
+                '`Undrive` it, set what it owns inside, and `Assign` again')

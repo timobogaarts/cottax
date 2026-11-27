@@ -231,13 +231,8 @@ def prefixes(graph) -> list[tuple[str, str, object]]:
     from ...core import Plan
     if not isinstance(graph, Plan):
         return [('', '', graph)]
-    plans, at = [], graph
-    while at is not None:
-        plans.append(at)
-        at = at.trunk
-    plans.reverse()
-    return [(('base', f'{len(p.graph.nodes)} nodes') if not p.ops else frame_label(p.ops[-1]))
-            + (p.graph,) for p in plans]
+    return [('base', f'{len(graph.base.nodes)} nodes', graph.base),
+            *(frame_label(op) + (g,) for op, g in zip(graph.ops, graph.graphs[1:]))]
 
 
 def changed(before, after) -> set:

@@ -8,8 +8,8 @@ import jax.numpy as jnp
 import optimistix as optx
 
 from .....core import Place
-from .....core.driven import Start, Steps
-from .....core.driven import DriverContract
+from .....core.conditional import Start, Steps
+from .....core.conditional import DriverContract
 from .....core.frozen import choice
 from .....relational.contracts import FixedPointIterator, Minimiser, RootFinder
 from .....consumers.execution.interface import DriverImplementation

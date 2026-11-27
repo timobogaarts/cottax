@@ -88,15 +88,15 @@ class Frozen(ABC):
     '''The names declared `PerLevel` here and above: what `per_level` may be asked.'''
 
     @classmethod
-    def per_level(cls, name: str, derived_first: bool = False) -> 'Iterator[Callable]':
+    def per_level(cls, name: str) -> 'Iterator[Callable]':
         '''
         Get the attribute `name` from each level in the MRO, in order from base to
-        implementation, or the reverse. `name` is one a level declared `PerLevel`.
+        implementation. `name` is one a level declared `PerLevel`.
         '''
         if name not in cls.__per_level__:
             raise TypeError(f'{cls.__name__}.{name} is not declared `PerLevel`, so no level '
                             f'accumulates it')
-        for level in (cls.__mro__ if derived_first else reversed(cls.__mro__)):
+        for level in reversed(cls.__mro__):
             yield from level.__dict__.get(name, ())
 
     def __post_init__(self) -> None:

@@ -57,7 +57,7 @@ def sellar():
 @pytest.fixture
 def closed(sellar):
     '''`d1` / `d2` closed by a fixed point on `^copy.y2`: a problem with no driver.'''
-    cut = Cut(V('y2'), (N('d1'),), HAT)(sellar)
+    cut = Cut(V('y2'), (N('d1'),), HAT).apply(sellar)
     fp = RelationalCondition((Relation(HAT(V('y2')), V('y2'), Eq),), (), (HAT(V('y2')),), ())
     return graph_of(OrderedMap({**cut.definitions, N('fp'): fp}))
 

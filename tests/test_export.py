@@ -46,7 +46,7 @@ def solved():
     '''A realised graph: module-level bodies and a Newton with scalar settings.'''
     graph   = cx.absolute.declare(flat.residual(square, 'u'), flat.function(double, 'w')).graph
     problem = cx.absolute.node(cx.solve(NAME['square']))
-    return (Plan(graph) + cx.absolute.assign(problem, RootFinding(steps=False))
+    return (Plan(graph) + cx.absolute.assign(problem, RootFinding())
             + cx.absolute.implement({problem: Newton(rtol=1e-10, atol=1e-10)})).graph
 
 
@@ -182,7 +182,7 @@ def test_a_slot_under_another_role_is_refused():
     driven = next(e['definition']['node'] for e in data['nodes']
                   if e['definition'].get('node', {}).get('kind') == 'driven')
     driven['data'][0]['role'] = 'Steps'
-    with pytest.raises(ValueError, match='data roles disagree'):
+    with pytest.raises(ValueError, match='data names a role its driver.s contract does not offer'):
         read_json(data)
 
 
@@ -315,7 +315,8 @@ class Local(NodeDefinition):
     owns  : tuple
 
     def relabel(self, renaming):
-        return type(self)(relabelled(self.reads, renaming), relabelled(self.owns, renaming))
+        return dataclasses.replace(self, reads=relabelled(self.reads, renaming),
+                                   owns=relabelled(self.owns, renaming))
 
 
 class Unspelled(Local):
@@ -334,7 +335,8 @@ class Stepped(NodeDefinition):
     dt    : float
 
     def relabel(self, renaming):
-        return Stepped(relabelled(self.reads, renaming), relabelled(self.owns, renaming), self.dt)
+        return dataclasses.replace(self, reads=relabelled(self.reads, renaming),
+                                   owns=relabelled(self.owns, renaming))
 
 
 class SteppedSpelling(Spelling[Stepped]):
