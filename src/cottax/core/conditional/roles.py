@@ -17,7 +17,7 @@ class Steps(PerProblem):
 
 
 def role_slots[N: Label, V: Place](graph: Graph[N, V], role: type[Role]
-                                   ) -> tuple[tuple[V, N, object], ...]:
+                                   ) -> tuple[tuple[V, N, V | None], ...]:
     '''Each place a driven problem takes or reports `role` at, in binding order: the place,
     its problem, and what it stands for (`role.index`: an unknown, `None` for the problem as
     a whole). A place two problems take is there twice.'''

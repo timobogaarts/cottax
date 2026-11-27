@@ -50,7 +50,9 @@ def first(violations: Iterable[Violation]) -> None:
 def checked[F: Callable](*checks: Callable[..., Iterable[Violation]]) -> Callable[[F], F]:
     '''A function declaring its checks as a class does: each is called with the function's
     arguments as it receives them, and the first violation is raised before the body runs.
-    The signature is read once, at decoration (`fn.signature`).'''
+    An iterator argument (a generator, `map`, ...) is read once, into a tuple, so the checks
+    and the body see the same values; one held inside another argument is not. The
+    signature is read once, at decoration (`fn.signature`).'''
     def decorate(fn: F) -> F:
         signature = inspect.signature(fn)
 
@@ -66,8 +68,13 @@ def checked[F: Callable](*checks: Callable[..., Iterable[Violation]]) -> Callabl
 
 
 def _bound(signature: inspect.Signature, args: tuple, kwargs: dict) -> inspect.BoundArguments:
+    '''The arguments bound to `signature`, each iterator among them read into a tuple: the
+    checks and the body each iterate what they are handed.'''
     bound = signature.bind(*args, **kwargs)
     bound.apply_defaults()
+    for name, value in bound.arguments.items():
+        if isinstance(value, Iterator):
+            bound.arguments[name] = tuple(value)
     return bound
 
 

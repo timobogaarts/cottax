@@ -71,6 +71,11 @@ def graph_from_pytree(pytree: Any) -> Graph:
                     if is_node(leaf))
 
 
+def functional(members, reads, owns) -> FunctionalNode:
+    '''A box as a computation, for `Graph.contracted`: what the cut analysis keeps.'''
+    return FunctionalNode(reads, owns)
+
+
 def refusals(op, graph) -> tuple:
     '''Why `op` does not apply to `graph`, as data: the refusal's `violations`, empty when
     it applies.'''

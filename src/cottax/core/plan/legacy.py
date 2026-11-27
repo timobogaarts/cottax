@@ -16,7 +16,6 @@ from ..maths.places import Label, Place
 from ..maths.valid import Valid
 from .edit import Edit
 from .op import Composite, GraphOp, PrimitiveOp, in_turn
-from .primitive_ops import blocks_own_something, blocks_partition, contraction
 from .primitive_ops import nested_among
 
 
@@ -109,28 +108,3 @@ class Redefine[N: Label, V: Place](PrimitiveOp[N, V]):
         redefined = OrderedMap(self.redefined(graph))
         return Edit(redefine=OrderedMap((name, replace(after, attributes=graph[name].attributes))
                                         for name, after in redefined.items()))
-
-
-def _check_blocks_partition(op: 'Contract'):
-    return blocks_partition(op.blocks)
-
-
-def _check_blocks_own_something(op: 'Contract', graph: Graph):
-    return blocks_own_something(graph, op.blocks)
-
-
-class Contract[N: Label, V: Place](PrimitiveOp[N, V]):
-    '''`contraction` as an op, until its callers call `contracted`.'''
-
-    needs = Valid
-
-    blocks : tuple[tuple[N, ...], ...]
-
-    checks       = (_check_blocks_partition,)
-    checks_graph = (_check_blocks_own_something,)
-
-    def _edit(self, graph: Graph[N, V]) -> Edit[N, V]:
-        return contraction(graph, self.blocks)
-
-    def __repr__(self) -> str:
-        return 'contract(' + ', '.join('{' + ', '.join(map(str, b)) + '}' for b in self.blocks) + ')'

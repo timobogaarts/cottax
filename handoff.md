@@ -150,10 +150,12 @@ One stored value, facts as views, rules as groups, edits as ops (`plan/`).
    - **Plan:** `base`, `ops`; `graphs` a `cached_property` built by a loop (no `trunk`, no
      recursion; not pickled, not in eq/hash). `__add__` primes the new plan's memo (as today)
      and also takes an `Applied` (hence `Applied.op`) so `attempt` then `+` walks once.
-   - **Contract becomes a function**, `contracted(graph, blocks) -> Graph`: one Edit, boxes
-     carry no attributes by definition (a coarsening for analysis, never in a plan); its own
-     rules raise. `cuts_per_cycle_boxed` calls it; 16 test sites change from
-     `Contract(b).apply(g)`. `graph.nodes` order, not `_position`.
+   - **Contract is a projection, done (2026-11-27):** `Graph.contracted(blocks, box)`, `blocks` a mapping box name -> members (a name new or a member's, else `NameTaken`, which moved to `graph.py`), beside `subgraph`
+     and like it a projection (built with `replace`, `@checked`, no
+     Edit, no `Valid` proof: a caller asks what it needs). `box(members, reads, owns)` is the
+     caller's: the architectures pass a `FunctionalNode` (what `cuts_per_cycle` keeps), a
+     drawing could pass a group keeping its members. `BoxOwnsNothing` gone (the kind's own
+     `OwnsNothing`); `legacy.Contract` deleted.
    - **Monolithic.outside** yields one step: the analysis (a user-given one rebuilt with
      `dataclasses.replace`) with `apart=cycle_of(top)`; Coupled's `scope` and
      `check_implicit_models` read the graph without `apart` while its ops apply to the whole

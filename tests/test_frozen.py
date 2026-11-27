@@ -190,6 +190,18 @@ def test_violations_of_a_checked_function_are_every_refusal_and_the_body_never_r
     assert ran == []
 
 
+def test_an_iterator_argument_is_read_once_so_the_checks_and_the_body_see_the_same_values():
+    seen = []
+    def count(values):
+        seen.append(len(tuple(values)))
+        return ()
+    @checked(count, count)
+    def total(values):
+        return sum(values)
+    assert total(v for v in (1, 2, 3)) == 6 and seen == [3, 3]
+    assert list(violations(total, iter((1, 2)))) == [] and seen == [3, 3, 2, 2]
+
+
 def test_defaults_and_keywords_reach_the_checks():
     halved, _, Low, Odd = checked_halving()
     assert list(violations(halved, 3)) == [Odd(3)]                # floor=0, step=1 defaulted

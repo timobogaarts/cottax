@@ -222,7 +222,7 @@ class RolePlaces(Frozen):
         rule an `AssignByRule` records.'''
         from .interface import DerivedNames                 # the interface is built on this
         rule = self.rule(role)
-        def place(subject: object) -> V:
+        def place(subject: V | None) -> V:
             if subject is None:
                 return rule(answer(DerivedNames, at).place_at(at))
             if subject in condition.owns_inside:

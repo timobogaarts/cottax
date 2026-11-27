@@ -6,7 +6,7 @@ inner -> outer -- makes every consumer read one answer instead of being told, an
 the ways a rewrite could quietly void it refusals rather than surprises.
 """
 
-from cottax.core import Rules, Valid, Dependencies, Nesting, Contract
+from cottax.core import Rules, Valid, Dependencies, Nesting
 
 import pytest
 from jax.tree_util import GetAttrKey as G
@@ -25,7 +25,7 @@ from cottax.consumers.architectures import Combine
 from cottax.pytree.path import NodePath, VarPath
 from cottax.core.frozen import OrderedMap
 import purposes
-from graphs import graph_of
+from graphs import functional, graph_of
 from cottax.core.maths.graph import Graph
 
 HAT, PROBLEM = purposes.Copy(), purposes.Solve()
@@ -370,11 +370,11 @@ def test_interior_of_a_sibling_carries_the_nesting_it_severs():
 def test_contract_drops_a_pair_with_an_end_in_a_block_and_keeps_the_rest(nested):
     # A box is no problem, so a pair touching one goes. A pair outside keeps its
     # cycle, since a contraction only adds paths.
-    boxed = Contract(((n('mda'), n('d')),)).apply(nested)
+    boxed = nested.contracted({n('mda'): (n('mda'), n('d'))}, functional)
     assert dict(boxed.within) == {}
     assert boxed.nodes == (n('opt'), n('mda'), n('obj'))
     assert boxed[n('mda')] == FunctionalNode((v('z'),), (v('hy'), v('y')))
-    kept = Contract(((n('d'), n('obj')),)).apply(nested)
+    kept = nested.contracted({n('d'): (n('d'), n('obj'))}, functional)
     assert dict(kept.within) == {n('mda'): n('opt')}
     from cottax.core.maths.graph import Graph
-    assert isinstance(Contract(()).apply(nested), Graph)
+    assert isinstance(nested.contracted({}, functional), Graph)

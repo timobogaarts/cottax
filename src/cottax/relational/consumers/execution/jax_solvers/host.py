@@ -146,6 +146,8 @@ class HostMinimiser[D: DriverContract](DriverImplementation[D]):
     '''
 
     needs    = frozenset({Start})
+    uses     = frozenset({Scales})
+    '''A `Scaling`, read when placed: without one the problem is solved as it stands.'''
     reported : AbstractClassVar[Mapping[type[Role], Any]]
     '''Each role `minimise` returns a value for, and the dtype it comes back in.'''
     asks = frozenset({'values', 'jacobians'})

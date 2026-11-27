@@ -11,7 +11,7 @@ Of a feature:
 from abc import abstractmethod
 from collections.abc import Iterable, Mapping
 from types import get_original_bases
-from typing import Any, TypeVar, get_args, get_origin
+from typing import Any, ClassVar, TypeVar, get_args, get_origin
 
 from ...core import Place
 from ...core.frozen import AbstractClassVar, Answer, Choice, Frozen, OrderedMap
@@ -57,7 +57,9 @@ class DriverImplementation[D: DriverContract](Frozen, Choice):
     The type parameter is the contract it implements: `Newton(DriverImplementation[RootFinder])`
     implements a `RootFinder`.
 
-    Needs and provides are with respect to that contract.
+    Needs, uses and provides are with respect to that contract: `needs` the data it cannot run
+    without, `uses` the optional data it reads when placed (a role placed that it does not
+    use is refused, not silently dropped: `DataUnused`), `provides` the reports it can make.
 
     Handed in as:
 
@@ -70,6 +72,7 @@ class DriverImplementation[D: DriverContract](Frozen, Choice):
 
     implements : AbstractClassVar[type[DriverContract]]    
     needs      : AbstractClassVar[frozenset[type[Role]]]
+    uses       : ClassVar[frozenset[type[Role]]] = frozenset()
     provides   : AbstractClassVar[frozenset[type[Role]]]    
 
     def __init_subclass__(cls, **kwargs: Any) -> None:

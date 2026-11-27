@@ -13,7 +13,7 @@ from ...core.realisation import Realised, implementation_of, is_implemented
 from .interface import DriverImplementation
 from .interface_types import ConditionMap, ConditionValues, Context, Posed, Unknowns
 from .refusals import (
-    DataMissing, ImplementsAnother, NotADriverImplementation, NotCallable,
+    DataMissing, DataUnused, ImplementsAnother, NotADriverImplementation, NotCallable,
     ReportUnavailable, ReturnedUnlike,
 )
 from .valued import GraphWithValues
@@ -44,7 +44,8 @@ def check_implements_its_driver[N: Label, V: Place](name: N, node: NodeDefinitio
     - is the implementation a `DriverImplementation`
     - is the node implementing the driver contract?
     - Is the implementation capable of taking and reporting what the driver is given and
-    asked for?
+    asked for? Data the contract requires an implementation may leave unread (a solver
+    starting itself); optional data was asked for, so one it does not use is refused.
     '''
     if is_driven(node) and is_implemented(node):
         implementation, driver = implementation_of(node), node.driver
@@ -57,6 +58,10 @@ def check_implements_its_driver[N: Label, V: Place](name: N, node: NodeDefinitio
         else:
             if missing := tuple(r for r in implementation.needs if r not in driver.data):
                 yield DataMissing(name, type(implementation).__name__, _names(missing))
+            required = contract.required(tuple(driver.reports))
+            if unused := tuple(r for r in driver.data if r not in required
+                               and r not in implementation.needs | implementation.uses):
+                yield DataUnused(name, type(implementation).__name__, _names(unused))
             if absent := tuple(r for r in driver.reports if r not in implementation.provides):
                 yield ReportUnavailable(name, type(implementation).__name__, _names(absent))
 

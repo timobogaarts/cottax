@@ -32,7 +32,7 @@ from cottax.consumers.execution import Runnable, run
 from cottax.consumers.execution.run import RunnableNodes
 from cottax.consumers.execution.interface_types import ConditionMap, Context, Posed
 from cottax.consumers.execution.refusals import (
-    DataMissing, ImplementsAnother, NotADriverImplementation, NotCallable,
+    DataMissing, DataUnused, ImplementsAnother, NotADriverImplementation, NotCallable,
     ReportUnavailable, ReturnedUnlike,
 )
 from cottax.consumers.execution.interface import DriverImplementation
@@ -361,6 +361,53 @@ def test_a_driven_node_runs_by_an_implementation_of_its_own_driver():
                            ReportUnavailable)):
         changed = definitions() | {CLOSE: node}
         assert kinds(Graph(changed, OrderedMap())) == [refused]
+
+
+class Tolerated(DriverContract):
+    '''`Newton`, which may also be handed a `Tolerance`.'''
+    accepts    = staticmethod(is_root_find)
+    takes      = (Start, Budget)
+    may_take   = (Tolerance,)
+    may_report = (Steps,)
+
+
+class Reads(DriverImplementation[Tolerated]):
+    '''Reads a `Tolerance` where one is placed.'''
+    needs    = frozenset({Start, Budget})
+    uses     = frozenset({Tolerance})
+    provides = frozenset({Steps})
+    seen : list = field(default_factory=list, compare=False)
+
+    def __call__(self, posed, context, data):
+        self.seen.append(data.get(Tolerance))
+        return newton(posed, context, data)
+
+
+class Skips(DriverImplementation[Tolerated]):
+    '''Never reads one.'''
+    needs    = Reads.needs
+    provides = Reads.provides
+
+    def __call__(self, posed, context, data):
+        return newton(posed, context, data)
+
+
+def test_optional_data_placed_is_read_or_refused_and_never_dropped():
+    '''Data the contract requires may go unread (a solver starting itself). Optional data is
+    there because it was asked for: an implementation that does not `use` it is refused,
+    where one without it placed runs as before.'''
+    condition = (definitions()[CLOSE]).condition
+    data, reports = places(CLOSE, U)
+    tolerant  = OrderedMap({**data, Tolerance: (W('^tolerance.DiscA.close'),)})
+    on = lambda d, implementation: definitions() | {
+        CLOSE: implemented(with_driver(condition, Tolerated(), d, reports), implementation)}
+    assert kinds(Graph(on(tolerant, Skips()), OrderedMap())) == [DataUnused]
+    assert kinds(Graph(on(data, Skips()), OrderedMap())) == []
+    reads = Reads()
+    graph = Graph(on(tolerant, reads), OrderedMap())
+    Runnable.prove(graph)
+    ran(graph, **{'^tolerance.DiscA.close': 1e-9})
+    assert reads.seen == [(1e-9,)]
 
 
 # ---------------------------------------------------------------- choosing and changing drivers

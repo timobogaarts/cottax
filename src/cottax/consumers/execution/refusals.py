@@ -56,6 +56,17 @@ class DataMissing(Violation):
                 'take: {roles}')
 
 
+class DataUnused(Violation):
+    '''Optional data placed on the driver that its implementation does not read: asked for, and
+    it would be dropped without a word.'''
+    node           : object
+    implementation : str
+    roles          : tuple
+    error    = TypeError
+    template = ('{node!r} is given data its driver may take but {implementation} does not '
+                'use: {roles}')
+
+
 class ReportUnavailable(Violation):
     node           : object
     implementation : str
@@ -229,7 +240,7 @@ class NotAPlace(Violation):
 __all__ = [
     'InputMissing', 'NotAPlace', 'OwnedGiven',
     'ForeignPlace', 'NotCallable', 'NotADriverImplementation',
-    'ImplementsAnother', 'DataMissing', 'ReportUnavailable', 'NoneAccepts', 'NoneImplements',
+    'ImplementsAnother', 'DataMissing', 'DataUnused', 'ReportUnavailable', 'NoneAccepts', 'NoneImplements',
     'NoDefaultContract',
     'ReturnedUnlike', 'TraceFailed', 'Unhashable',
     'BodyByIdentity', 'PartialBody',

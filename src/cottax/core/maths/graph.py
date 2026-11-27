@@ -6,14 +6,54 @@ Its methods do not assume more than this either.
 For additional facts which need guarantees, use a `View`: facts read off one graph alone and cached on it.
 '''
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from typing import Self
 from dataclasses import replace
 from functools import cached_property
 
-from ..frozen import Frozen, OrderedMap, Violation, first, remembered
+from ..frozen import Frozen, OrderedMap, Violation, checked, first, remembered
 from .definition import NodeDefinition
 from .places import Label, Place
+
+# --------------------------------------------------------------- contract & subgraph checks.
+type Box[N, V] = Callable[[tuple[N, ...], tuple[V, ...], tuple[V, ...]], NodeDefinition[V]]
+'''`(members, reads, owns) -> node`: the node standing for a block, in `Graph.contracted`.'''
+
+
+def check_kept_bound[N: Label](graph: 'Graph', keep: Iterable[N]) -> Iterator[Violation]:
+    '''Every node kept is bound, in the order given.'''
+    for n in dict.fromkeys(keep):
+        if n not in graph:
+            yield NotBound(n)
+
+
+def check_blocks_partition[N: Label](graph: 'Graph', blocks: Mapping[N, Sequence[N]], box: Box) -> Iterator[Violation]:
+    '''Each block is at least two nodes, and no node is in two.'''
+    seen, twice = set(), {}
+    for block in blocks.values():
+        if len(set(block)) < 2:
+            yield BlockTooSmall(tuple(block))
+        for n in dict.fromkeys(block):
+            if n in seen:
+                twice[n] = None
+            seen.add(n)
+    if twice:
+        yield NodeInTwoBlocks(tuple(twice))
+
+
+def check_blocks_bound[N: Label](graph: 'Graph', blocks: Mapping[N, Sequence[N]], box: Box) -> Iterator[Violation]:
+    '''Every node of a block is bound.'''
+    for n in dict.fromkeys(n for block in blocks.values() for n in block):
+        if n not in graph:
+            yield NotBound(n)
+
+
+def check_box_names_free[N: Label](graph: 'Graph', blocks: Mapping[N, Sequence[N]], box: Box) -> Iterator[Violation]:
+    '''A box's name is new, or one of its own block's: never another node's.'''
+    for name, block in blocks.items():
+        if name in graph and name not in block:
+            yield NameTaken(name)
+
 
 # ---------------------------------------------------------------- the graph
 class Graph[N: Label, V: Place](Frozen):
@@ -93,29 +133,61 @@ class Graph[N: Label, V: Place](Frozen):
         '''Whether a node is in the graph'''
         return name in self.definitions
 
-    # ------------------------------------------------------------ restriction
-    # Every other edit is an op (`plan/`).
+    # ------------------------------------------------------------ projections    
 
     @cached_property
     def _position(self) -> dict[N, int]:
         '''Each node's place in the binding order: what `subgraph` sorts by.'''
         return {n: i for i, n in enumerate(self.definitions)}
 
+    @checked(check_kept_bound)
     def subgraph(self, keep: Iterable[N]) -> Self:
         '''
         Only the nodes in `keep`, with their definitions, in the parent's binding order and the nesting
         pairs with both ends kept.
         '''
         kept = set(keep)
-        if unknown := [n for n in kept if n not in self._position]:
-            raise KeyError(f'not node(s) of this graph: {unknown!r}')
         order = sorted(kept, key=self._position.__getitem__)
         return replace(self, definitions=OrderedMap((n, self.definitions[n]) for n in order),
                        within=OrderedMap((i, o) for i, o in self.within.items()
                                          if i in kept and o in kept))
 
+    @checked(check_blocks_partition, check_blocks_bound, check_box_names_free)
+    def contracted(self, blocks: Mapping[N, Sequence[N]], box: Box[N, V]) -> Self:
+        '''
+        Coarsening of the graph: contracting blocks into a box.
+
+        Args:
+            blocks: box name -> its members (at least two; no node in two blocks). A name is
+                new or one of its own members'.
+            box: `(members, reads, owns) -> node`, the node standing for a block.
+
+        Returns:
+            The graph with each box at its first member's place in binding order, reading what
+            its block reads from outside and owning what it owns. Nesting pairs touching a
+            block are dropped. 
+
+        Refuses:
+            BlockTooSmall, NodeInTwoBlocks, NotBound, NameTaken (@checked)        
+        '''
+        at, members = {}, set()                 # first member -> (name, box); every member
+        for name, block in blocks.items():
+            order = tuple(sorted(dict.fromkeys(block), key=self._position.__getitem__))
+            owns  = tuple(dict.fromkeys(v for m in order for v in self[m].owns))
+            owned = set(owns)
+            reads = tuple(dict.fromkeys(v for m in order for v in self[m].reads if v not in owned))
+            at[order[0]] = (name, box(order, reads, owns))
+            members |= set(order)
+        return replace(self,
+                       definitions=OrderedMap(at[n] if n in at else (n, d)
+                                              for n, d in self.definitions.items()
+                                              if n in at or n not in members),
+                       within=OrderedMap((i, o) for i, o in self.within.items()
+                                         if i not in members and o not in members))
+
 
 # ---------------------------------------------------------------- views
+
 
 class View[N: Label, V: Place](Frozen):
     '''
@@ -150,3 +222,22 @@ class NotBound(Violation):
     name : Label
     error    = KeyError
     template = 'not a node of this graph: {name!r}'
+
+
+class NameTaken(Violation):
+    '''A new binding at a name the graph already binds.'''
+    name : Label
+    error    = ValueError
+    template = 'node name {name!r} is already bound -- a new binding does not replace one'
+
+
+class BlockTooSmall(Violation):
+    block : tuple[Label, ...]
+    error    = ValueError
+    template = 'block {block} is not two nodes -- a box contracts at least two into one'
+
+
+class NodeInTwoBlocks(Violation):
+    nodes : tuple[Label, ...]
+    error    = ValueError
+    template = '{nodes} each in two blocks -- a node is contracted into one box at most'

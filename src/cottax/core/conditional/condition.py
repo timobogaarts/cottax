@@ -17,7 +17,7 @@ from ..maths.places import Place
 
 class Condition[V: Place](Frozen):
     """
-    Condition node: mirrors a AbstractConditional node.
+    Condition: mirrors a AbstractConditional node.
     """
     owns_inside   : AbstractVar[tuple[V, ...]]
     """What it gives to its subgraph (cycle):"""

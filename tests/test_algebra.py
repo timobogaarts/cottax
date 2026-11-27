@@ -12,12 +12,12 @@ from jax.tree_util import GetAttrKey
 
 from cottax.core.frozen import OrderedMap, violations
 from cottax.pytree.path import NodePath, VarPath
-from cottax.core import FunctionalNode, body, conditions, Dependencies, Nesting, Valid, Contract
-from cottax.core.plan.primitive_ops import BlockTooSmall, NodeInTwoBlocks
+from cottax.core import FunctionalNode, body, conditions, Dependencies, Nesting, Valid
+from cottax.core.maths.graph import BlockTooSmall, Graph, NameTaken, NodeInTwoBlocks
 from cottax.core.realisation import implemented
 from cottax.relational import Eq, Relation, RelationalCondition
 from cottax.consumers.visualization.sequencing import entries
-from graphs import graph_of
+from graphs import functional, graph_of
 
 
 def V(*keys) -> VarPath:
@@ -303,17 +303,29 @@ def test_closing_readers_needs_a_producer(sellar):
 def test_contract_is_the_quotient_by_the_blocks(sellar):
     '''One node per block, reading what the block reads from outside and owning what
     it owns, bound at the first member's place; the other members gone.'''
-    g = Contract(((N('d2'), N('d1')),)).apply(sellar)
+    g = sellar.contracted({N('d1'): (N('d2'), N('d1'))}, functional)
     assert g.nodes == (N('z'), N('d1'), N('obj'), N('con'))
     assert g[N('d1')] == FunctionalNode((V('z'),), (V('y1'), V('y2')))     # y1 / y2 internal, not read
     assert Dependencies.of(g).is_acyclic
-    assert Contract(()).apply(sellar) == sellar
+    assert sellar.contracted({}, functional) == sellar
+
+
+def test_a_box_is_bound_at_the_name_it_is_given_new_or_a_members_never_another_nodes(sellar):
+    '''The box takes its first member's place whatever its name; a name another node holds
+    is refused, as an insert's is.'''
+    g = sellar.contracted({N('disciplines'): (N('d2'), N('d1'))}, functional)
+    assert g.nodes == (N('z'), N('disciplines'), N('obj'), N('con'))
+    assert g[N('disciplines')] == FunctionalNode((V('z'),), (V('y1'), V('y2')))
+    assert list(violations(Graph.contracted, sellar, {N('obj'): (N('d1'), N('d2'))}, functional)) \
+        == [NameTaken(N('obj'))]
+    with pytest.raises(ValueError, match='obj.*is already bound'):
+        sellar.contracted({N('obj'): (N('d1'), N('d2'))}, functional)
 
 
 def test_contract_coarsens_and_never_refines(sellar):
     '''A path through a box may appear where none was: `obj` and `con` in one box
     puts `con` downstream of `y2`, which it never read.'''
-    g = Contract(((N('obj'), N('con')),)).apply(sellar)
+    g = sellar.contracted({N('obj'): (N('obj'), N('con'))}, functional)
     assert g[N('obj')] == FunctionalNode((V('z'), V('y1'), V('y2')), (V('f'), V('c')))
     assert set(Dependencies.of(g).descendants([N('d2')])) >= {N('obj')}
     assert set(Dependencies.of(sellar).descendants([N('d2')])) >= {N('obj'), N('con')}
@@ -323,12 +335,12 @@ def test_contract_refuses_a_short_block_a_node_in_two_blocks_and_an_unknown_one(
     '''A block of one is the identity or a change of kind, neither a view's to make;
     `Combine` refuses the same.'''
     for short in ((N('d1'),), (N('d1'), N('d1')), ()):
-        assert list(violations(Contract, (short,))) == [BlockTooSmall(short)]
+        assert list(violations(Graph.contracted, sellar, {N('box'): short}, functional)) == [BlockTooSmall(short)]
         with pytest.raises(ValueError, match='is not two nodes'):
-            Contract((short,)).apply(sellar)
-    twice = ((N('d1'), N('d2')), (N('d2'), N('obj')))
-    assert list(violations(Contract, twice)) == [NodeInTwoBlocks((N('d2'),))]
+            sellar.contracted({N('box'): short}, functional)
+    twice = {N('d1'): (N('d1'), N('d2')), N('obj'): (N('d2'), N('obj'))}
+    assert list(violations(Graph.contracted, sellar, twice, functional)) == [NodeInTwoBlocks((N('d2'),))]
     with pytest.raises(ValueError, match='each in two blocks'):
-        Contract(twice).apply(sellar)
+        sellar.contracted(twice, functional)
     with pytest.raises(KeyError, match='nope'):
-        Contract(((N('d1'), N('nope')),)).apply(sellar)
+        sellar.contracted({N('d1'): (N('d1'), N('nope'))}, functional)

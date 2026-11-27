@@ -13,7 +13,7 @@ from typing import Any, ClassVar
 
 from ...core import (
     AbstractConditionalNode, FunctionalNode, Label, kind_of, Graph, Place, Violation,
-    enclosers, owns_inside, Contract, GraphOp, Nest, StagedOp, Dependencies, Nesting)
+    enclosers, owns_inside, GraphOp, Nest, StagedOp, Dependencies, Nesting)
 from ...core.frozen import AbstractVar, Frozen, OrderedMap, answer
 from .closing import closed
 from .combine import Combine
@@ -432,12 +432,19 @@ def one_mda[N: Label](op: Architecture, opened: Graph[N, Any], cycle: OnCycle[N]
 # ---------------------------------------------------------------- boxes cyclic
 
 
+def _as_function[N: Label, V: Place](members: tuple[N, ...], reads: tuple[V, ...],
+                                     owns: tuple[V, ...]) -> FunctionalNode[V]:
+    '''A box as a computation: what `cuts_per_cycle` keeps.'''
+    return FunctionalNode(reads, owns)
+
+
 def cuts_per_cycle_boxed[N: Label, V: Place](graph: Graph[N, V], boxes: Boxes[N, V],
                                              rule: CutRule[N, V]) -> tuple[Opened[N, V], ...]:
     '''
     `cuts_per_cycle` over the graph with each selected problem contracted with its
-    body (`Graph.contract`), together with every problem lying inside it; a body no
-    selected problem brings is contracted alone, so nothing inside a body is cut. Every
+    body (`Graph.contracted`, each box a `FunctionalNode`, so the cut analysis sees it), together
+    with every problem lying inside it; a body no selected problem brings is contracted
+    alone, so nothing inside a body is cut. Every
     box is mapped back to its members: on a cycle, its function nodes in binding order;
     as a reader, those that read the variable -- under `check_implicit_models` always its
     body, since a problem reads nothing from outside its box. In the graph's own names.
@@ -448,18 +455,18 @@ def cuts_per_cycle_boxed[N: Label, V: Place](graph: Graph[N, V], boxes: Boxes[N,
     for p in enclosers(graph.definitions):
         trees.setdefault(chain(pairs, p)[-1], []).append(p)
     folded = set(boxes.folded(graph))
-    blocks = tuple((*tree, *bodies[root]) if folded & set(tree) else bodies[root]
-                   for root, tree in trees.items() if folded & set(tree) or len(bodies[root]) > 1)
-    if not blocks:
+    members = {min(block, key=graph.nodes.index): block                         # a box named after its first member
+               for block in ((*tree, *bodies[root]) if folded & set(tree) else bodies[root]
+                             for root, tree in trees.items() if folded & set(tree) or len(bodies[root]) > 1)}
+    if not members:
         return cuts_per_cycle(graph, rule)
-    members = {min(block, key=graph.nodes.index): block for block in blocks}    # a box is named after its first member
     return tuple((tuple(sorted((m for n in cycle for m in members.get(n, (n,))
                                 if isinstance(graph[m], FunctionalNode)), key=graph.nodes.index)),
                   tuple({var: tuple(m for r in readers for m in members.get(r, (r,))
                                     if var in graph[m].reads)
                          for var, readers in group.items()}
                         for group in groups))
-                 for cycle, groups in cuts_per_cycle(Contract(blocks).apply(graph), rule))
+                 for cycle, groups in cuts_per_cycle(graph.contracted(members, _as_function), rule))
 
 
 def per_functional_cycle_boxed[N: Label, V: Place](graph: Graph[N, V], boxes: Boxes[N, V],

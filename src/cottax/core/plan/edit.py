@@ -13,7 +13,7 @@ from dataclasses import replace
 
 from ..frozen import Frozen, OrderedMap, Violation, first
 from ..maths.definition import NodeDefinition
-from ..maths.graph import Graph, NotBound
+from ..maths.graph import Graph, NameTaken, NotBound
 from ..maths.places import Label, Place
 
 class Edit[N: Label, V: Place](Frozen):
@@ -68,11 +68,6 @@ def _misfits(edit: Edit, graph: Graph) -> Iterator[Violation]:
 
 
 # ----------------------------------------------------------------- violation finals
-
-class NameTaken(Violation):
-    name : Label
-    error    = ValueError
-    template = 'node name {name!r} is already bound -- an insert adds a binding, it does not replace one'
 
 class NotNested(Violation):
     inner : Label

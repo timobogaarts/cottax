@@ -44,7 +44,7 @@ from .definition import (
     Attribute, NodeDefinition, Renaming, relabelled,
 )
 from .kinds import AbstractConditionalNode, FunctionalNode, conditions, enclosers, owns_inside
-from .graph import Graph, View
+from .graph import Box, Graph, View
 from .rules import Rules, per_node_check
 from .valid import Valid, ValidDependencies, ValidNesting
 from .dependencies import Dependencies

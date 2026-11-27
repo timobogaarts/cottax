@@ -5,7 +5,7 @@ graph on every fixture it is meant for, a study's own final is a few lines on a 
 and MDF and IDF driven agree. Fixtures and helpers are `test_cutting.py`'s.
 '''
 
-from cottax.core import conditions, Contract
+from cottax.core import conditions
 from cottax.core import Nesting
 
 import pytest
@@ -34,7 +34,7 @@ from cottax.consumers.architectures.interface_types import At
 from cottax.consumers.visualization.sequencing import Run, Solve, entries
 from test_cutting import *
 from test_cutting import sellar, implicit, two_cycles, through_explicit     # the fixtures, by name
-from graphs import graph_of
+from graphs import functional, graph_of
 
 
 # ================================================================ boxes
@@ -55,10 +55,10 @@ def test_a_sweep_over_bodies_does_not_depend_on_where_a_problem_is_bound(implici
 
 def test_a_box_is_a_problem_with_its_body(implicit):
     '''The owners of the problem's conditions and nothing else: no block is computed.
-    The contraction is `Graph.contract`'s, bound at the block's first member in
-    binding order, the body here.'''
+    The contraction is `Graph.contracted`'s, each box named after its body and at the
+    block's first member's place in binding order, the body's here.'''
     assert body_of_problem(implicit, N('h1')) == (D1,)
-    folded = Contract(((N('h1'), D1), (N('h2'), D2))).apply(implicit)
+    folded = implicit.contracted({D1: (N('h1'), D1), D2: (N('h2'), D2)}, functional)
     assert folded[D1] == FunctionalNode((V('z'), V('y2')), (V('r1'), V('y1')))
     assert folded[D2] == FunctionalNode((V('z'), V('y1')), (V('r2'), V('y2')))
     assert N('h1') not in folded and folded.nodes == (OPT, D1, D2, N('obj'), N('con'))

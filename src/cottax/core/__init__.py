@@ -22,7 +22,7 @@ from .maths import (
     Label, Place, PlaceToPlace, comparable, comparables_in,
     NodeDefinition, Renaming, relabelled, Attribute,
     AbstractConditionalNode, FunctionalNode, conditions, enclosers, owns_inside,
-    Graph, View,
+    Graph, View, Box,
     Rules, per_node_check,
     Dependencies, Valid, ValidDependencies, ValidNesting, Nesting, Executable, body, outline,
     Enclosed, Run, Schedule, Step,
@@ -32,8 +32,7 @@ from .answers import answer_for_labels, answer_for_places
 from .plan import (
     Plan, GraphOp, PrimitiveOp, Composite, Edit, in_turn,
     Cut, Delete, Insert, Nest, Rename, Replace, SetAttribute, RemoveAttribute, Unnest,
-    contracted,
-    ComposedOp, StagedOp, Stage, Rebind, Rebinding, Redefine, Contract,   # legacy, phase 2 removes
+    ComposedOp, StagedOp, Stage, Rebind, Rebinding, Redefine,   # legacy, phase 2 removes
 )
 from .conditional import (
     Condition, ConditionalNode, SetOwnsInside, is_driven, kind_of,

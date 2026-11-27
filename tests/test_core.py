@@ -8,7 +8,7 @@ to the laws the vocabulary states.
 '''
 
 from toy_places import Segmented
-from cottax.core import conditions, Contract
+from cottax.core import conditions
 from cottax.core import Dependencies, Nesting
 
 import dataclasses
@@ -17,7 +17,7 @@ import random
 from dataclasses import dataclass
 
 import pytest
-from graphs import refusals
+from graphs import functional, refusals
 from jax.tree_util import GetAttrKey, SequenceKey
 
 from cottax.core.maths.places import comparable, is_prefix, overlaps
@@ -38,7 +38,6 @@ from cottax.core.refusal_kinds import DoesNotRead, ReadOnBothSides
 from cottax.core.maths.executable import Executable
 from cottax.core.frozen import Answer, OrderedMap, answers
 from cottax.core.maths.valid import EndOwnsNothingInside, Unbound
-from cottax.core.plan.primitive_ops import BoxOwnsNothing, blocks_own_something
 from cottax.pytree.path import VarPath
 from cottax.core import Mint, Minting
 from cottax.core.conditional import Driver, DriverContract, PerProblem
@@ -292,12 +291,15 @@ def test_a_nesting_with_a_bad_end_is_listed_not_raised():
     assert [type(v) for v in Valid.check(Graph(graph.definitions, OrderedMap({t: a})))] == [EndOwnsNothingInside]
 
 
-def test_a_contraction_refuses_a_block_owning_nothing():
+def test_what_a_box_must_be_its_kind_refuses():
+    '''A block owning nothing is no computation: the `FunctionalNode` box refuses it as it
+    is built. Contraction itself asks nothing of what a box is.'''
     a, b = Word('a'), Word('b')
     g = G({a: states(['x'], []), b: states(['y'], [])})
-    assert list(blocks_own_something(g, ((a, b),))) == [BoxOwnsNothing((a, b))]
-    with pytest.raises(ValueError, match='owns nothing'):
-        Contract(((a, b),)).apply(g)
+    with pytest.raises(ValueError, match='must own at least one'):
+        g.contracted({a: (a, b)}, functional)
+    boxed = g.contracted({a: (a, b)}, lambda members, reads, owns: Toy(reads, owns))
+    assert boxed.nodes == (a,) and boxed[a].reads == places(['x', 'y'])
 
 
 class Said(Answer):
@@ -431,8 +433,7 @@ def test_every_case_a_rule_can_name_has_wording():
     seen(Valid.check(Graph(G(cyc).definitions, OrderedMap({a: a}))))            # inside itself
     seen(Valid.check(Nest(a, b).apply(G(cyc, {b: a}))))                         # loop, on the result
     seen(Executable.check(G({a: states([], ['x']), b: states([], ['y'])}, {a: b})))   # unreachable
-    seen(blocks_own_something(G({a: states(['x'], []), b: states(['y'], [])}), ((a, b),)))  # a box owning nothing
-    seen(violations(Contract, ((a,), (a, b))))  # a short block, a node twice
+    seen(violations(Graph.contracted, G({a: states([], ['x']), b: states([], ['y'])}), {Word('p'): (a,), Word('q'): (a, b)}, functional))  # a short block, a node twice
     S = G
     seen(Executable.check(S({a: body(['u'], ['x']), b: body(['x'], ['u'])})))     # coupled, no problem
     seen(Executable.check(S({a: body(['u'], ['x']), b: body(['x'], ['u']),

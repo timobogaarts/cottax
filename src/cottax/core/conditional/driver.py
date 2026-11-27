@@ -1,10 +1,7 @@
 '''
-What a driver is: the algorithm answering a condition node -- its contract, the roles its
-places play -- and where each of those places sits. A condition node carries one as its
-`driver` field: its places are edges, so it is not an attribute. Judged against the bare
-condition, so below the node.
+A driver: its Roles of its extra data, the contract (what it *may take* and *can* report), 
+and the driver itself (which picks out a particular choice).
 '''
-
 import dataclasses
 import inspect
 from abc import ABC, abstractmethod
@@ -20,40 +17,37 @@ from .condition import Condition
 
 class Role(ABC):
     '''
-    What a set of places is to a driver: a class, never a value, and the key a run hands the
-    data over by. Its `index` says what each of its places stands for on a problem answered
-    by a contract: one entry per place, in order, no entry twice. Free to extend: a feature
-    defines a role over its own conditions (a multiplier per inequality).
+    Role of driver I/O and how it maps to the condition itself (i.e. its Places or just the total Condition)
     '''
-
     def __init__(self) -> None:
         raise TypeError(f'{type(self).__name__} is a role, not a value')
-
+    
     @classmethod
     @abstractmethod
-    def index(cls, condition: Condition, contract: 'DriverContract') -> tuple[object, ...]:
-        '''What each place stands for: an unknown, `None` for the problem as a whole, or what
-        the role reads off the condition or the contract (a segment, a constraint).'''
+    def index[V: Place](cls, condition: Condition[V], contract: 'DriverContract'
+              ) -> tuple[V | None, ...]:
+        '''
+        What each Role-keyed place stands for: a {Start : (^start.u,^start.v)} will map to the conditions's
+        unknowns as (u,v). `None` is the problem as a whole (a `Steps`).'''
 
     @classmethod
     def arity(cls, condition: Condition, contract: 'DriverContract') -> int:
-        '''How many places the role takes: one per entry of its `index`.'''
+        '''How many places the role requires.'''
         return len(cls.index(condition, contract))
-
 
 class PerUnknown(Role):
     '''One place per unknown (e.g. where each starts).'''
 
     @classmethod
-    def index(cls, condition: Condition, contract: 'DriverContract') -> tuple[object, ...]:
+    def index[V: Place](cls, condition: Condition[V], contract: 'DriverContract'
+              ) -> tuple[V | None, ...]:
         return condition.owns_inside
-
-
 class PerProblem(Role):
     '''One place for the problem as a whole (e.g. a tolerance, the steps taken).'''
 
     @classmethod
-    def index(cls, condition: Condition, contract: 'DriverContract') -> tuple[object, ...]:
+    def index[V: Place](cls, condition: Condition[V], contract: 'DriverContract'
+              ) -> tuple[V | None, ...]:
         return (None,)
 
 
@@ -150,7 +144,7 @@ class Driver[V: Place](Frozen):
         '''Every place it reports at: owned outside the node's cycle.'''
         return tuple(p for places in self.reports.values() for p in places)
 
-    def places_for(self, role: type[Role], condition: Condition[V]) -> dict[object, V] | None:
+    def places_for(self, role: type[Role], condition: Condition[V]) -> dict[V | None, V] | None:
         '''What each place of `role` stands for on `condition`, to the place (`{u: s_u, v:
         s_v}` for a start); `None` where it neither takes nor reports `role`.'''
         side = self.data if role in self.data else self.reports if role in self.reports else None

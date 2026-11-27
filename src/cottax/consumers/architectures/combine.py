@@ -11,7 +11,7 @@ from ...core import (
     ConditionalNode, Label, Graph, Place, Rebind, Rebinding, Violation, is_driven, kind_of,
 )
 from ...core.frozen import OrderedMap, answer_for_class
-from ...core.plan.edit import NameTaken
+from ...core.maths.graph import NameTaken
 from .interface import ModelReading
 from .refusals import (
     CarriesAttributes, FoldsDriven, NodeTwice, NotAddable, NotOfKind, NothingToCombine, Stranded,

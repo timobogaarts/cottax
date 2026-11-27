@@ -8,7 +8,7 @@ fixtures and helpers here are shared with `test_mdao_architectures.py`.
 import pytest
 from jax.tree_util import GetAttrKey
 
-from cottax.core import FunctionalNode, owns_inside, Nesting, Contract
+from cottax.core import FunctionalNode, owns_inside, Nesting
 from cottax.relational import Min, Objective
 from cottax.core.maths.executable import Executable
 from cottax.core.plan import Cut, Nest, Plan
@@ -28,7 +28,7 @@ from cottax.relational import Eq, Le, Relation, RelationalCondition, is_optimise
 from cottax.consumers.architectures import Combine
 from cottax.relational.rewrites import FixedPointCut
 from cottax.consumers.visualization.sequencing import Run, Solve, entries
-from graphs import graph_of
+from graphs import functional, graph_of
 
 HAT, MINT_MDA = purposes.Copy(), purposes.Closure()
 
@@ -178,7 +178,7 @@ def test_coupling_reads_holds_nothing_back(implicit):
     cycle = cyc(implicit, D1, N('h1'), D2, N('h2'))
     assert coupling_reads(cycle) == {V('r1'): (N('h1'),), V('y1'): (D1, D2),
                                      V('r2'): (N('h2'),), V('y2'): (D1, D2)}
-    folded = Contract(((N('h1'), D1), (N('h2'), D2))).apply(implicit)
+    folded = implicit.contracted({D1: (N('h1'), D1), D2: (N('h2'), D2)}, functional)
     assert coupling_reads(folded) == {V('z'): (D1, D2, N('obj')),
                                             V('y1'): (D2, N('obj'), N('con')),
                                             V('y2'): (D1, N('obj')),
